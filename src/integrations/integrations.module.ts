@@ -12,11 +12,17 @@ import { YamahaAvrIntegration } from './built-in/yamaha-avr/yamaha-avr.integrati
 import { YamahaAvrClientService } from './built-in/yamaha-avr/yamaha-avr-client.service';
 import { LutronCasetaIntegration } from './built-in/lutron-caseta/lutron-caseta.integration';
 import { LutronCasetaClientService } from './built-in/lutron-caseta/lutron-caseta-client.service';
+import { MqttIntegration } from './built-in/mqtt/mqtt.integration';
+import { MqttClientService } from './built-in/mqtt/mqtt-client.service';
+import { CameraIntegration } from './built-in/camera/camera.integration';
+import { CameraStreamService } from './built-in/camera/camera-stream.service';
+import { CameraController } from './built-in/camera/camera.controller';
 import { RegistryModule } from '../registry/registry.module';
 import { ContextService } from '../core/context/context.service';
 
 @Module({
   imports: [RegistryModule],
+  controllers: [CameraController],
   providers: [
     IntegrationLoaderService,
     ContextService,
@@ -37,6 +43,12 @@ import { ContextService } from '../core/context/context.service';
     // Lutron Caséta
     LutronCasetaIntegration,
     LutronCasetaClientService,
+    // MQTT
+    MqttIntegration,
+    MqttClientService,
+    // Camera
+    CameraIntegration,
+    CameraStreamService,
   ],
   exports: [IntegrationLoaderService],
 })

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Home Assistant</title>
   <script src="/socket.io.min.js"></script>
+  <script src="/hls.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -265,6 +266,125 @@
     .badge.on { background: var(--on-dim); color: var(--on); }
 
     /* Media player card */
+    /* ── Camera card ──────────────────────────────── */
+    .camera-card {
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      position: relative;
+      grid-column: span 2;
+      cursor: pointer;
+    }
+    .camera-card video, .camera-card img {
+      width: 100%;
+      height: auto;
+      display: block;
+      object-fit: cover;
+      min-height: 180px;
+      background: #111;
+      position: relative;
+      z-index: 0;
+    }
+    .camera-card-footer {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      z-index: 10;
+      background: linear-gradient(transparent, rgba(0,0,0,0.75));
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .camera-name { font-size: 0.85rem; font-weight: 600; color: #fff; }
+    .camera-state { font-size: 0.75rem; color: rgba(255,255,255,0.7); }
+    .camera-state.streaming { color: #4caf50; }
+    .camera-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .camera-quality-btn {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 5px;
+      color: rgba(255,255,255,0.8);
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.15rem 0.4rem;
+      cursor: pointer;
+      line-height: 1.4;
+    }
+    .camera-quality-btn.active {
+      background: rgba(79,195,247,0.35);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .camera-quality-btn:hover:not(.active) { background: rgba(255,255,255,0.25); }
+    .camera-fullscreen-btn {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 5px;
+      color: #fff;
+      font-size: 0.85rem;
+      padding: 0.1rem 0.4rem;
+      cursor: pointer;
+      line-height: 1.4;
+    }
+    .camera-fullscreen-btn:hover { background: rgba(255,255,255,0.3); }
+    .camera-mute-btn {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 5px;
+      color: #fff;
+      font-size: 0.85rem;
+      padding: 0.1rem 0.4rem;
+      cursor: pointer;
+      line-height: 1.4;
+    }
+    .camera-mute-btn:hover { background: rgba(255,255,255,0.3); }
+    .camera-mute-btn.muted { color: rgba(255,255,255,0.4); }
+
+    /* ── Camera fullscreen modal ───────────────────── */
+    #camera-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0,0,0,0.92);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #camera-modal.open { display: flex; }
+    #camera-modal-header {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 0.75rem 1rem;
+      background: linear-gradient(rgba(0,0,0,0.7), transparent);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #camera-modal-title { color: #fff; font-weight: 600; font-size: 1rem; }
+    #camera-modal-close {
+      background: rgba(255,255,255,0.15);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 1.2rem;
+      width: 2rem; height: 2rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #camera-modal-close:hover { background: rgba(255,255,255,0.3); }
+    #camera-modal video {
+      max-width: 100%;
+      max-height: 100vh;
+      object-fit: contain;
+      background: #000;
+    }
+
     .media-card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -395,6 +515,15 @@
   </main>
 </div>
 
+<!-- Camera fullscreen modal -->
+<div id="camera-modal">
+  <div id="camera-modal-header">
+    <span id="camera-modal-title"></span>
+    <button id="camera-modal-close">✕</button>
+  </div>
+  <video id="camera-modal-video" autoplay muted playsinline></video>
+</div>
+
 <script>
 // ── Config ───────────────────────────────────────────────────────────────────
 const BASE = '';   // same origin
@@ -410,8 +539,9 @@ const DOMAIN_META = {
   sensor:        { label: 'Sensors',          icon: '📊', ctrl: 'readonly' },
   weather:       { label: 'Weather',          icon: '🌤️', ctrl: 'weather' },
   media_player:  { label: 'Media Players',    icon: '🎵', ctrl: 'media_player' },
+  camera:        { label: 'Cameras',          icon: '📷', ctrl: 'camera' },
 };
-const DOMAIN_ORDER = ['weather', 'media_player', 'light', 'switch', 'binary_sensor', 'sensor'];
+const DOMAIN_ORDER = ['weather', 'camera', 'media_player', 'light', 'switch', 'binary_sensor', 'sensor'];
 
 const CONDITION_ICON = {
   'sunny':           '☀️',
@@ -535,6 +665,7 @@ function renderDashboard() {
 
   // Attach event listeners after DOM update
   attachListeners();
+  initCameraCards();
 }
 
 function renderMediaPlayerCard(s) {
@@ -581,6 +712,40 @@ function renderMediaPlayerCard(s) {
     </div>`;
 }
 
+function renderCameraCard(s) {
+  const name = s.attributes?.friendly_name || s.entity_id.split('.')[1].replace(/_/g, ' ');
+  const streams = s.attributes?.streams || [];
+  const isStreaming = s.state === 'streaming';
+  const stateLabel = s.state === 'unavailable' ? '⚠ Unavailable' : isStreaming ? '● Live' : '○ Idle';
+  const stateClass = isStreaming ? 'streaming' : '';
+
+  const activeLabel = streams.find(st => st.label === 'HD')?.label || streams[0]?.label || '';
+  const defaultHls = streams.find(st => st.label === activeLabel)?.hls
+    || s.attributes?.hls_url
+    || `/api/camera/hls/${s.entity_id}/index.m3u8`;
+
+  const qualityBtns = streams.map(st =>
+    `<button class="camera-quality-btn${st.label === activeLabel ? ' active' : ''}"
+      data-hls-url="${st.hls}" data-quality-label="${esc(st.label)}">${esc(st.label)}</button>`
+  ).join('');
+
+  const videoId = `cam-${s.entity_id.replace(/\./g, '-')}`;
+  return `
+    <div class="camera-card" data-entity="${s.entity_id}"
+         data-hls="${defaultHls}" data-camera-name="${esc(name)}">
+      <video id="${videoId}" autoplay muted playsinline></video>
+      <div class="camera-card-footer">
+        <span class="camera-name">📷 ${esc(name)}</span>
+        <span class="camera-state ${stateClass}">${stateLabel}</span>
+        <div class="camera-controls">
+          ${qualityBtns}
+          <button class="camera-mute-btn muted" title="Mute/Unmute">🔇</button>
+          <button class="camera-fullscreen-btn" title="Fullscreen">⛶</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderWeatherCard(s) {
   const a = s.attributes || {};
   const icon = CONDITION_ICON[s.state] ?? '🌡️';
@@ -624,6 +789,7 @@ function renderCard(s, meta) {
 
   if (meta.ctrl === 'weather') return renderWeatherCard(s);
   if (meta.ctrl === 'media_player') return renderMediaPlayerCard(s);
+  if (meta.ctrl === 'camera') return renderCameraCard(s);
 
   if (meta.ctrl === 'readonly') {
     if (domain === 'sensor') {
@@ -801,6 +967,8 @@ function updateCard(s) {
     ? `.weather-card[data-entity="${s.entity_id}"]`
     : domain === 'media_player'
     ? `.media-card[data-entity="${s.entity_id}"]`
+    : domain === 'camera'
+    ? `.camera-card[data-entity="${s.entity_id}"]`
     : `.card[data-entity="${s.entity_id}"]`;
   const existing = document.querySelector(selector);
   if (!existing) {
@@ -817,7 +985,20 @@ function updateCard(s) {
   newCard.innerHTML = renderCard(s, meta).trim();
   const newCardEl = newCard.firstElementChild;
 
+  // For camera cards: destroy old HLS instance before replacing
+  if (domain === 'camera') {
+    const oldVideo = existing.querySelector('video');
+    if (oldVideo) detachHls(oldVideo);
+  }
+
   existing.replaceWith(newCardEl);
+
+  // For camera cards: attach HLS to the new video element
+  if (domain === 'camera') {
+    const newVideo = newCardEl.querySelector('video');
+    const hlsUrl = newCardEl.dataset.hls;
+    if (newVideo && hlsUrl) attachHls(newVideo, hlsUrl);
+  }
 
   // Re-attach listeners for this new element
   newCardEl.querySelectorAll('[data-role="toggle"]').forEach(btn => {
@@ -844,6 +1025,104 @@ function updateCard(s) {
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── HLS player helpers ─────────────────────────────────────────────────────────
+const hlsInstances = new Map();
+
+function attachHls(videoEl, hlsUrl) {
+  const prev = hlsInstances.get(videoEl);
+  if (prev) { prev.destroy(); hlsInstances.delete(videoEl); }
+  if (!hlsUrl) return;
+  if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+    const hls = new Hls({ lowLatencyMode: true });
+    hls.loadSource(hlsUrl);
+    hls.attachMedia(videoEl);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => videoEl.play().catch(() => {}));
+    hlsInstances.set(videoEl, hls);
+  } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+    videoEl.src = hlsUrl;
+    videoEl.play().catch(() => {});
+  }
+}
+
+function detachHls(videoEl) {
+  const hls = hlsInstances.get(videoEl);
+  if (hls) { hls.destroy(); hlsInstances.delete(videoEl); }
+  videoEl.src = '';
+}
+
+function initCameraCards() {
+  document.querySelectorAll('.camera-card').forEach(card => {
+    const videoEl = card.querySelector('video');
+    if (!videoEl || hlsInstances.has(videoEl)) return;
+    const hlsUrl = card.dataset.hls;
+    if (hlsUrl) attachHls(videoEl, hlsUrl);
+  });
+}
+
+// ── Camera fullscreen modal ────────────────────────────────────────────────────
+const cameraModal      = document.getElementById('camera-modal');
+const cameraModalVideo = document.getElementById('camera-modal-video');
+const cameraModalTitle = document.getElementById('camera-modal-title');
+const cameraModalClose = document.getElementById('camera-modal-close');
+
+function openCameraModal(hlsUrl, name) {
+  cameraModalTitle.textContent = '📷 ' + name;
+  cameraModal.classList.add('open');
+  attachHls(cameraModalVideo, hlsUrl);
+}
+
+function closeCameraModal() {
+  cameraModal.classList.remove('open');
+  detachHls(cameraModalVideo);
+}
+
+cameraModalClose.addEventListener('click', closeCameraModal);
+cameraModal.addEventListener('click', (e) => { if (e.target === cameraModal) closeCameraModal(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCameraModal(); });
+
+// Delegate clicks on camera cards
+document.addEventListener('click', (e) => {
+  const qualityBtn = e.target.closest('.camera-quality-btn');
+  if (qualityBtn) {
+    e.stopPropagation();
+    const card = qualityBtn.closest('.camera-card');
+    const hlsUrl = qualityBtn.dataset.hlsUrl;
+    console.log('[camera] quality btn clicked, hlsUrl=', hlsUrl, 'card=', card);
+    if (!card || !hlsUrl) return;
+    card.dataset.hls = hlsUrl;
+    attachHls(card.querySelector('video'), hlsUrl);
+    card.querySelectorAll('.camera-quality-btn').forEach(b => b.classList.remove('active'));
+    qualityBtn.classList.add('active');
+    return;
+  }
+
+  const muteBtn = e.target.closest('.camera-mute-btn');
+  if (muteBtn) {
+    e.stopPropagation();
+    const card = muteBtn.closest('.camera-card');
+    const video = card?.querySelector('video');
+    if (video) {
+      video.muted = !video.muted;
+      muteBtn.textContent = video.muted ? '🔇' : '🔊';
+      muteBtn.classList.toggle('muted', video.muted);
+    }
+    return;
+  }
+
+  const fsBtn = e.target.closest('.camera-fullscreen-btn');
+  if (fsBtn) {
+    e.stopPropagation();
+    const card = fsBtn.closest('.camera-card');
+    console.log('[camera] fullscreen btn clicked, card=', card);
+    if (card) openCameraModal(card.dataset.hls, card.dataset.cameraName);
+    return;
+  }
+
+  const card = e.target.closest('.camera-card');
+  if (!card || e.target.closest('.camera-card-footer')) return;
+  openCameraModal(card.dataset.hls, card.dataset.cameraName);
+});
 </script>
 </body>
 </html>

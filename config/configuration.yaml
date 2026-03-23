@@ -52,11 +52,12 @@ integrations:
   #   port: 80
   #   scan_interval: 30
 
+
   - domain: weather
-    city: "Vancouver, BC"       # change to any city, e.g. "Tokyo" or "London"
-    temperature_unit: celsius   # celsius | fahrenheit
-    wind_speed_unit: kmh        # kmh | mph | ms
-    scan_interval: 600          # refresh interval in seconds
+    city: "Vancouver, BC"
+    temperature_unit: celsius
+    wind_speed_unit: kmh
+    scan_interval: 600
 
   - domain: light
     platforms:
@@ -95,11 +96,59 @@ integrations:
             device_class: humidity
             state_class: measurement
 
+  - domain: camera
+    cameras:
+      - name: "Driveway"
+        streams:
+          - label: "SD"
+            rtsp_url: "rtsp://admin:Vancouver007@2370palmerstone.ddns.net:554/cam/realmonitor?channel=1&subtype=1"
+          - label: "HD"
+            rtsp_url: "rtsp://admin:Vancouver007@2370palmerstone.ddns.net:554/cam/realmonitor?channel=1&subtype=0"
+            default: true
+      - name: "Camera 2"
+        streams:
+          - label: "SD"
+            rtsp_url: "rtsp://admin:Vancouver007@2370palmerstone.ddns.net:554/cam/realmonitor?channel=2&subtype=1"
+          - label: "HD"
+            rtsp_url: "rtsp://admin:Vancouver007@2370palmerstone.ddns.net:554/cam/realmonitor?channel=2&subtype=0"
+            default: true
+      - name: "Camera 3"
+        streams:
+          - label: "SD"
+            rtsp_url: "rtsp://admin:Vancouver007@2370palmerstone.ddns.net:554/cam/realmonitor?channel=3&subtype=1"
+          - label: "HD"
+            rtsp_url: "rtsp://admin:Vancouver007@2370palmerstone.ddns.net:554/cam/realmonitor?channel=3&subtype=0"
+            default: true
+      - name: "Camera 4"
+        streams:
+          - label: "SD"
+            rtsp_url: "rtsp://admin:Vancouver007@2370palmerstone.ddns.net:554/cam/realmonitor?channel=4&subtype=1"
+          - label: "HD"
+            rtsp_url: "rtsp://admin:Vancouver007@2370palmerstone.ddns.net:554/cam/realmonitor?channel=4&subtype=0"
+            default: true
+
+  - domain: mqtt
+    broker: "broker.hivemq.com"
+    # port: 1883     # default
+    entities:
+      - topic: "light/01"
+        name: "MQTT Light 01"
+        type: light
+        payload_on: "ON"
+        payload_off: "OFF"
+        payload_toggle: "TOGGLE"
+      - topic: "light/02"
+        name: "MQTT Light 02"
+        type: light
+      - topic: "switch/01"
+        name: "MQTT Switch 01"
+        type: switch
+
   - domain: lutron_caseta
     host: "192.168.1.167"
-    # port: 23          # default
-    # username: lutron  # default
-    # password: integration  # default
+    port: 23          # default
+    username: lutron  # default
+    password: integration  # default
     devices:
       - id: 1
         name: "Living Room"
