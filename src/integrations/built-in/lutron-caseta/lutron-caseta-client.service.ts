@@ -99,6 +99,7 @@ export class LutronCasetaClientService extends EventEmitter {
         this.logger.warn(`Lutron socket error: ${err.message}`);
         this.connected = false;
         this.emit('disconnected');
+        fail();
       });
 
       sock.on('close', () => {
