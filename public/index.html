@@ -26,6 +26,22 @@
       --shadow: 0 2px 12px rgba(0,0,0,0.4);
     }
 
+    :root.light {
+      --bg: #f0f2f5;
+      --surface: #ffffff;
+      --surface2: #e8eaed;
+      --border: #d1d5db;
+      --text: #111318;
+      --text2: #6b7280;
+      --accent: #0284c7;
+      --accent-dim: #e0f2fe;
+      --on: #16a34a;
+      --on-dim: #dcfce7;
+      --off: #9ca3af;
+      --danger: #dc2626;
+      --shadow: 0 2px 12px rgba(0,0,0,0.1);
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: var(--bg);
@@ -115,6 +131,14 @@
       background: var(--off); transition: background 0.3s;
     }
     .dot.connected { background: var(--on); }
+    .btn-theme {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text2); border-radius: 6px;
+      padding: 0.35rem 0.6rem; font-size: 1rem; cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      line-height: 1;
+    }
+    .btn-theme:hover { border-color: var(--accent); color: var(--accent); }
     .btn-logout {
       background: transparent; border: 1px solid var(--border);
       color: var(--text2); border-radius: 6px;
@@ -506,6 +530,7 @@
   <header>
     <div class="logo">Home Assistant <span>NestJS</span></div>
     <div id="ws-status"><div class="dot" id="ws-dot"></div><span id="ws-label">Connecting…</span></div>
+    <button class="btn-theme" id="theme-btn" title="Toggle day/night mode">🌙</button>
     <button class="btn-logout" id="logout-btn">Sign out</button>
   </header>
   <main id="main">
@@ -525,6 +550,27 @@
 </div>
 
 <script>
+// ── Theme ────────────────────────────────────────────────────────────────────
+const themeBtn = document.getElementById('theme-btn');
+function applyTheme(mode) {
+  if (mode === 'light') {
+    document.documentElement.classList.add('light');
+    themeBtn.textContent = '☀️';
+    themeBtn.title = 'Switch to night mode';
+  } else {
+    document.documentElement.classList.remove('light');
+    themeBtn.textContent = '🌙';
+    themeBtn.title = 'Switch to day mode';
+  }
+}
+// Load saved preference
+applyTheme(localStorage.getItem('theme') || 'dark');
+themeBtn.addEventListener('click', () => {
+  const next = document.documentElement.classList.contains('light') ? 'dark' : 'light';
+  localStorage.setItem('theme', next);
+  applyTheme(next);
+});
+
 // ── Config ───────────────────────────────────────────────────────────────────
 const BASE = '';   // same origin
 let token = null;
