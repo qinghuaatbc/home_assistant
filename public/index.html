@@ -264,6 +264,59 @@
     }
     .badge.on { background: var(--on-dim); color: var(--on); }
 
+    /* Media player card */
+    .media-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .media-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--off);
+      transition: background 0.3s;
+    }
+    .media-card.on::before { background: #9c27b0; }
+    .media-card.on { border-color: #2d1a3a; }
+    .media-card-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+    .media-card-title { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+    .media-card-state { font-size: 0.72rem; color: var(--text2); }
+    .media-card-state.on { color: #ce93d8; }
+    .media-volume-row { display: flex; align-items: center; gap: 0.5rem; }
+    .media-volume-row input[type=range] {
+      flex: 1; height: 4px; -webkit-appearance: none;
+      background: var(--border); border-radius: 2px; outline: none; cursor: pointer;
+    }
+    .media-volume-row input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px;
+      border-radius: 50%; background: #9c27b0; cursor: pointer;
+    }
+    .media-source-row { display: flex; align-items: center; gap: 0.5rem; }
+    .media-source-row select {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 0.78rem;
+      padding: 0.3rem 0.5rem; outline: none; cursor: pointer;
+    }
+    .media-btns { display: flex; gap: 0.4rem; }
+    .media-btn {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text2); font-size: 0.8rem;
+      padding: 0.3rem 0.6rem; cursor: pointer; transition: background 0.15s, color 0.15s;
+      line-height: 1;
+    }
+    .media-btn:hover { background: var(--border); color: var(--text); }
+    .media-btn.active { background: #4a1a5a; border-color: #9c27b0; color: #ce93d8; }
+    .vol-label { font-size: 0.7rem; color: var(--text2); min-width: 28px; text-align: right; }
+
     /* Weather card */
     .weather-card {
       background: linear-gradient(135deg, #1a3a5c 0%, #0d2137 100%);
@@ -356,8 +409,9 @@ const DOMAIN_META = {
   binary_sensor: { label: 'Binary Sensors',   icon: '🔍', ctrl: 'readonly' },
   sensor:        { label: 'Sensors',          icon: '📊', ctrl: 'readonly' },
   weather:       { label: 'Weather',          icon: '🌤️', ctrl: 'weather' },
+  media_player:  { label: 'Media Players',    icon: '🎵', ctrl: 'media_player' },
 };
-const DOMAIN_ORDER = ['weather', 'light', 'switch', 'binary_sensor', 'sensor'];
+const DOMAIN_ORDER = ['weather', 'media_player', 'light', 'switch', 'binary_sensor', 'sensor'];
 
 const CONDITION_ICON = {
   'sunny':           '☀️',
@@ -467,7 +521,7 @@ function renderDashboard() {
 
   dash.innerHTML = ordered.map(domain => {
     const meta = DOMAIN_META[domain] || { label: domain, icon: '🔧', ctrl: 'toggle' };
-    const isWeather = meta.ctrl === 'weather';
+    const isWeather = meta.ctrl === 'weather' || meta.ctrl === 'media_player';
     const cards = groups[domain]
       .sort((a, b) => a.entity_id.localeCompare(b.entity_id))
       .map(s => renderCard(s, meta))
@@ -481,6 +535,50 @@ function renderDashboard() {
 
   // Attach event listeners after DOM update
   attachListeners();
+}
+
+function renderMediaPlayerCard(s) {
+  const a = s.attributes || {};
+  const isOn = s.state === 'on';
+  const name = a.friendly_name || s.entity_id.split('.')[1].replace(/_/g, ' ');
+  const volPct = a.volume_level != null ? Math.round(a.volume_level * 100) : 0;
+  const muted = a.is_volume_muted ?? false;
+  const source = a.source ?? '';
+  const sources = a.source_list ?? [];
+
+  const sourceOptions = sources.map(src =>
+    `<option value="${esc(src)}" ${src === source ? 'selected' : ''}>${esc(src)}</option>`
+  ).join('');
+
+  return `
+    <div class="media-card ${isOn ? 'on' : ''}" data-entity="${s.entity_id}">
+      <div class="media-card-header">
+        <span class="media-card-title">🎵 ${esc(name)}</span>
+        <span class="media-card-state ${isOn ? 'on' : ''}">${isOn ? 'On' : s.state === 'unavailable' ? 'Unavailable' : 'Standby'}</span>
+      </div>
+      <div class="media-btns">
+        <button class="media-btn ${isOn ? 'active' : ''}" data-entity="${s.entity_id}" data-role="mp-power">
+          ${isOn ? '⏻ On' : '⏻ Off'}
+        </button>
+        <button class="media-btn ${muted ? 'active' : ''}" data-entity="${s.entity_id}" data-role="mp-mute" ${!isOn ? 'disabled' : ''}>
+          ${muted ? '🔇 Muted' : '🔊 Sound'}
+        </button>
+        <button class="media-btn" data-entity="${s.entity_id}" data-role="mp-vol-down" ${!isOn ? 'disabled' : ''}>−</button>
+        <button class="media-btn" data-entity="${s.entity_id}" data-role="mp-vol-up" ${!isOn ? 'disabled' : ''}>+</button>
+      </div>
+      <div class="media-volume-row">
+        <input type="range" min="0" max="100" value="${volPct}"
+          data-entity="${s.entity_id}" data-role="mp-volume"
+          ${!isOn || muted ? 'disabled' : ''} />
+        <span class="vol-label">${isOn ? volPct + '%' : '--'}</span>
+      </div>
+      ${sources.length ? `
+      <div class="media-source-row">
+        <select data-entity="${s.entity_id}" data-role="mp-source" ${!isOn ? 'disabled' : ''}>
+          ${sourceOptions}
+        </select>
+      </div>` : ''}
+    </div>`;
 }
 
 function renderWeatherCard(s) {
@@ -525,6 +623,7 @@ function renderCard(s, meta) {
   const name = s.attributes?.friendly_name || s.entity_id.split('.')[1].replace(/_/g, ' ');
 
   if (meta.ctrl === 'weather') return renderWeatherCard(s);
+  if (meta.ctrl === 'media_player') return renderMediaPlayerCard(s);
 
   if (meta.ctrl === 'readonly') {
     if (domain === 'sensor') {
@@ -575,6 +674,43 @@ function renderCard(s, meta) {
 }
 
 function attachListeners() {
+  // Media player controls
+  document.querySelectorAll('[data-role="mp-power"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const entityId = btn.dataset.entity;
+      const s = states[entityId];
+      const service = s?.state === 'on' ? 'turn_off' : 'turn_on';
+      callService('media_player', service, entityId);
+    });
+  });
+  document.querySelectorAll('[data-role="mp-mute"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const entityId = btn.dataset.entity;
+      const muted = !(states[entityId]?.attributes?.is_volume_muted ?? false);
+      callService('media_player', 'mute_volume', entityId, { is_volume_muted: muted });
+    });
+  });
+  document.querySelectorAll('[data-role="mp-vol-up"]').forEach(btn => {
+    btn.addEventListener('click', () => callService('media_player', 'volume_up', btn.dataset.entity));
+  });
+  document.querySelectorAll('[data-role="mp-vol-down"]').forEach(btn => {
+    btn.addEventListener('click', () => callService('media_player', 'volume_down', btn.dataset.entity));
+  });
+  document.querySelectorAll('[data-role="mp-volume"]').forEach(slider => {
+    slider.addEventListener('input', () => {
+      const row = slider.closest('.media-volume-row');
+      if (row) row.querySelector('.vol-label').textContent = slider.value + '%';
+    });
+    slider.addEventListener('change', () => {
+      callService('media_player', 'volume_set', slider.dataset.entity, { volume_level: Number(slider.value) / 100 });
+    });
+  });
+  document.querySelectorAll('[data-role="mp-source"]').forEach(sel => {
+    sel.addEventListener('change', () => {
+      callService('media_player', 'select_source', sel.dataset.entity, { source: sel.value });
+    });
+  });
+
   // Toggle buttons
   document.querySelectorAll('[data-role="toggle"]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -663,6 +799,8 @@ function updateCard(s) {
   // Weather uses .weather-card, not .card
   const selector = domain === 'weather'
     ? `.weather-card[data-entity="${s.entity_id}"]`
+    : domain === 'media_player'
+    ? `.media-card[data-entity="${s.entity_id}"]`
     : `.card[data-entity="${s.entity_id}"]`;
   const existing = document.querySelector(selector);
   if (!existing) {

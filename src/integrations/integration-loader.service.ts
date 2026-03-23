@@ -13,6 +13,8 @@ import { SensorIntegration } from './built-in/sensor/sensor.integration';
 import { BinarySensorIntegration } from './built-in/binary-sensor/binary-sensor.integration';
 import { Isy994Integration } from './built-in/isy994/isy994.integration';
 import { WeatherIntegration } from './built-in/weather/weather.integration';
+import { YamahaAvrIntegration } from './built-in/yamaha-avr/yamaha-avr.integration';
+import { LutronCasetaIntegration } from './built-in/lutron-caseta/lutron-caseta.integration';
 import {
   EVENT_HOMEASSISTANT_START,
   EVENT_COMPONENT_LOADED,
@@ -58,6 +60,8 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     binarySensorIntegration: BinarySensorIntegration,
     isy994Integration: Isy994Integration,
     weatherIntegration: WeatherIntegration,
+    yamahaAvrIntegration: YamahaAvrIntegration,
+    lutronCasetaIntegration: LutronCasetaIntegration,
   ) {
     // Register built-in integrations
     this.builtInRegistry.set('light', lightIntegration);
@@ -66,6 +70,8 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     this.builtInRegistry.set('binary_sensor', binarySensorIntegration);
     this.builtInRegistry.set('isy994', isy994Integration);
     this.builtInRegistry.set('weather', weatherIntegration);
+    this.builtInRegistry.set('yamaha_avr', yamahaAvrIntegration);
+    this.builtInRegistry.set('lutron_caseta', lutronCasetaIntegration);
   }
 
   /**

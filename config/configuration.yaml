@@ -27,6 +27,31 @@ logger:
   level: "info"
 
 integrations:
+  - domain: yamaha_avr
+    mock: true
+    receivers:
+      - name: "Living Room Receiver"
+        model: "RX-V685"
+        zone: "Main_Zone"
+        power: true
+        volume: 0.35        # 0.0–1.0
+        muted: false
+        source: "HDMI1"
+        sources: ["HDMI1", "HDMI2", "HDMI3", "AV1", "Audio1", "Spotify", "Bluetooth"]
+      - name: "Bedroom Receiver"
+        model: "RX-S602"
+        zone: "Zone_2"
+        power: false
+        volume: 0.20
+        muted: false
+        source: "Spotify"
+        sources: ["HDMI1", "HDMI2", "Audio1", "Spotify", "Bluetooth"]
+  # To connect to real hardware instead:
+  # - domain: yamaha_avr
+  #   host: "192.168.1.50"
+  #   port: 80
+  #   scan_interval: 30
+
   - domain: weather
     city: "Vancouver, BC"       # change to any city, e.g. "Tokyo" or "London"
     temperature_unit: celsius   # celsius | fahrenheit
@@ -69,6 +94,22 @@ integrations:
             unit_of_measurement: "%"
             device_class: humidity
             state_class: measurement
+
+  - domain: lutron_caseta
+    host: "192.168.1.167"
+    # port: 23          # default
+    # username: lutron  # default
+    # password: integration  # default
+    devices:
+      - id: 1
+        name: "Living Room"
+        type: light
+      - id: 2
+        name: "Kitchen"
+        type: light
+      - id: 3
+        name: "Bedroom"
+        type: light
 
   - domain: binary_sensor
 
