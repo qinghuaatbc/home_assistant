@@ -1,0 +1,125 @@
+homeassistant:
+  name: "My Home"
+  latitude: 39.9042
+  longitude: 116.4074
+  elevation: 43
+  unit_system: metric
+  time_zone: "Asia/Shanghai"
+  country: "CN"
+  currency: "CNY"
+
+http:
+  port: 8123
+  cors_allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+
+auth:
+  jwt_secret: "change-this-secret-in-production-at-least-32-chars"
+  jwt_expiry: "30m"
+
+database:
+  type: "better-sqlite3"
+  database: "ha.db"
+  logging: false
+
+logger:
+  level: "info"
+
+integrations:
+  - domain: light
+    platforms:
+      - name: demo
+        entities:
+          - entity_id: light.living_room
+            name: "Living Room Light"
+            brightness: 255
+          - entity_id: light.bedroom
+            name: "Bedroom Light"
+            brightness: 128
+          - entity_id: light.kitchen
+            name: "Kitchen Light"
+
+  - domain: switch
+    platforms:
+      - name: demo
+        entities:
+          - entity_id: switch.fan
+            name: "Living Room Fan"
+          - entity_id: switch.tv
+            name: "TV Switch"
+
+  - domain: sensor
+    platforms:
+      - name: demo
+        entities:
+          - entity_id: sensor.temperature
+            name: "Indoor Temperature"
+            unit_of_measurement: "°C"
+            device_class: temperature
+            state_class: measurement
+          - entity_id: sensor.humidity
+            name: "Indoor Humidity"
+            unit_of_measurement: "%"
+            device_class: humidity
+            state_class: measurement
+
+  - domain: binary_sensor
+
+  # ISY994 / Insteon — sample data (no real hardware required)
+  - domain: isy994
+    mock: true
+    nodes:
+      # Dimmable lights  (type 1.x.x.x → light)
+      - address: "11 22 33 1"
+        name: "Living Room Dimmer"
+        type: "1.32.65.0"
+        value: 200          # on at ~78% brightness
+      - address: "11 22 33 2"
+        name: "Kitchen Dimmer"
+        type: "1.32.65.0"
+        value: 0            # off
+      - address: "11 22 66 1"
+        name: "Master Bedroom Dimmer"
+        type: "1.32.65.0"
+        value: 128          # on at 50%
+      # Switched loads  (type 2.x.x.x → switch)
+      - address: "11 22 44 1"
+        name: "Dining Room Switch"
+        type: "2.55.65.0"
+        value: 255          # on
+      - address: "11 22 66 2"
+        name: "Office Fan"
+        type: "9.0.65.0"   # category 9 = fan/motor → switch
+        value: 255          # on
+      - address: "11 22 44 2"
+        name: "Garage Door Relay"
+        type: "15.0.65.0"  # category 15 = access control → switch
+        value: 0            # closed / off
+      # Sensors  (type 16.x.x.x → binary_sensor)
+      - address: "11 22 55 1"
+        name: "Front Door Sensor"
+        type: "16.1.65.0"
+        value: 0            # closed
+      - address: "11 22 55 2"
+        name: "Motion Sensor Hall"
+        type: "16.1.65.0"
+        value: 0            # no motion
+  # To connect to real hardware instead, replace the block above with:
+  # - domain: isy994
+  #   host: "192.168.1.100"
+  #   port: 80
+  #   username: "admin"
+  #   password: "admin"
+  #   tls: false
+  #   ignore_string: "_ignore_"
+  #   scan_interval: 30
+    platforms:
+      - name: demo
+        entities:
+          - entity_id: binary_sensor.motion
+            name: "Motion Sensor"
+            device_class: motion
+          - entity_id: binary_sensor.door
+            name: "Front Door"
+            device_class: door
