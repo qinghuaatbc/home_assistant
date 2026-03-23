@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Home Assistant</title>
+  <script src="/socket.io.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #111318;
+      --surface: #1c1f26;
+      --surface2: #252930;
+      --border: #2e323c;
+      --text: #e4e6eb;
+      --text2: #9099aa;
+      --accent: #4fc3f7;
+      --accent-dim: #1a3a4a;
+      --on: #4caf50;
+      --on-dim: #1b3d1c;
+      --off: #555c6a;
+      --danger: #ef5350;
+      --radius: 12px;
+      --shadow: 0 2px 12px rgba(0,0,0,0.4);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Login ────────────────────────────────────── */
+    #login-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2.5rem 2rem;
+      width: 340px;
+      box-shadow: var(--shadow);
+    }
+    .login-card h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .login-card p { color: var(--text2); font-size: 0.85rem; margin-bottom: 1.5rem; }
+    .field { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem; }
+    .field label { font-size: 0.8rem; color: var(--text2); font-weight: 500; }
+    .field input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      color: var(--text);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .field input:focus { border-color: var(--accent); }
+    .btn-primary {
+      width: 100%;
+      padding: 0.7rem;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      margin-top: 0.5rem;
+    }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-primary:disabled { opacity: 0.5; cursor: default; }
+    #login-error {
+      color: var(--danger);
+      font-size: 0.82rem;
+      margin-top: 0.75rem;
+      display: none;
+    }
+
+    /* ── App shell ────────────────────────────────── */
+    #app { display: none; flex-direction: column; min-height: 100vh; }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .logo { font-size: 1.1rem; font-weight: 700; color: var(--accent); flex: 1; }
+    .logo span { color: var(--text2); font-weight: 400; font-size: 0.85rem; margin-left: 0.5rem; }
+    #ws-status {
+      display: flex; align-items: center; gap: 0.4rem;
+      font-size: 0.78rem; color: var(--text2);
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--off); transition: background 0.3s;
+    }
+    .dot.connected { background: var(--on); }
+    .btn-logout {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text2); border-radius: 6px;
+      padding: 0.35rem 0.75rem; font-size: 0.8rem; cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-logout:hover { border-color: var(--accent); color: var(--accent); }
+
+    main { padding: 1.5rem; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+    /* ── Domain section ───────────────────────────── */
+    .domain-section { margin-bottom: 2rem; }
+    .domain-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text2);
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .domain-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── Cards grid ───────────────────────────────── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--off);
+      transition: background 0.3s;
+    }
+    .card.on::before { background: var(--on); }
+    .card.on { border-color: #2a3f2a; box-shadow: 0 0 0 1px #2a3f2a; }
+
+    .card-icon { font-size: 1.5rem; line-height: 1; transition: filter 0.3s, opacity 0.3s; }
+    .card-icon.icon-off { filter: grayscale(1); opacity: 0.35; }
+    .card-name {
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.3;
+    }
+    .card-state {
+      font-size: 0.75rem;
+      color: var(--text2);
+    }
+    .card-state.on { color: var(--on); }
+
+    /* Toggle button */
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+    }
+    .toggle-track {
+      width: 36px; height: 20px;
+      border-radius: 10px;
+      background: var(--off);
+      position: relative;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .toggle-track.on { background: var(--on); }
+    .toggle-thumb {
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.2s;
+    }
+    .toggle-track.on .toggle-thumb { transform: translateX(16px); }
+
+    /* Brightness slider */
+    .brightness-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .brightness-row input[type=range] {
+      flex: 1;
+      height: 4px;
+      -webkit-appearance: none;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    .brightness-row input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+    .brightness-pct { font-size: 0.72rem; color: var(--text2); min-width: 28px; text-align: right; }
+
+    /* Sensor card */
+    .sensor-value {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .sensor-unit { font-size: 0.75rem; color: var(--text2); }
+
+    /* Binary sensor badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.2rem 0.5rem;
+      border-radius: 20px;
+      background: var(--surface2);
+      color: var(--text2);
+    }
+    .badge.on { background: var(--on-dim); color: var(--on); }
+
+    /* Weather card */
+    .weather-card {
+      background: linear-gradient(135deg, #1a3a5c 0%, #0d2137 100%);
+      border: 1px solid #1e4a7a;
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      box-shadow: var(--shadow);
+      margin-bottom: 0.75rem;
+    }
+    .weather-card.day {
+      background: linear-gradient(135deg, #1a4a7a 0%, #0d2a4d 100%);
+    }
+    .weather-card.night {
+      background: linear-gradient(135deg, #12213a 0%, #0a1628 100%);
+    }
+    .weather-main { display: flex; align-items: center; gap: 1rem; flex: 0 0 auto; }
+    .weather-icon { font-size: 3.5rem; line-height: 1; }
+    .weather-temp { font-size: 3rem; font-weight: 700; color: #fff; line-height: 1; }
+    .weather-temp-unit { font-size: 1.2rem; color: rgba(255,255,255,0.6); }
+    .weather-info { flex: 1; min-width: 150px; }
+    .weather-location { font-size: 1rem; font-weight: 600; color: #fff; }
+    .weather-desc { font-size: 0.82rem; color: rgba(255,255,255,0.65); margin-top: 0.15rem; }
+    .weather-stats {
+      display: flex; gap: 1.25rem; flex-wrap: wrap;
+      margin-top: 0.6rem;
+    }
+    .weather-stat { display: flex; flex-direction: column; gap: 0.1rem; }
+    .weather-stat-label { font-size: 0.68rem; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.05em; }
+    .weather-stat-value { font-size: 0.85rem; color: rgba(255,255,255,0.85); font-weight: 500; }
+    .weather-feels { font-size: 0.78rem; color: rgba(255,255,255,0.5); margin-top: 0.25rem; }
+
+    #loading {
+      text-align: center;
+      color: var(--text2);
+      padding: 4rem;
+      font-size: 0.9rem;
+    }
+    #empty { display: none; text-align: center; color: var(--text2); padding: 4rem; }
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>🏠 Home Assistant</h1>
+    <p>Sign in to continue</p>
+    <div class="field">
+      <label>Username</label>
+      <input id="username" type="text" value="admin" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input id="password" type="password" value="admin" autocomplete="current-password" />
+    </div>
+    <button class="btn-primary" id="login-btn">Sign in</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <header>
+    <div class="logo">Home Assistant <span>NestJS</span></div>
+    <div id="ws-status"><div class="dot" id="ws-dot"></div><span id="ws-label">Connecting…</span></div>
+    <button class="btn-logout" id="logout-btn">Sign out</button>
+  </header>
+  <main id="main">
+    <div id="loading">Loading devices…</div>
+    <div id="dashboard"></div>
+    <div id="empty">No devices found.</div>
+  </main>
+</div>
+
+<script>
+// ── Config ───────────────────────────────────────────────────────────────────
+const BASE = '';   // same origin
+let token = null;
+let ws = null;
+let states = {};   // entity_id → state object
+
+// ── Domain metadata ──────────────────────────────────────────────────────────
+const DOMAIN_META = {
+  light:         { label: 'Lights',          icon: '💡', ctrl: 'toggle' },
+  switch:        { label: 'Switches',         icon: '🔌', ctrl: 'toggle' },
+  binary_sensor: { label: 'Binary Sensors',   icon: '🔍', ctrl: 'readonly' },
+  sensor:        { label: 'Sensors',          icon: '📊', ctrl: 'readonly' },
+  weather:       { label: 'Weather',          icon: '🌤️', ctrl: 'weather' },
+};
+const DOMAIN_ORDER = ['weather', 'light', 'switch', 'binary_sensor', 'sensor'];
+
+const CONDITION_ICON = {
+  'sunny':           '☀️',
+  'partlycloudy':    '⛅',
+  'cloudy':          '☁️',
+  'fog':             '🌫️',
+  'rainy':           '🌧️',
+  'pouring':         '⛈️',
+  'snowy':           '❄️',
+  'snowy-rainy':     '🌨️',
+  'lightning':       '⚡',
+  'lightning-rainy': '⛈️',
+  'windy':           '🌬️',
+  'exceptional':     '🌡️',
+};
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+document.getElementById('login-btn').addEventListener('click', login);
+document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+document.getElementById('logout-btn').addEventListener('click', logout);
+
+async function login() {
+  const btn = document.getElementById('login-btn');
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+
+  try {
+    const res = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Login failed');
+    token = data.access_token;
+    showApp();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign in';
+  }
+}
+
+function logout() {
+  token = null;
+  if (ws) { ws.disconnect(); ws = null; }
+  states = {};
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('dashboard').innerHTML = '';
+}
+
+// ── App init ─────────────────────────────────────────────────────────────────
+async function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  await fetchStates();
+  connectWs();
+}
+
+async function fetchStates() {
+  const res = await fetch(`${BASE}/api/states`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) { logout(); return; }
+  const list = await res.json();
+  states = {};
+  for (const s of list) states[s.entity_id] = s;
+  renderDashboard();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  const dash = document.getElementById('dashboard');
+  const loading = document.getElementById('loading');
+  const empty = document.getElementById('empty');
+
+  loading.style.display = 'none';
+
+  // Group by domain
+  const groups = {};
+  for (const s of Object.values(states)) {
+    const domain = s.entity_id.split('.')[0];
+    if (!groups[domain]) groups[domain] = [];
+    groups[domain].push(s);
+  }
+
+  if (Object.keys(groups).length === 0) {
+    empty.style.display = 'block';
+    dash.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  // Render in defined order, then any remaining domains
+  const ordered = [
+    ...DOMAIN_ORDER.filter(d => groups[d]),
+    ...Object.keys(groups).filter(d => !DOMAIN_ORDER.includes(d)).sort(),
+  ];
+
+  dash.innerHTML = ordered.map(domain => {
+    const meta = DOMAIN_META[domain] || { label: domain, icon: '🔧', ctrl: 'toggle' };
+    const isWeather = meta.ctrl === 'weather';
+    const cards = groups[domain]
+      .sort((a, b) => a.entity_id.localeCompare(b.entity_id))
+      .map(s => renderCard(s, meta))
+      .join('');
+    return `
+      <div class="domain-section">
+        <div class="domain-title">${meta.icon} ${meta.label}</div>
+        ${isWeather ? cards : `<div class="cards">${cards}</div>`}
+      </div>`;
+  }).join('');
+
+  // Attach event listeners after DOM update
+  attachListeners();
+}
+
+function renderWeatherCard(s) {
+  const a = s.attributes || {};
+  const icon = CONDITION_ICON[s.state] ?? '🌡️';
+  const isDay = a.is_day !== false;
+  const dayClass = isDay ? 'day' : 'night';
+  const tempUnit = a.temperature_unit ?? '°C';
+  const windUnit = a.wind_speed_unit ?? 'km/h';
+  const desc = a.description ?? s.state;
+
+  return `
+    <div class="weather-card ${dayClass}" data-entity="${s.entity_id}">
+      <div class="weather-main">
+        <div class="weather-icon">${icon}</div>
+        <div>
+          <div class="weather-temp">${a.temperature ?? '--'}<span class="weather-temp-unit">${tempUnit}</span></div>
+          ${a.feels_like != null ? `<div class="weather-feels">Feels like ${a.feels_like}${tempUnit}</div>` : ''}
+        </div>
+      </div>
+      <div class="weather-info">
+        <div class="weather-location">${esc(a.friendly_name ?? s.entity_id)}</div>
+        <div class="weather-desc">${esc(desc)}</div>
+        <div class="weather-stats">
+          ${a.humidity != null ? `<div class="weather-stat"><span class="weather-stat-label">Humidity</span><span class="weather-stat-value">${a.humidity}%</span></div>` : ''}
+          ${a.wind_speed != null ? `<div class="weather-stat"><span class="weather-stat-label">Wind</span><span class="weather-stat-value">${a.wind_speed} ${windUnit}</span></div>` : ''}
+          ${a.precipitation != null ? `<div class="weather-stat"><span class="weather-stat-label">Precip</span><span class="weather-stat-value">${a.precipitation} mm</span></div>` : ''}
+          ${a.wind_direction != null ? `<div class="weather-stat"><span class="weather-stat-label">Direction</span><span class="weather-stat-value">${bearingToCompass(a.wind_direction)}</span></div>` : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+function bearingToCompass(deg) {
+  const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+function renderCard(s, meta) {
+  const domain = s.entity_id.split('.')[0];
+  const isOn = s.state === 'on';
+  const name = s.attributes?.friendly_name || s.entity_id.split('.')[1].replace(/_/g, ' ');
+
+  if (meta.ctrl === 'weather') return renderWeatherCard(s);
+
+  if (meta.ctrl === 'readonly') {
+    if (domain === 'sensor') {
+      const unit = s.attributes?.unit_of_measurement || '';
+      return `
+        <div class="card" data-entity="${s.entity_id}">
+          <div class="card-icon">${meta.icon}</div>
+          <div class="card-name">${esc(name)}</div>
+          <div class="sensor-value">${esc(s.state)}<span class="sensor-unit"> ${esc(unit)}</span></div>
+        </div>`;
+    }
+    // binary_sensor
+    return `
+      <div class="card ${isOn ? 'on' : ''}" data-entity="${s.entity_id}">
+        <div class="card-icon">${meta.icon}</div>
+        <div class="card-name">${esc(name)}</div>
+        <span class="badge ${isOn ? 'on' : ''}">${isOn ? '● Active' : '○ Clear'}</span>
+      </div>`;
+  }
+
+  // Controllable: light or switch
+  const brightness = s.attributes?.brightness;
+  const bPct = brightness != null ? Math.round(brightness / 255 * 100) : null;
+
+  // For lights and switches, dim the icon when off
+  const iconOff = !isOn ? ' icon-off' : '';
+
+  const brightnessHtml = domain === 'light' ? `
+    <div class="brightness-row">
+      <input type="range" min="0" max="100" value="${bPct ?? 0}"
+        data-entity="${s.entity_id}" data-role="brightness"
+        ${!isOn ? 'disabled' : ''} />
+      <span class="brightness-pct">${bPct != null ? bPct + '%' : '--'}</span>
+    </div>` : '';
+
+  return `
+    <div class="card ${isOn ? 'on' : ''}" data-entity="${s.entity_id}">
+      <div class="card-icon${iconOff}">${meta.icon}</div>
+      <div class="card-name">${esc(name)}</div>
+      <div class="card-state ${isOn ? 'on' : ''}">${isOn ? 'On' : s.state === 'unavailable' ? 'Unavailable' : 'Off'}</div>
+      <button class="toggle" data-entity="${s.entity_id}" data-role="toggle" aria-label="Toggle ${esc(name)}">
+        <div class="toggle-track ${isOn ? 'on' : ''}">
+          <div class="toggle-thumb"></div>
+        </div>
+      </button>
+      ${brightnessHtml}
+    </div>`;
+}
+
+function attachListeners() {
+  // Toggle buttons
+  document.querySelectorAll('[data-role="toggle"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const entityId = btn.dataset.entity;
+      const domain = entityId.split('.')[0];
+      const s = states[entityId];
+      const service = s?.state === 'on' ? 'turn_off' : 'turn_on';
+      callService(domain, service, entityId);
+    });
+  });
+
+  // Brightness sliders
+  document.querySelectorAll('[data-role="brightness"]').forEach(slider => {
+    // Live label update
+    slider.addEventListener('input', () => {
+      const pct = slider.value;
+      const row = slider.closest('.brightness-row');
+      if (row) row.querySelector('.brightness-pct').textContent = pct + '%';
+    });
+    // Send on release
+    slider.addEventListener('change', () => {
+      const entityId = slider.dataset.entity;
+      callService('light', 'turn_on', entityId, { brightness_pct: Number(slider.value) });
+    });
+  });
+}
+
+// ── Service calls ─────────────────────────────────────────────────────────────
+async function callService(domain, service, entityId, serviceData = {}) {
+  try {
+    await fetch(`${BASE}/api/services/${domain}/${service}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        target: { entity_id: entityId },
+        service_data: serviceData,
+      }),
+    });
+    // State update comes via WebSocket; no need to re-fetch
+  } catch (err) {
+    console.error('Service call failed', err);
+  }
+}
+
+// ── WebSocket (Socket.IO) ─────────────────────────────────────────────────────
+function connectWs() {
+  // The backend uses Socket.IO — must use the Socket.IO client, not native WebSocket
+  ws = io({ path: '/api/websocket', transports: ['websocket'] });
+
+  ws.on('connect', () => setWsStatus(false)); // connected to socket, not yet authed
+
+  ws.on('message', (msg) => {
+    if (msg.type === 'auth_required') {
+      ws.emit('message', { type: 'auth', access_token: token });
+    }
+    else if (msg.type === 'auth_ok') {
+      setWsStatus(true);
+      ws.emit('message', { id: 1, type: 'subscribe_events', event_type: 'state_changed' });
+    }
+    else if (msg.type === 'event' && msg.event?.event_type === 'state_changed') {
+      const { new_state } = msg.event.data || {};
+      if (new_state) {
+        states[new_state.entity_id] = new_state;
+        updateCard(new_state);
+      }
+    }
+  });
+
+  ws.on('disconnect', () => {
+    setWsStatus(false);
+    // Socket.IO handles reconnection automatically
+  });
+}
+
+function setWsStatus(connected) {
+  document.getElementById('ws-dot').className = 'dot' + (connected ? ' connected' : '');
+  document.getElementById('ws-label').textContent = connected ? 'Live' : 'Connecting…';
+}
+
+// ── Incremental DOM update (no full re-render) ────────────────────────────────
+function updateCard(s) {
+  const domain = s.entity_id.split('.')[0];
+  // Weather uses .weather-card, not .card
+  const selector = domain === 'weather'
+    ? `.weather-card[data-entity="${s.entity_id}"]`
+    : `.card[data-entity="${s.entity_id}"]`;
+  const existing = document.querySelector(selector);
+  if (!existing) {
+    // New entity appeared — full re-render
+    renderDashboard();
+    return;
+  }
+
+  const meta = DOMAIN_META[domain] || { label: domain, icon: '🔧', ctrl: 'toggle' };
+  const isOn = s.state === 'on';
+
+  // Replace card contents
+  const newCard = document.createElement('div');
+  newCard.innerHTML = renderCard(s, meta).trim();
+  const newCardEl = newCard.firstElementChild;
+
+  existing.replaceWith(newCardEl);
+
+  // Re-attach listeners for this new element
+  newCardEl.querySelectorAll('[data-role="toggle"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const entityId = btn.dataset.entity;
+      const domainName = entityId.split('.')[0];
+      const sv = states[entityId];
+      const service = sv?.state === 'on' ? 'turn_off' : 'turn_on';
+      callService(domainName, service, entityId);
+    });
+  });
+  newCardEl.querySelectorAll('[data-role="brightness"]').forEach(slider => {
+    slider.addEventListener('input', () => {
+      const row = slider.closest('.brightness-row');
+      if (row) row.querySelector('.brightness-pct').textContent = slider.value + '%';
+    });
+    slider.addEventListener('change', () => {
+      callService('light', 'turn_on', slider.dataset.entity, { brightness_pct: Number(slider.value) });
+    });
+  });
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

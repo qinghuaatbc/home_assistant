@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 import { AppModule } from './app.module';
 import { HaExceptionFilter } from './common/filters/ha-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -9,9 +11,12 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
 
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['log', 'error', 'warn', 'debug'],
   });
+
+  // Serve frontend from public/
+  app.useStaticAssets(join(__dirname, '..', 'public'));
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('http.port', 8123);

@@ -7,6 +7,7 @@ import { BinarySensorIntegration } from './built-in/binary-sensor/binary-sensor.
 import { Isy994Integration } from './built-in/isy994/isy994.integration';
 import { Isy994ClientService } from './built-in/isy994/isy994-client.service';
 import { Isy994SubscriptionService } from './built-in/isy994/isy994-subscription.service';
+import { WeatherIntegration } from './built-in/weather/weather.integration';
 import { RegistryModule } from '../registry/registry.module';
 import { ContextService } from '../core/context/context.service';
 
@@ -24,6 +25,8 @@ import { ContextService } from '../core/context/context.service';
     Isy994Integration,
     Isy994ClientService,
     Isy994SubscriptionService,
+    // Weather
+    WeatherIntegration,
   ],
   exports: [IntegrationLoaderService],
 })

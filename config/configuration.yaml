@@ -27,6 +27,12 @@ logger:
   level: "info"
 
 integrations:
+  - domain: weather
+    city: "Vancouver, BC"       # change to any city, e.g. "Tokyo" or "London"
+    temperature_unit: celsius   # celsius | fahrenheit
+    wind_speed_unit: kmh        # kmh | mph | ms
+    scan_interval: 600          # refresh interval in seconds
+
   - domain: light
     platforms:
       - name: demo

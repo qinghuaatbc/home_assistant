@@ -12,6 +12,7 @@ import { SwitchIntegration } from './built-in/switch/switch.integration';
 import { SensorIntegration } from './built-in/sensor/sensor.integration';
 import { BinarySensorIntegration } from './built-in/binary-sensor/binary-sensor.integration';
 import { Isy994Integration } from './built-in/isy994/isy994.integration';
+import { WeatherIntegration } from './built-in/weather/weather.integration';
 import {
   EVENT_HOMEASSISTANT_START,
   EVENT_COMPONENT_LOADED,
@@ -56,6 +57,7 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     sensorIntegration: SensorIntegration,
     binarySensorIntegration: BinarySensorIntegration,
     isy994Integration: Isy994Integration,
+    weatherIntegration: WeatherIntegration,
   ) {
     // Register built-in integrations
     this.builtInRegistry.set('light', lightIntegration);
@@ -63,6 +65,7 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     this.builtInRegistry.set('sensor', sensorIntegration);
     this.builtInRegistry.set('binary_sensor', binarySensorIntegration);
     this.builtInRegistry.set('isy994', isy994Integration);
+    this.builtInRegistry.set('weather', weatherIntegration);
   }
 
   /**

@@ -1,0 +1,80 @@
+export const DOMAIN_WEATHER = 'weather';
+
+/**
+ * WMO Weather Interpretation Codes → HA condition strings.
+ * https://open-meteo.com/en/docs#weathervariables
+ */
+export const WMO_TO_CONDITION: Record<number, string> = {
+  0:  'sunny',
+  1:  'sunny',
+  2:  'partlycloudy',
+  3:  'cloudy',
+  45: 'fog',
+  48: 'fog',
+  51: 'rainy',
+  53: 'rainy',
+  55: 'rainy',
+  56: 'rainy',
+  57: 'rainy',
+  61: 'rainy',
+  63: 'rainy',
+  65: 'pouring',
+  66: 'rainy',
+  67: 'pouring',
+  71: 'snowy',
+  73: 'snowy',
+  75: 'snowy',
+  77: 'snowy',
+  80: 'rainy',
+  81: 'rainy',
+  82: 'pouring',
+  85: 'snowy',
+  86: 'snowy',
+  95: 'lightning',
+  96: 'lightning-rainy',
+  99: 'lightning-rainy',
+};
+
+export const WMO_DESCRIPTION: Record<number, string> = {
+  0:  'Clear sky',
+  1:  'Mainly clear',
+  2:  'Partly cloudy',
+  3:  'Overcast',
+  45: 'Fog',
+  48: 'Icy fog',
+  51: 'Light drizzle',
+  53: 'Drizzle',
+  55: 'Heavy drizzle',
+  61: 'Slight rain',
+  63: 'Rain',
+  65: 'Heavy rain',
+  71: 'Slight snow',
+  73: 'Snow',
+  75: 'Heavy snow',
+  80: 'Rain showers',
+  81: 'Rain showers',
+  82: 'Violent rain showers',
+  85: 'Snow showers',
+  86: 'Heavy snow showers',
+  95: 'Thunderstorm',
+  96: 'Thunderstorm with hail',
+  99: 'Thunderstorm with heavy hail',
+};
+
+/** Condition → emoji */
+export const CONDITION_ICON: Record<string, string> = {
+  'sunny':           '☀️',
+  'partlycloudy':    '⛅',
+  'cloudy':          '☁️',
+  'fog':             '🌫️',
+  'rainy':           '🌧️',
+  'pouring':         '⛈️',
+  'snowy':           '❄️',
+  'snowy-rainy':     '🌨️',
+  'lightning':       '⚡',
+  'lightning-rainy': '⛈️',
+  'windy':           '🌬️',
+  'windy-variant':   '🌬️',
+  'hail':            '🌨️',
+  'exceptional':     '🌡️',
+};
