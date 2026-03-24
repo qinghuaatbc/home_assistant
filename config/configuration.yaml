@@ -219,3 +219,57 @@ integrations:
           - entity_id: binary_sensor.door
             name: "Front Door"
             device_class: door
+
+# ── Automations ───────────────────────────────────────────────────────────────
+automation:
+  - id: "motion_light"
+    alias: "Turn on living room light when motion detected"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.motion
+        to: "on"
+    condition:
+      - condition: time
+        after: "07:00"
+        before: "23:00"
+    action:
+      - action: call_service
+        service: light.turn_on
+        target:
+          entity_id: light.living_room
+        data:
+          brightness: 200
+
+  - id: "night_dim"
+    alias: "Dim bedroom light at 10pm"
+    mode: single
+    trigger:
+      - platform: time
+        at: "22:00"
+    action:
+      - action: condition
+        conditions:
+          - condition: state
+            entity_id: light.bedroom
+            state: "on"
+        then:
+          - action: call_service
+            service: light.turn_on
+            target:
+              entity_id: light.bedroom
+            data:
+              brightness: 50
+
+  - id: "high_temp_alert"
+    alias: "Turn on fan when temperature is high"
+    mode: single
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.temperature
+        above: 28
+    action:
+      - action: call_service
+        service: switch.turn_on
+        target:
+          entity_id: switch.fan

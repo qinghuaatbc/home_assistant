@@ -17,6 +17,7 @@ import { YamahaAvrIntegration } from './built-in/yamaha-avr/yamaha-avr.integrati
 import { LutronCasetaIntegration } from './built-in/lutron-caseta/lutron-caseta.integration';
 import { MqttIntegration } from './built-in/mqtt/mqtt.integration';
 import { CameraIntegration } from './built-in/camera/camera.integration';
+import { AutomationIntegration } from '../automations/automation.integration';
 import {
   EVENT_HOMEASSISTANT_START,
   EVENT_COMPONENT_LOADED,
@@ -66,6 +67,7 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     lutronCasetaIntegration: LutronCasetaIntegration,
     mqttIntegration: MqttIntegration,
     cameraIntegration: CameraIntegration,
+    automationIntegration: AutomationIntegration,
   ) {
     // Register built-in integrations
     this.builtInRegistry.set('light', lightIntegration);
@@ -78,6 +80,7 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     this.builtInRegistry.set('lutron_caseta', lutronCasetaIntegration);
     this.builtInRegistry.set('mqtt', mqttIntegration);
     this.builtInRegistry.set('camera', cameraIntegration);
+    this.builtInRegistry.set('automation', automationIntegration);
   }
 
   /**

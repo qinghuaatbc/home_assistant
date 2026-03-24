@@ -51,7 +51,13 @@ export default (): Record<string, unknown> => {
       type: process.env.HA_DB_TYPE ?? (fileConfig.database as Record<string, unknown>)?.type ?? 'better-sqlite3',
       database: process.env.HA_DB_PATH ?? (fileConfig.database as Record<string, unknown>)?.database ?? 'ha.db',
     },
-    integrations: (fileConfig.integrations as unknown[]) ?? [],
+    integrations: [
+      ...((fileConfig.integrations as unknown[]) ?? []),
+      // Inject automation as a synthetic integration entry
+      ...(fileConfig.automation
+        ? [{ domain: 'automation', automations: fileConfig.automation }]
+        : []),
+    ],
   };
 
   return config;

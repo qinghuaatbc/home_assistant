@@ -19,9 +19,11 @@ import { CameraStreamService } from './built-in/camera/camera-stream.service';
 import { CameraController } from './built-in/camera/camera.controller';
 import { RegistryModule } from '../registry/registry.module';
 import { ContextService } from '../core/context/context.service';
+import { AutomationModule } from '../automations/automation.module';
+import { AutomationIntegration } from '../automations/automation.integration';
 
 @Module({
-  imports: [RegistryModule],
+  imports: [RegistryModule, AutomationModule],
   controllers: [CameraController],
   providers: [
     IntegrationLoaderService,
