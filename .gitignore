@@ -5,3 +5,5 @@ dist/
 *.db-wal
 .env
 .claude/
+.DS_Store
+*.tsbuildinfo
