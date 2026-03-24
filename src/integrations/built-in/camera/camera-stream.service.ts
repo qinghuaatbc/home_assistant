@@ -1,10 +1,10 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
-import { spawn, spawnSync, ChildProcess } from 'child_process';
+import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
+import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { FFMPEG_RESTART_DELAY } from './camera.constants';
+import { FFMPEG_RESTART_DELAY, STREAM_IDLE_TIMEOUT } from './camera.constants';
 
 export interface StreamDef {
   label: string;
@@ -16,10 +16,12 @@ export type StateListener = (state: 'streaming' | 'unavailable') => void;
 interface StreamEntry {
   rtspUrl: string;
   process: ChildProcess | null;
-  hlsDir: string;       // directory where HLS segments live
-  ready: boolean;       // true once at least one .m3u8 exists
+  hlsDir: string;
+  ready: boolean;
   restartTimer: NodeJS.Timeout | null;
-  stopped: boolean;
+  stopped: boolean;          // camera removed from registry
+  idleTimer: NodeJS.Timeout | null;  // stop after inactivity
+  lastRequest: number;       // epoch ms of last client request
 }
 
 interface CameraGroup {
@@ -29,21 +31,16 @@ interface CameraGroup {
 }
 
 /**
- * Manages one FFmpeg process per camera stream.
- * Each process transcodes RTSP → HLS segments written to a temp directory.
+ * On-demand HLS streaming service.
  *
- * FFmpeg command:
- *   ffmpeg -rtsp_transport tcp -i <url>
- *          -c:v copy -an
- *          -f hls -hls_time 2 -hls_list_size 3
- *          -hls_flags delete_segments+append_list
- *          <hlsDir>/index.m3u8
+ * Streams are started lazily when a client requests the manifest, and
+ * stopped automatically after STREAM_IDLE_TIMEOUT ms of no requests.
+ * This prevents exhausting the DVR's concurrent-connection limit.
  */
 @Injectable()
 export class CameraStreamService extends EventEmitter implements OnApplicationShutdown {
   private readonly logger = new Logger(CameraStreamService.name);
   private readonly groups = new Map<string, CameraGroup>();
-  private startIndex = 0;  // global counter for staggered starts
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -73,34 +70,49 @@ export class CameraStreamService extends EventEmitter implements OnApplicationSh
         ready: false,
         restartTimer: null,
         stopped: false,
+        idleTimer: null,
+        lastRequest: 0,
       });
     }
 
     this.groups.set(entityId, group);
-
-    // Stagger stream starts: 2s apart to avoid overwhelming the DVR
-    for (const key of group.streams.keys()) {
-      const delay = this.startIndex * 2000;
-      this.startIndex++;
-      if (delay === 0) {
-        this.startProcess(entityId, key);
-      } else {
-        setTimeout(() => this.startProcess(entityId, key), delay);
-      }
-    }
   }
 
   stopCamera(entityId: string): void {
     const group = this.groups.get(entityId);
     if (!group) return;
     for (const [key, entry] of group.streams) {
-      entry.stopped = true;
-      if (entry.restartTimer) clearTimeout(entry.restartTimer);
-      entry.process?.kill('SIGKILL');
-      try { fs.rmSync(entry.hlsDir, { recursive: true, force: true }); } catch { /* ignore */ }
-      this.logger.debug(`Camera [${entityId}:${key}] stopped`);
+      this.stopEntry(entityId, key, entry, true);
     }
     this.groups.delete(entityId);
+  }
+
+  /**
+   * Called by the controller whenever a client requests a manifest or segment.
+   * Starts the stream if not running; resets the idle timer.
+   */
+  touchStream(entityId: string, quality: string): void {
+    const entry = this.resolveEntry(entityId, quality);
+    if (!entry || entry.stopped) return;
+
+    entry.lastRequest = Date.now();
+
+    // Reset idle timer
+    if (entry.idleTimer) {
+      clearTimeout(entry.idleTimer);
+      entry.idleTimer = null;
+    }
+    entry.idleTimer = setTimeout(() => {
+      this.logger.log(`Camera [${entityId}] stream idle — stopping FFmpeg`);
+      this.stopEntry(entityId, quality, entry, false);
+    }, STREAM_IDLE_TIMEOUT);
+
+    // Start if not already running
+    if (!entry.process && !entry.restartTimer) {
+      const group = this.groups.get(entityId)!;
+      const key = (quality || group.defaultLabel).toLowerCase();
+      this.startProcess(entityId, key);
+    }
   }
 
   /** Returns the path to index.m3u8 for the given quality, or undefined */
@@ -139,12 +151,24 @@ export class CameraStreamService extends EventEmitter implements OnApplicationSh
     return group.streams.get(key) ?? group.streams.get(group.defaultLabel);
   }
 
+  private stopEntry(entityId: string, key: string, entry: StreamEntry, permanent: boolean): void {
+    if (permanent) entry.stopped = true;
+    if (entry.restartTimer) { clearTimeout(entry.restartTimer); entry.restartTimer = null; }
+    if (entry.idleTimer) { clearTimeout(entry.idleTimer); entry.idleTimer = null; }
+    if (entry.process) { entry.process.kill('SIGKILL'); entry.process = null; }
+    entry.ready = false;
+    if (permanent) {
+      try { fs.rmSync(entry.hlsDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+    this.logger.debug(`Camera [${entityId}:${key}] ${permanent ? 'stopped' : 'stream paused (idle)'}`);
+  }
+
   // ── FFmpeg (HLS) ─────────────────────────────────────────────────────────────
 
   private startProcess(entityId: string, key: string): void {
     const group = this.groups.get(entityId);
     const entry = group?.streams.get(key);
-    if (!entry || entry.stopped) return;
+    if (!entry || entry.stopped || entry.process) return;
 
     const m3u8 = path.join(entry.hlsDir, 'index.m3u8');
     this.logger.log(`Camera [${entityId}:${key}] starting HLS → ${this.maskUrl(entry.rtspUrl)}`);
@@ -153,8 +177,8 @@ export class CameraStreamService extends EventEmitter implements OnApplicationSh
       '-loglevel', 'warning',
       '-rtsp_transport', 'tcp',
       '-i', entry.rtspUrl,
-      '-c:v', 'copy',   // no re-encode — pass H.264 straight through
-      '-c:a', 'aac',    // transcode audio to AAC for HLS
+      '-c:v', 'copy',
+      '-c:a', 'aac',
       '-f', 'hls',
       '-hls_time', '2',
       '-hls_list_size', '3',
@@ -166,7 +190,6 @@ export class CameraStreamService extends EventEmitter implements OnApplicationSh
     entry.process = proc;
     entry.ready = false;
 
-    // Poll for the manifest file appearing
     const readyPoll = setInterval(() => {
       if (fs.existsSync(m3u8)) {
         entry.ready = true;
@@ -183,14 +206,21 @@ export class CameraStreamService extends EventEmitter implements OnApplicationSh
     proc.on('close', (code) => {
       clearInterval(readyPoll);
       if (entry.stopped) return;
-      this.logger.warn(`Camera [${entityId}:${key}] FFmpeg exited (code ${code}), restarting in ${FFMPEG_RESTART_DELAY / 1000}s`);
       entry.process = null;
       entry.ready = false;
       group!.stateListener('unavailable');
-      entry.restartTimer = setTimeout(() => {
-        entry.restartTimer = null;
-        this.startProcess(entityId, key);
-      }, FFMPEG_RESTART_DELAY);
+
+      // Only restart if there was a recent client request
+      const sinceRequest = Date.now() - entry.lastRequest;
+      if (sinceRequest < STREAM_IDLE_TIMEOUT) {
+        this.logger.warn(`Camera [${entityId}:${key}] FFmpeg exited (code ${code}), restarting in ${FFMPEG_RESTART_DELAY / 1000}s`);
+        entry.restartTimer = setTimeout(() => {
+          entry.restartTimer = null;
+          this.startProcess(entityId, key);
+        }, FFMPEG_RESTART_DELAY);
+      } else {
+        this.logger.log(`Camera [${entityId}:${key}] FFmpeg exited — no active viewers, not restarting`);
+      }
     });
   }
 

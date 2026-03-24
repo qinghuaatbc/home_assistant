@@ -34,6 +34,7 @@ export class CameraController {
       throw new NotFoundException(`Camera not found: ${entityId}`);
     }
 
+    this.streamService.touchStream(entityId, quality);
     const manifestPath = this.streamService.getHlsManifestPath(entityId, quality);
     if (!manifestPath || !fs.existsSync(manifestPath)) {
       res.status(503).send('Stream not ready yet');
@@ -57,6 +58,8 @@ export class CameraController {
     if (!this.streamService.hasCamera(entityId)) {
       throw new NotFoundException(`Camera not found: ${entityId}`);
     }
+
+    this.streamService.touchStream(entityId, quality);
 
     // Only serve .ts files
     if (!segment.endsWith('.ts')) {
