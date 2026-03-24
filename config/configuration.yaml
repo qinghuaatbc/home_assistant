@@ -12,11 +12,12 @@ http:
   port: 8123
   cors_allowed_origins:
     - "http://localhost:3000"
+    - "http://localhost:5173"
     - "http://localhost:8080"
 
 auth:
   jwt_secret: "change-this-secret-in-production-at-least-32-chars"
-  jwt_expiry: "30m"
+  jwt_expiry: "24h"
 
 database:
   type: "better-sqlite3"

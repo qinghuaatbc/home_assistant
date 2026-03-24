@@ -1,5 +1,5 @@
-import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
-import { spawn, ChildProcess } from 'child_process';
+import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
+import { spawn, spawnSync, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
