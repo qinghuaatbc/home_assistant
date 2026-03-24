@@ -224,7 +224,7 @@ integrations:
 # ── Automations ───────────────────────────────────────────────────────────────
 automation:
   - id: "motion_light"
-    alias: "Turn on living room light when motion detected"
+    alias: "!Turn on living room light when motion detected"
     mode: single
     trigger:
       - platform: state

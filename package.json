@@ -7,6 +7,9 @@
   "license": "Apache-2.0",
   "scripts": {
     "build": "nest build",
+    "frontend:install": "cd frontend && npm install --cache /tmp/npm-cache",
+    "frontend:dev": "cd frontend && node node_modules/.bin/vite",
+    "frontend:build": "cd frontend && node node_modules/.bin/tsc -b && node node_modules/.bin/vite build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
