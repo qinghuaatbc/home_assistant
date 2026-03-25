@@ -168,14 +168,30 @@ export default function FloorPlanPage() {
     }
     animate()
 
-    const ro = new ResizeObserver(() => {
+    const doResize = () => {
       const w = el.clientWidth, h = el.clientHeight
+      if (w === 0 || h === 0) return
       camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h)
-    })
+    }
+
+    const ro = new ResizeObserver(doResize)
     ro.observe(el)
+
+    // On mobile, orientationchange fires before the browser recalculates layout.
+    // Delay the resize so dimensions reflect the new orientation correctly.
+    let orientTimer: ReturnType<typeof setTimeout>
+    const onOrientationChange = () => {
+      clearTimeout(orientTimer)
+      orientTimer = setTimeout(doResize, 150)
+    }
+    window.addEventListener('orientationchange', onOrientationChange)
+    screen.orientation?.addEventListener('change', onOrientationChange)
 
     return () => {
       cancelAnimationFrame(animFrame.current); ro.disconnect()
+      window.removeEventListener('orientationchange', onOrientationChange)
+      screen.orientation?.removeEventListener('change', onOrientationChange)
+      clearTimeout(orientTimer)
       renderer.dispose(); el.removeChild(renderer.domElement)
       rendererRef.current = null; sceneRef.current = null; cameraRef.current = null; controlsRef.current = null
     }
