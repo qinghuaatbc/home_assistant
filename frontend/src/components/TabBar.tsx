@@ -6,6 +6,7 @@ interface Props {
 const TABS = [
   { id: 'dashboard',   icon: '⊞',  label: 'Home'       },
   { id: 'entities',    icon: '⚙️',  label: 'Devices'    },
+  { id: 'floorplan',   icon: '🏠',  label: '3D Plan'    },
   { id: 'automations', icon: '⚡',  label: 'Automations' },
   { id: 'settings',    icon: '☰',  label: 'Settings'   },
 ]

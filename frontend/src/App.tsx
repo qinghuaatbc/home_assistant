@@ -5,9 +5,10 @@ import DashboardPage from './pages/DashboardPage'
 import EntitiesPage from './pages/EntitiesPage'
 import AutomationsPage from './pages/AutomationsPage'
 import SettingsPage from './pages/SettingsPage'
+import FloorPlanPage from './pages/FloorPlanPage'
 import TabBar from './components/TabBar'
 
-type Tab = 'dashboard' | 'entities' | 'automations' | 'settings'
+type Tab = 'dashboard' | 'entities' | 'automations' | 'settings' | 'floorplan'
 
 function AppInner() {
   const { token } = useHa()
@@ -21,6 +22,7 @@ function AppInner() {
       {tab === 'entities'     && <EntitiesPage />}
       {tab === 'automations'  && <AutomationsPage />}
       {tab === 'settings'     && <SettingsPage />}
+      {tab === 'floorplan'    && <FloorPlanPage />}
       <TabBar current={tab} onChange={(t) => setTab(t as Tab)} />
     </>
   )

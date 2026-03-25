@@ -64,14 +64,39 @@ integrations:
     platforms:
       - name: demo
         entities:
+          # ── glb_floor : which floor tab (1/2/3) shows this light
+          # ── glb_mesh  : exact node name in the .glb → click the real 3D fixture
+          # ── glb_pos   : [x, z] world coords for sphere indicator (no mesh)
           - entity_id: light.living_room
             name: "Living Room Light"
             brightness: 255
+            glb_floor: 1
+            glb_pos: [-4.5, -2.0]
           - entity_id: light.bedroom
             name: "Bedroom Light"
             brightness: 128
+            glb_floor: 2
+            glb_pos: [-4.5, -2.0]
           - entity_id: light.kitchen
             name: "Kitchen Light"
+            glb_floor: 1
+            glb_pos: [4.5, -2.0]
+          # ── Lights that map to a named mesh object inside the .glb ──
+          - entity_id: light.kitchen_light
+            name: "Kitchen Ceiling"
+            brightness: 200
+            glb_floor: 1
+            glb_mesh: "KITCHEN_LIGHT"
+          - entity_id: light.dining_light
+            name: "Dining Room Light"
+            brightness: 255
+            glb_floor: 1
+            glb_mesh: "DINING_LIGHT"
+          - entity_id: light.office_light
+            name: "Office Light"
+            brightness: 150
+            glb_floor: 1
+            glb_mesh: "OFFICE_LIGHT"
 
   - domain: switch
     platforms:

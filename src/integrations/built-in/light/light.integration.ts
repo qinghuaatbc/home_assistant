@@ -75,7 +75,15 @@ export class LightIntegration implements HaIntegration {
     const platforms = config.platforms ?? [];
     for (const platform of platforms) {
       for (const entityConfig of platform.entities ?? []) {
-        await this.registerLightEntity(entityConfig.entity_id, entityConfig.name ?? entityConfig.entity_id);
+        const extra: Record<string, unknown> = {};
+        if (entityConfig.glb_mesh)  extra.glb_mesh  = entityConfig.glb_mesh;
+        if (entityConfig.glb_floor) extra.glb_floor = entityConfig.glb_floor;
+        if (entityConfig.glb_pos)   extra.glb_pos   = entityConfig.glb_pos;
+        await this.registerLightEntity(
+          entityConfig.entity_id,
+          entityConfig.name ?? entityConfig.entity_id,
+          extra,
+        );
       }
     }
 
@@ -228,7 +236,11 @@ export class LightIntegration implements HaIntegration {
     return Array.isArray(entityId) ? entityId : [entityId];
   }
 
-  private async registerLightEntity(entityId: string, name: string): Promise<void> {
+  private async registerLightEntity(
+    entityId: string,
+    name: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<void> {
     await this.entityRegistry.registerEntity({
       entity_id: entityId,
       platform: DOMAIN_LIGHT,
@@ -236,7 +248,7 @@ export class LightIntegration implements HaIntegration {
       original_name: name,
     });
 
-    // Set initial state
+    // Set initial state — extra may carry glb_mesh / glb_floor from config
     this.stateMachine.setState(
       entityId,
       STATE_OFF,
@@ -253,6 +265,7 @@ export class LightIntegration implements HaIntegration {
         effect_list: null,
         min_mireds: 153,
         max_mireds: 500,
+        ...extra,
       },
       this.contextService.system(),
     );
