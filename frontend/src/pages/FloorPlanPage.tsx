@@ -235,11 +235,12 @@ export default function FloorPlanPage() {
           if (clipPlane) {
             const wBot: number = doorObj.userData.worldBottomY
             const wTop: number = doorObj.userData.worldTopY
-            const openTarget = wBot + (wTop - wBot) * 0.9  // all: 10% left
-            const target = open ? -openTarget : -(wBot - (wTop - wBot))
-            const speed = open ? 0.012 : 0.03
-            const next = THREE.MathUtils.lerp(clipPlane.constant, target, speed)
-            clipPlane.constant = Math.abs(next - target) < 0.002 ? target : next
+            const height = wTop - wBot
+            const openTarget = wBot + height * 0.9  // 10% left
+            const target = open ? -openTarget : -(wBot - height)
+            const step = height * 0.018  // fixed units/frame — no startup jump
+            const diff = target - clipPlane.constant
+            clipPlane.constant = Math.abs(diff) < step ? target : clipPlane.constant + Math.sign(diff) * step
           }
         } else {
           // Hinged door rotates along Z
@@ -259,11 +260,12 @@ export default function FloorPlanPage() {
         if ((deviceClass === 'curtain' || deviceClass === 'blind') && clipPlane) {
           const wBot: number = marker.userData.worldBottomY
           const wTop: number = marker.userData.worldTopY
-          const openTarget = wBot + (wTop - wBot) * 0.9
-          const target = open ? -openTarget : -(wBot - (wTop - wBot))
-          const speed = open ? 0.012 : 0.03
-          const next = THREE.MathUtils.lerp(clipPlane.constant, target, speed)
-          clipPlane.constant = Math.abs(next - target) < 0.002 ? target : next
+          const height = wTop - wBot
+          const openTarget = wBot + height * 0.9
+          const target = open ? -openTarget : -(wBot - height)
+          const step = height * 0.018
+          const diff = target - clipPlane.constant
+          clipPlane.constant = Math.abs(diff) < step ? target : clipPlane.constant + Math.sign(diff) * step
           mM.color.set(0.5, 0.75, 1); mM.emissive.set(0.1, 0.3, 0.8)
           mM.emissiveIntensity = 0.3; mM.opacity = 0.7
         } else if (open) {
@@ -527,8 +529,10 @@ export default function FloorPlanPage() {
           const turningOn = st?.state !== 'on'
           callService('light', turningOn ? 'turn_on' : 'turn_off', turningOn ? { brightness: 255 } : {}, eid)
         } else if (eid.startsWith('binary_sensor.')) {
-          // Toggle door/window open ↔ closed
-          setEntityState(eid, st?.state === 'on' ? 'off' : 'on')
+          const newState = st?.state === 'on' ? 'off' : 'on'
+          // Optimistic update — animation starts immediately, no network wait
+          statesRef.current = new Map(statesRef.current).set(eid, { ...st!, state: newState })
+          setEntityState(eid, newState)
         }
       }
     } else setSelectedId(null)
