@@ -4,7 +4,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { useHa, HaState } from '../context/HaContext'
 
-const FW = 19, FD = 14, WH = 2.8, WT = 0.15, BR = 0.22
+const FW = 19, FD = 14, WH = 2.8, WT = 0.15, BR = 0.35
+const SR = 0.28  // sensor indicator radius
 
 function buildFallback(floor: 1 | 2 | 3): THREE.Group {
   const g = new THREE.Group()
@@ -50,8 +51,55 @@ function makeSphere(x: number, z: number, entityId: string, scene: THREE.Scene) 
   return { bulb, glow, ptLight: pl }
 }
 
+// Door/window/curtain sensor indicator
+function makeSensorMarker(x: number, z: number, entityId: string, deviceClass: string, scene: THREE.Scene) {
+  const isCurtain = deviceClass === 'curtain' || deviceClass === 'blind'
+  const isDoor    = deviceClass === 'door' || deviceClass === 'garage_door'
+
+  // Curtain/blind: full-height flat panel; door: tall box; window: wide box
+  const by  = isCurtain ? WH / 2 : WH * 0.55
+  const geo = isCurtain
+    ? new THREE.BoxGeometry(SR * 4, WH, SR * 0.15)
+    : isDoor
+      ? new THREE.BoxGeometry(SR * 1.6, SR * 2.2, SR * 0.4)
+      : new THREE.BoxGeometry(SR * 2.2, SR * 0.8, SR * 0.4)
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(0.15, 0.9, 0.35),
+    emissive: new THREE.Color(0.05, 0.5, 0.1),
+    emissiveIntensity: 0.4, transparent: true, opacity: 0.85, roughness: 0.2,
+  })
+  const marker = new THREE.Mesh(geo, mat)
+  marker.position.set(x, by, z); marker.userData.entityId = entityId; scene.add(marker)
+
+  // Curtain/blind: attach clip plane for roll-up animation (same as garage door)
+  let clipPlane: THREE.Plane | undefined
+  if (isCurtain) {
+    const worldBottomY = by - WH / 2
+    const worldTopY    = by + WH / 2
+    clipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(worldBottomY - 0.01))
+    mat.clippingPlanes = [clipPlane]
+    marker.userData.worldBottomY = worldBottomY
+    marker.userData.worldTopY    = worldTopY
+  }
+
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(SR * 1.4, 16, 16),
+    new THREE.MeshStandardMaterial({
+      color: new THREE.Color(0.1, 1, 0.3),
+      transparent: true, opacity: 0.06, depthWrite: false, side: THREE.BackSide,
+    }),
+  )
+  glow.position.set(x, by, z); scene.add(glow)
+
+  const pl = new THREE.PointLight(new THREE.Color(0.2, 1, 0.4), 0, 5, 2)
+  pl.position.set(x, by, z); scene.add(pl)
+
+  return { marker, glow, ptLight: pl, deviceClass, clipPlane }
+}
+
 export default function FloorPlanPage() {
-  const { states, callService } = useHa()
+  const { states, callService, setEntityState } = useHa()
   const containerRef = useRef<HTMLDivElement>(null)
 
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null)
@@ -65,38 +113,51 @@ export default function FloorPlanPage() {
   const ptrDown      = useRef({ x: 0, y: 0 })
 
   const fallbackRef = useRef<THREE.Group | null>(null)
-  // entityId → { mesh, ptLight, origColor }
-  const glbRefs  = useRef(new Map<string, { mesh: THREE.Mesh; ptLight: THREE.PointLight; origColor: THREE.Color }>())
-  // entityId → { bulb, glow, ptLight }
-  const sphRefs  = useRef(new Map<string, { bulb: THREE.Mesh; glow: THREE.Mesh; ptLight: THREE.PointLight }>())
+  const glbModelRef = useRef<THREE.Group | null>(null)   // loaded GLB root, kept for late-arriving entities
+  const glbRefs     = useRef(new Map<string, { mesh: THREE.Mesh; ptLight: THREE.PointLight; origColor: THREE.Color }>())
+  const sphRefs     = useRef(new Map<string, { bulb: THREE.Mesh; glow: THREE.Mesh; ptLight: THREE.PointLight }>())
+  const senRefs     = useRef(new Map<string, { marker: THREE.Mesh; glow: THREE.Mesh; ptLight: THREE.PointLight; deviceClass: string; clipPlane?: THREE.Plane }>())
+  // door/window sensor GLB meshes: highlight real door/window geometry + animate on open
+  const senGlbRefs  = useRef(new Map<string, { meshes: THREE.Mesh[]; ptLight: THREE.PointLight; origColors: THREE.Color[]; doorObj: THREE.Object3D; origRotY: number; deviceClass: string; origPosY: number }>())
   const clickables  = useRef<THREE.Mesh[]>([])
-  const addedSphIds = useRef(new Set<string>())    // tracks which spheres are in the scene
-  const glbLightsRef = useRef<Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string }>>([])
+  const addedSphIds = useRef(new Set<string>())
+  const addedSenIds = useRef(new Set<string>())
+  const glbLightsRef    = useRef<Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string }>>([])
+  const senGlbRef       = useRef<Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string; deviceClass: string; pos?: [number, number] }>>([])
 
   const [floor, setFloor]           = useState<1 | 2 | 3>(1)
   const [glbLoading, setGlbLoading] = useState(false)
   const [glbLoaded,  setGlbLoaded]  = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  // ── Derive layout from state attributes (glb_floor/glb_mesh/glb_pos) ──────
-  // These attributes are set by configuration.yaml → light integration → state machine.
-  const { glbLights, sphereLights } = useMemo(() => {
-    const glb: Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string }> = []
-    const sph: Array<{ entityId: string; name: string; floor: 1|2|3; x: number; z: number }> = []
+  // ── Derive layout from state attributes ───────────────────────────────────
+  const { glbLights, sphereLights, sensorMarkers, sensorGlbMeshes } = useMemo(() => {
+    const glb:    Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string }> = []
+    const sph:    Array<{ entityId: string; name: string; floor: 1|2|3; x: number; z: number }> = []
+    const sen:    Array<{ entityId: string; name: string; floor: 1|2|3; x: number; z: number; deviceClass: string }> = []
+    const senGlb: Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string; deviceClass: string; pos?: [number, number] }> = []
     states.forEach((st: HaState, entityId: string) => {
-      if (!entityId.startsWith('light.')) return
       const a = st.attributes
       const f = a.glb_floor as number | undefined; if (!f) return
       const name = (a.friendly_name as string) ?? entityId
-      if (a.glb_mesh)                    glb.push({ entityId, name, floor: f as 1|2|3, meshName: a.glb_mesh as string })
-      else if (Array.isArray(a.glb_pos)) sph.push({ entityId, name, floor: f as 1|2|3, x: (a.glb_pos as number[])[0], z: (a.glb_pos as number[])[1] })
+
+      if (entityId.startsWith('light.')) {
+        if (a.glb_mesh)                    glb.push({ entityId, name, floor: f as 1|2|3, meshName: a.glb_mesh as string })
+        else if (Array.isArray(a.glb_pos)) sph.push({ entityId, name, floor: f as 1|2|3, x: (a.glb_pos as number[])[0], z: (a.glb_pos as number[])[1] })
+      } else if (entityId.startsWith('binary_sensor.')) {
+        const dc = (a.device_class as string) ?? 'door'
+        if (a.glb_mesh) {
+          const pos = Array.isArray(a.glb_pos) ? [(a.glb_pos as number[])[0], (a.glb_pos as number[])[1]] as [number, number] : undefined
+          senGlb.push({ entityId, name, floor: f as 1|2|3, meshName: a.glb_mesh as string, deviceClass: dc, pos })
+        } else if (Array.isArray(a.glb_pos)) sen.push({ entityId, name, floor: f as 1|2|3, x: (a.glb_pos as number[])[0], z: (a.glb_pos as number[])[1], deviceClass: dc })
+      }
     })
-    return { glbLights: glb, sphereLights: sph }
+    return { glbLights: glb, sphereLights: sph, sensorMarkers: sen, sensorGlbMeshes: senGlb }
   }, [states])
 
-  // Always keep refs current — animation loop and GLB callback read from refs
-  useEffect(() => { statesRef.current    = states       }, [states])
-  useEffect(() => { glbLightsRef.current = glbLights    }, [glbLights])
+  useEffect(() => { statesRef.current    = states         }, [states])
+  useEffect(() => { glbLightsRef.current = glbLights      }, [glbLights])
+  useEffect(() => { senGlbRef.current    = sensorGlbMeshes }, [sensorGlbMeshes])
 
   // ── Init Three.js once ────────────────────────────────────────────────────
   useEffect(() => {
@@ -107,6 +168,7 @@ export default function FloorPlanPage() {
     renderer.setSize(el.clientWidth, el.clientHeight)
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1
+    renderer.localClippingEnabled = true
     el.appendChild(renderer.domElement); rendererRef.current = renderer
 
     const scene = new THREE.Scene()
@@ -159,8 +221,62 @@ export default function FloorPlanPage() {
           gM.opacity = 0.10 + 0.06 * Math.sin(t * 2.8); gM.emissiveIntensity = p * b * 0.8
           ptLight.intensity = b * 3 * p
         } else {
-          bM.emissiveIntensity = 0.05; bM.opacity = 0.3
-          gM.opacity = 0.04; gM.emissiveIntensity = 0; ptLight.intensity = 0
+          bM.emissiveIntensity = 0.15; bM.opacity = 0.55
+          gM.opacity = 0.08; gM.emissiveIntensity = 0.05; ptLight.intensity = 0
+        }
+      })
+
+      // Door/window sensor GLB meshes: animate on open/close
+      senGlbRefs.current.forEach(({ doorObj, deviceClass }, eid) => {
+        const open = statesRef.current.get(eid)?.state === 'on'
+        if (deviceClass === 'garage_door' || deviceClass === 'curtain' || deviceClass === 'blind') {
+          // Clip-plane roll-up: bottom edge sweeps up, top stays fixed
+          const clipPlane = doorObj.userData.clipPlane as THREE.Plane | undefined
+          if (clipPlane) {
+            const wBot: number = doorObj.userData.worldBottomY
+            const wTop: number = doorObj.userData.worldTopY
+            const openTarget = wBot + (wTop - wBot) * 0.9  // all: 10% left
+            const target = open ? -openTarget : -(wBot - (wTop - wBot))
+            const speed = open ? 0.012 : 0.03
+            const next = THREE.MathUtils.lerp(clipPlane.constant, target, speed)
+            clipPlane.constant = Math.abs(next - target) < 0.002 ? target : next
+          }
+        } else {
+          // Hinged door rotates along Z
+          const targetRotZ = open ? doorObj.userData.origRotZ + (75 * Math.PI / 180) : doorObj.userData.origRotZ
+          doorObj.rotation.z = THREE.MathUtils.lerp(doorObj.rotation.z, targetRotZ, 0.03)
+        }
+      })
+
+      // Door/window sensors: green=closed, red=open with pulse
+      // Curtain/blind sensors: clip-plane roll-up (same as garage door)
+      senRefs.current.forEach(({ marker, glow, ptLight, deviceClass, clipPlane }, eid) => {
+        const st   = statesRef.current.get(eid)
+        const open = st?.state === 'on'
+        const mM   = marker.material as THREE.MeshStandardMaterial
+        const gM   = glow.material as THREE.MeshStandardMaterial
+
+        if ((deviceClass === 'curtain' || deviceClass === 'blind') && clipPlane) {
+          const wBot: number = marker.userData.worldBottomY
+          const wTop: number = marker.userData.worldTopY
+          const openTarget = wBot + (wTop - wBot) * 0.9
+          const target = open ? -openTarget : -(wBot - (wTop - wBot))
+          const speed = open ? 0.012 : 0.03
+          const next = THREE.MathUtils.lerp(clipPlane.constant, target, speed)
+          clipPlane.constant = Math.abs(next - target) < 0.002 ? target : next
+          mM.color.set(0.5, 0.75, 1); mM.emissive.set(0.1, 0.3, 0.8)
+          mM.emissiveIntensity = 0.3; mM.opacity = 0.7
+        } else if (open) {
+          const p = 0.7 + 0.3 * Math.sin(t * 4)
+          mM.color.set(1, 0.2, 0.1); mM.emissive.set(1, 0.1, 0.05)
+          mM.emissiveIntensity = p * 1.5; mM.opacity = 1
+          gM.color.set(1, 0.2, 0.1); gM.opacity = 0.18 + 0.1 * Math.sin(t * 4)
+          ptLight.color.set(1, 0.15, 0.05); ptLight.intensity = p * 2
+        } else {
+          mM.color.set(0.15, 0.9, 0.35); mM.emissive.set(0.05, 0.5, 0.1)
+          mM.emissiveIntensity = 0.4; mM.opacity = 0.85
+          gM.color.set(0.1, 1, 0.3); gM.opacity = 0.06
+          ptLight.color.set(0.2, 1, 0.4); ptLight.intensity = 0
         }
       })
 
@@ -177,8 +293,6 @@ export default function FloorPlanPage() {
     const ro = new ResizeObserver(doResize)
     ro.observe(el)
 
-    // On mobile, orientationchange fires before the browser recalculates layout.
-    // Delay the resize so dimensions reflect the new orientation correctly.
     let orientTimer: ReturnType<typeof setTimeout>
     const onOrientationChange = () => {
       clearTimeout(orientTimer)
@@ -201,34 +315,37 @@ export default function FloorPlanPage() {
   useEffect(() => {
     const scene = sceneRef.current; if (!scene) return
 
-    // Cleanup previous floor objects
     if (fallbackRef.current) { scene.remove(fallbackRef.current); fallbackRef.current = null }
     glbRefs.current.forEach(({ mesh, ptLight }) => { scene.remove(mesh); scene.remove(ptLight) })
     glbRefs.current.clear()
     sphRefs.current.forEach(({ bulb, glow, ptLight }) => { scene.remove(bulb); scene.remove(glow); scene.remove(ptLight) })
     sphRefs.current.clear()
+    senRefs.current.forEach(({ marker, glow, ptLight }) => { scene.remove(marker); scene.remove(glow); scene.remove(ptLight) })
+    senRefs.current.clear()
+    senGlbRefs.current.forEach(({ ptLight, doorObj, origRotY, origPosY }) => {
+      scene.remove(ptLight)
+      doorObj.rotation.y = origRotY; doorObj.rotation.z = doorObj.userData.origRotZ ?? 0; doorObj.position.y = origPosY
+      const cp = doorObj.userData.clipPlane as THREE.Plane | undefined
+      if (cp) cp.constant = -(doorObj.userData.worldBottomY as number - 0.01)
+    })
+    senGlbRefs.current.clear()
+    glbModelRef.current = null
     clickables.current = []
     addedSphIds.current.clear()
+    addedSenIds.current.clear()
     setGlbLoaded(false); setGlbLoading(true)
 
-    // Procedural fallback room
     const fb = buildFallback(floor); scene.add(fb); fallbackRef.current = fb
 
-    // Sphere lights that are already known when floor loads
-    // (reads from current ref — does NOT re-run this effect when states change)
-    glbLightsRef.current  // just ensures ref is accessed, actual sphere add in next effect
-
-    // Reset camera to default
     cameraRef.current!.position.set(0, 14, 13)
     cameraRef.current!.lookAt(0, 0, 0)
     controlsRef.current!.target.set(0, 1, 0); controlsRef.current!.update()
 
-    // Load GLB — camera repositioned only once here, not on state changes
     const targetFloor = floor
     new GLTFLoader().load(
       `/floor${floor}.glb`,
       (gltf) => {
-        if (targetFloor !== floor) return  // floor changed while loading, discard
+        if (targetFloor !== floor) return
         setGlbLoading(false); setGlbLoaded(true)
         const model = gltf.scene
 
@@ -239,25 +356,71 @@ export default function FloorPlanPage() {
         model.scale.setScalar(Math.min(FW / sz.x, FD / sz.z) * 0.92)
         scene.add(model)
 
-        // Match mesh node names to glb_mesh values from configuration.yaml (via state attrs)
         const floorGlbLights = glbLightsRef.current.filter(l => l.floor === floor)
+        const floorSenGlb    = senGlbRef.current.filter(s => s.floor === floor)
+
+        // Match light meshes by traversal
         model.traverse(child => {
           const m = child as THREE.Mesh; if (!m.isMesh) return
           m.castShadow = true; m.receiveShadow = true
-          const cfg = floorGlbLights.find(l => l.meshName === child.name); if (!cfg) return
+          const lcfg = floorGlbLights.find(l => l.meshName === child.name)
+          if (!lcfg) return
           const mat = (m.material as THREE.MeshStandardMaterial).clone()
           m.material = mat; m.updateWorldMatrix(true, false)
           const wp = new THREE.Vector3(); m.getWorldPosition(wp)
           const pl = new THREE.PointLight(new THREE.Color(1, 0.92, 0.7), 0, 12, 1.4)
           pl.position.copy(wp); scene.add(pl)
-          m.userData.entityId = cfg.entityId
-          glbRefs.current.set(cfg.entityId, { mesh: m, ptLight: pl, origColor: mat.color.clone() })
+          m.userData.entityId = lcfg.entityId
+          glbRefs.current.set(lcfg.entityId, { mesh: m, ptLight: pl, origColor: mat.color.clone() })
           clickables.current.push(m)
         })
 
+        // Match door/window nodes by name — may be a Group, so collect all child meshes
+        floorSenGlb.forEach(cfg => {
+          const doorObj = model.getObjectByName(cfg.meshName)
+          if (!doorObj) {
+            // GLB mesh not found — fall back to procedural marker if glb_pos given
+            if (cfg.pos && !addedSenIds.current.has(cfg.entityId)) {
+              addedSenIds.current.add(cfg.entityId)
+              const refs = makeSensorMarker(cfg.pos[0], cfg.pos[1], cfg.entityId, cfg.deviceClass, scene)
+              senRefs.current.set(cfg.entityId, refs)
+              clickables.current.push(refs.marker)
+            }
+            return
+          }
+          const meshes: THREE.Mesh[] = []
+          const origColors: THREE.Color[] = []
+          doorObj.traverse(child => {
+            const m = child as THREE.Mesh; if (!m.isMesh) return
+            const mat = (m.material as THREE.MeshStandardMaterial).clone()
+            m.material = mat
+            m.userData.entityId = cfg.entityId
+            meshes.push(m); origColors.push(mat.color.clone())
+            clickables.current.push(m)
+          })
+          if (meshes.length === 0) return
+          const pl = new THREE.PointLight(0xffffff, 0, 1, 1)  // dummy, unused
+          doorObj.userData.origRotZ = doorObj.rotation.z
+          const origPosY = doorObj.position.y
+
+          if (cfg.deviceClass === 'garage_door' || cfg.deviceClass === 'curtain' || cfg.deviceClass === 'blind') {
+            const b = new THREE.Box3().setFromObject(doorObj)
+            const clipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(b.min.y - 0.01))
+            doorObj.userData.clipPlane = clipPlane
+            doorObj.userData.worldBottomY = b.min.y
+            doorObj.userData.worldTopY = b.max.y
+            meshes.forEach(m => {
+              const mat = m.material as THREE.MeshStandardMaterial
+              mat.clippingPlanes = [clipPlane]
+            })
+          }
+
+          senGlbRefs.current.set(cfg.entityId, { meshes, ptLight: pl, origColors, doorObj, origRotY: doorObj.rotation.y, deviceClass: cfg.deviceClass, origPosY })
+        })
+
+        glbModelRef.current = model
         if (fallbackRef.current) fallbackRef.current.visible = false
 
-        // Fit camera — happens once per GLB load, never again unless floor changes
         const sz2 = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3())
         const d   = Math.max(sz2.x, sz2.z)
         cameraRef.current!.position.set(0, d * 0.9, d * 0.75)
@@ -268,20 +431,73 @@ export default function FloorPlanPage() {
       () => setGlbLoading(false),
     )
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [floor])   // ← ONLY floor, never state changes
+  }, [floor])
 
-  // ── Add new sphere indicators when states arrive (without rebuilding scene) ─
-  // Runs when sphereLights changes, but only ADDS new entities — never removes or reloads GLB.
+  // ── Wire GLB sensor meshes for late-arriving entities (e.g. curtains) ──────
+  useEffect(() => {
+    const scene = sceneRef.current
+    const model = glbModelRef.current
+    if (!scene || !model) return
+    sensorGlbMeshes.filter(s => s.floor === floor && !senGlbRefs.current.has(s.entityId) && !senRefs.current.has(s.entityId)).forEach(cfg => {
+      const doorObj = model.getObjectByName(cfg.meshName)
+      if (!doorObj) {
+        if (cfg.pos && !addedSenIds.current.has(cfg.entityId)) {
+          addedSenIds.current.add(cfg.entityId)
+          const refs = makeSensorMarker(cfg.pos[0], cfg.pos[1], cfg.entityId, cfg.deviceClass, scene!)
+          senRefs.current.set(cfg.entityId, refs)
+          clickables.current.push(refs.marker)
+        }
+        return
+      }
+      const meshes: THREE.Mesh[] = []
+      const origColors: THREE.Color[] = []
+      doorObj.traverse(child => {
+        const m = child as THREE.Mesh; if (!m.isMesh) return
+        const mat = (m.material as THREE.MeshStandardMaterial).clone()
+        m.material = mat
+        m.userData.entityId = cfg.entityId
+        meshes.push(m); origColors.push(mat.color.clone())
+        clickables.current.push(m)
+      })
+      if (meshes.length === 0) return
+      const pl = new THREE.PointLight(0xffffff, 0, 1, 1)
+      doorObj.userData.origRotZ = doorObj.userData.origRotZ ?? doorObj.rotation.z
+      const origPosY = doorObj.position.y
+      if (cfg.deviceClass === 'garage_door' || cfg.deviceClass === 'curtain' || cfg.deviceClass === 'blind') {
+        const b = new THREE.Box3().setFromObject(doorObj)
+        const clipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(b.min.y - 0.01))
+        doorObj.userData.clipPlane = clipPlane
+        doorObj.userData.worldBottomY = b.min.y
+        doorObj.userData.worldTopY = b.max.y
+        meshes.forEach(m => { (m.material as THREE.MeshStandardMaterial).clippingPlanes = [clipPlane] })
+      }
+      senGlbRefs.current.set(cfg.entityId, { meshes, ptLight: pl, origColors, doorObj, origRotY: doorObj.rotation.y, deviceClass: cfg.deviceClass, origPosY })
+    })
+  }, [sensorGlbMeshes, floor])
+
+  // ── Add sphere light indicators ───────────────────────────────────────────
   useEffect(() => {
     const scene = sceneRef.current; if (!scene) return
     sphereLights.filter(l => l.floor === floor).forEach(cfg => {
-      if (addedSphIds.current.has(cfg.entityId)) return  // already in scene
+      if (addedSphIds.current.has(cfg.entityId)) return
       addedSphIds.current.add(cfg.entityId)
       const refs = makeSphere(cfg.x, cfg.z, cfg.entityId, scene)
       sphRefs.current.set(cfg.entityId, refs)
       clickables.current.push(refs.bulb)
     })
   }, [sphereLights, floor])
+
+  // ── Add door/window sensor indicators ────────────────────────────────────
+  useEffect(() => {
+    const scene = sceneRef.current; if (!scene) return
+    sensorMarkers.filter(s => s.floor === floor).forEach(cfg => {
+      if (addedSenIds.current.has(cfg.entityId)) return
+      addedSenIds.current.add(cfg.entityId)
+      const refs = makeSensorMarker(cfg.x, cfg.z, cfg.entityId, cfg.deviceClass, scene)
+      senRefs.current.set(cfg.entityId, refs)
+      clickables.current.push(refs.marker)
+    })
+  }, [sensorMarkers, floor])
 
   // ── Click detection ───────────────────────────────────────────────────────
   const onPointerDown = (e: React.PointerEvent) => {
@@ -304,10 +520,15 @@ export default function FloorPlanPage() {
     if (hits.length > 0) {
       const eid = hits[0].object.userData.entityId as string
       if (eid) {
-        setSelectedId(eid)  // show popup
+        setSelectedId(eid)
         const st = statesRef.current.get(eid)
-        const turningOn = st?.state !== 'on'
-        callService('light', turningOn ? 'turn_on' : 'turn_off', turningOn ? { brightness: 255 } : {}, eid)
+        if (eid.startsWith('light.')) {
+          const turningOn = st?.state !== 'on'
+          callService('light', turningOn ? 'turn_on' : 'turn_off', turningOn ? { brightness: 255 } : {}, eid)
+        } else if (eid.startsWith('binary_sensor.')) {
+          // Toggle door/window open ↔ closed
+          setEntityState(eid, st?.state === 'on' ? 'off' : 'on')
+        }
       }
     } else setSelectedId(null)
   }
@@ -315,17 +536,33 @@ export default function FloorPlanPage() {
   // ── Controls ──────────────────────────────────────────────────────────────
   const selState     = selectedId ? states.get(selectedId) : null
   const selOn        = selState?.state === 'on'
+  const selName      = selState ? (selState.attributes.friendly_name as string) ?? selectedId : ''
+  const selDomain    = selectedId?.split('.')[0] ?? ''
+  const selDevClass  = selState?.attributes?.device_class as string | undefined
+  const isSensor     = selDomain === 'binary_sensor'
+
   const selBrightPct = selState?.attributes?.brightness != null
     ? Math.round(((selState.attributes.brightness as number) / 255) * 100) : 100
-  const selName = selState ? (selState.attributes.friendly_name as string) ?? selectedId : ''
   const toggle    = () => selectedId && callService('light', selOn ? 'turn_off' : 'turn_on', {}, selectedId)
   const setBright = (pct: number) =>
     selectedId && callService('light', 'turn_on', { brightness: Math.round(pct / 100 * 255) }, selectedId)
 
+  const sensorIcon = (dc?: string) =>
+    dc === 'door' || dc === 'garage_door' ? '🚪' : dc === 'curtain' || dc === 'blind' ? '🪟' : '🪟'
+  const sensorLabel = (dc?: string, open?: boolean) => {
+    if (dc === 'garage_door') return open ? 'Open' : 'Closed'
+    if (dc === 'door')        return open ? 'Open' : 'Closed'
+    if (dc === 'curtain')     return open ? 'Open' : 'Closed'
+    if (dc === 'blind')       return open ? 'Open' : 'Closed'
+    return open ? 'Open' : 'Closed'
+  }
+
   const legendLights = useMemo(() => [
-    ...glbLights.filter(l => l.floor === floor).map(l => ({ ...l, isGlb: true  })),
-    ...sphereLights.filter(l => l.floor === floor).map(l => ({ ...l, isGlb: false })),
-  ], [glbLights, sphereLights, floor])
+    ...glbLights.filter(l => l.floor === floor).map(l => ({ ...l, isGlb: true,  isSensor: false })),
+    ...sphereLights.filter(l => l.floor === floor).map(l => ({ ...l, isGlb: false, isSensor: false })),
+    ...sensorGlbMeshes.filter(s => s.floor === floor).map(s => ({ ...s, isGlb: true,  isSensor: true })),
+    ...sensorMarkers.filter(s => s.floor === floor).map(s => ({ ...s, isGlb: false, isSensor: true })),
+  ], [glbLights, sphereLights, sensorGlbMeshes, sensorMarkers, floor])
 
   return (
     <div className="fp-page">
@@ -348,15 +585,17 @@ export default function FloorPlanPage() {
       {glbLoaded  && <div className="fp-glb-badge" style={{ color: 'rgba(48,209,88,0.8)' }}>● 3D model · click fixtures</div>}
 
       <div className="fp-legend">
-        {legendLights.map(({ entityId, name, isGlb }) => {
+        {legendLights.map(({ entityId, name, isGlb, isSensor }) => {
           const on = states.get(entityId)?.state === 'on'
+          const dc = states.get(entityId)?.attributes?.device_class as string | undefined
           return (
             <button key={entityId}
-              className={`fp-legend-item${on ? ' on' : ''}${selectedId === entityId ? ' sel' : ''}`}
+              className={`fp-legend-item${on ? ' on' : ''}${selectedId === entityId ? ' sel' : ''}${isSensor ? ' sensor' : ''}`}
               onClick={() => setSelectedId(p => p === entityId ? null : entityId)}>
-              <span className={`fp-dot${on ? ' on' : ''}${isGlb ? ' glb' : ''}`} />
+              <span className={`fp-dot${on ? ' on' : ''}${isGlb ? ' glb' : ''}${isSensor ? (on ? ' open' : ' closed') : ''}`} />
               <span className="fp-legend-name">{name}</span>
-              {isGlb && <span className="fp-legend-3d">3D</span>}
+              {isGlb && !isSensor && <span className="fp-legend-3d">3D</span>}
+              {isSensor && <span className={`fp-legend-3d${on ? ' alert' : ''}`}>{on ? sensorLabel(dc, true) : sensorLabel(dc, false)}</span>}
             </button>
           )
         })}
@@ -365,18 +604,29 @@ export default function FloorPlanPage() {
       {selectedId && (
         <div className="fp-panel" onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()}>
           <div className="fp-panel-row">
-            <span className="fp-panel-icon">💡</span>
+            <span className="fp-panel-icon">{isSensor ? sensorIcon(selDevClass) : '💡'}</span>
             <div className="fp-panel-info">
               <div className="fp-panel-name">{selName}</div>
-              <div className={`fp-panel-state${selOn ? ' on' : ''}`}>{selOn ? 'On' : 'Off'}</div>
+              <div className={`fp-panel-state${selOn ? ' on' : ''}`}>
+                {isSensor ? sensorLabel(selDevClass, selOn) : (selOn ? 'On' : 'Off')}
+              </div>
             </div>
-            <label className="ios-toggle" onClick={e => e.stopPropagation()}>
-              <input type="checkbox" checked={selOn ?? false} onChange={toggle} />
-              <span className="ios-slider" />
-            </label>
+            {!isSensor && (
+              <label className="ios-toggle" onClick={e => e.stopPropagation()}>
+                <input type="checkbox" checked={selOn ?? false} onChange={toggle} />
+                <span className="ios-slider" />
+              </label>
+            )}
+            {isSensor && (
+              <label className="ios-toggle" onClick={e => e.stopPropagation()}>
+                <input type="checkbox" checked={selOn ?? false}
+                  onChange={() => selectedId && setEntityState(selectedId, selOn ? 'off' : 'on')} />
+                <span className="ios-slider" />
+              </label>
+            )}
             <button className="fp-close" onClick={() => setSelectedId(null)}>✕</button>
           </div>
-          {selOn && (
+          {!isSensor && selOn && (
             <div className="brightness-row" style={{ padding: '4px 4px 2px' }}>
               <span className="brightness-icon">☀</span>
               <input type="range" className="ios-range" min={1} max={100} value={selBrightPct}

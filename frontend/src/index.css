@@ -731,6 +731,20 @@ input[type=range].ios-range::-webkit-slider-thumb {
   background: var(--yellow);
   box-shadow: 0 0 6px rgba(255,214,10,0.8);
 }
+.fp-dot.closed {
+  background: rgba(48,209,88,0.5);
+  box-shadow: 0 0 5px rgba(48,209,88,0.4);
+  border-radius: 3px;
+}
+.fp-dot.open {
+  background: rgba(255,59,48,0.8);
+  box-shadow: 0 0 7px rgba(255,59,48,0.7);
+  border-radius: 3px;
+}
+.fp-legend-3d.alert {
+  color: rgba(255,59,48,0.9);
+  background: rgba(255,59,48,0.15);
+}
 
 /* Light control panel */
 .fp-panel {

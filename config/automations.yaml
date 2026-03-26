@@ -1,0 +1,114 @@
+- id: "motion_light"
+  alias: "!Turn on living room light when motion detected"
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.motion
+      to: "on"
+  condition:
+    - condition: time
+      after: "07:00"
+      before: "23:00"
+  action:
+    - action: call_service
+      service: light.turn_on
+      target:
+        entity_id: light.living_room
+      data:
+        brightness: 200
+
+- id: "night_dim"
+  alias: "Dim bedroom light at 10pm"
+  mode: single
+  trigger:
+    - platform: time
+      at: "22:00"
+  action:
+    - action: condition
+      conditions:
+        - condition: state
+          entity_id: light.bedroom
+          state: "on"
+      then:
+        - action: call_service
+          service: light.turn_on
+          target:
+            entity_id: light.bedroom
+          data:
+            brightness: 50
+
+# ── Security Alarm ────────────────────────────────────────────────────────────
+- id: "alarm_door_open"
+  alias: "Trigger alarm when door opens while armed"
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.front_door
+      to: "on"
+    - platform: state
+      entity_id: binary_sensor.back_door
+      to: "on"
+    - platform: state
+      entity_id: binary_sensor.garage_door
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: switch.alarm_armed
+      state: "on"
+  action:
+    - action: call_service
+      service: switch.turn_on
+      target:
+        entity_id: switch.alarm_siren
+
+- id: "alarm_window_open"
+  alias: "Trigger alarm when window opens while armed"
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.living_room_window
+      to: "on"
+    - platform: state
+      entity_id: binary_sensor.bedroom_window
+      to: "on"
+    - platform: state
+      entity_id: binary_sensor.kitchen_window
+      to: "on"
+    - platform: state
+      entity_id: binary_sensor.basement_window
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: switch.alarm_armed
+      state: "on"
+  action:
+    - action: call_service
+      service: switch.turn_on
+      target:
+        entity_id: switch.alarm_siren
+
+- id: "alarm_disarm"
+  alias: "Turn off siren when alarm is disarmed"
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: switch.alarm_armed
+      to: "off"
+  action:
+    - action: call_service
+      service: switch.turn_off
+      target:
+        entity_id: switch.alarm_siren
+
+- id: "high_temp_alert"
+  alias: "Turn on fan when temperature is high"
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.temperature
+      above: 28
+  action:
+    - action: call_service
+      service: switch.turn_on
+      target:
+        entity_id: switch.fan

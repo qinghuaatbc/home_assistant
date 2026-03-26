@@ -53,9 +53,24 @@ export default (): Record<string, unknown> => {
     },
     integrations: [
       ...((fileConfig.integrations as unknown[]) ?? []),
-      // Inject automation as a synthetic integration entry
+      // Inject automation as a synthetic integration entry.
+      // automation: can be an inline array OR a string path to a separate YAML file.
       ...(fileConfig.automation
-        ? [{ domain: 'automation', automations: fileConfig.automation }]
+        ? [{
+            domain: 'automation',
+            automations: (() => {
+              if (typeof fileConfig.automation === 'string') {
+                const autoPath = path.resolve(path.dirname(configPath), fileConfig.automation);
+                try {
+                  return yaml.parse(fs.readFileSync(autoPath, 'utf-8')) ?? [];
+                } catch {
+                  console.error(`Failed to load automations file: ${autoPath}`);
+                  return [];
+                }
+              }
+              return fileConfig.automation;
+            })(),
+          }]
         : []),
     ],
   };

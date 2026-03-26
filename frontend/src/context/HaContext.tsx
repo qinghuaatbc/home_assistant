@@ -24,6 +24,7 @@ interface HaCtx {
   wsConnected: boolean
   states: Map<string, HaState>
   callService: (domain: string, service: string, data?: Record<string, unknown>, entityId?: string | string[]) => Promise<void>
+  setEntityState: (entityId: string, state: string, attributes?: Record<string, unknown>) => Promise<void>
 }
 
 const Ctx = createContext<HaCtx | null>(null)
@@ -94,6 +95,20 @@ export function HaProvider({ children }: { children: ReactNode }) {
     })
   }, [token])
 
+  const setEntityState = useCallback(async (
+    entityId: string,
+    state: string,
+    attributes: Record<string, unknown> = {},
+  ) => {
+    if (!token) return
+    const current = states.get(entityId)
+    await fetch(`/api/states/${entityId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ state, attributes: { ...current?.attributes, ...attributes } }),
+    })
+  }, [token, states])
+
   // Connect WebSocket when token is available
   useEffect(() => {
     if (!token) return
@@ -154,7 +169,7 @@ export function HaProvider({ children }: { children: ReactNode }) {
   }, [token])
 
   return (
-    <Ctx.Provider value={{ token, login, logout, wsConnected, states, callService }}>
+    <Ctx.Provider value={{ token, login, logout, wsConnected, states, callService, setEntityState }}>
       {children}
     </Ctx.Provider>
   )

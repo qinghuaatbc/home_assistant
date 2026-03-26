@@ -71,7 +71,7 @@ integrations:
             name: "Living Room Light"
             brightness: 255
             glb_floor: 1
-            glb_pos: [-4.5, -2.0]
+            glb_pos: [-4.5, -5.0]
           - entity_id: light.bedroom
             name: "Bedroom Light"
             brightness: 128
@@ -79,8 +79,8 @@ integrations:
             glb_pos: [-4.5, -2.0]
           - entity_id: light.kitchen
             name: "Kitchen Light"
-            glb_floor: 1
-            glb_pos: [4.5, -2.0]
+            glb_floor: 3
+            glb_pos: [4.5, -1.0]
           # ── Lights that map to a named mesh object inside the .glb ──
           - entity_id: light.kitchen_light
             name: "Kitchen Ceiling"
@@ -106,6 +106,10 @@ integrations:
             name: "Living Room Fan"
           - entity_id: switch.tv
             name: "TV Switch"
+          - entity_id: switch.alarm_siren
+            name: "Alarm Siren"
+          - entity_id: switch.alarm_armed
+            name: "Alarm Armed"
 
   - domain: sensor
     platforms:
@@ -187,6 +191,77 @@ integrations:
         type: light
 
   - domain: binary_sensor
+    platforms:
+      - name: demo
+        entities:
+          # ── Security sensors ──────────────────────────────────────────────
+          # glb_mesh: named node in the .glb → highlights real 3D door object
+          # glb_pos:  [x, z] fallback sphere for sensors without a named mesh
+          - entity_id: binary_sensor.front_door
+            name: "Front Door"
+            device_class: door
+            glb_floor: 1
+            glb_mesh: "FRONT_DOOR"
+          - entity_id: binary_sensor.back_door
+            name: "Back Door"
+            device_class: door
+            glb_floor: 1
+            # glb_pos: [0.0, -6.5]
+          - entity_id: binary_sensor.garage_door
+            name: "Garage Door"
+            device_class: garage_door
+            glb_floor: 1
+            glb_mesh: "GARAGE_1"
+          - entity_id: binary_sensor.office_door
+            name: "Office Door"
+            device_class: door
+            glb_floor: 1
+            glb_mesh: "OFFICE_DOOR"
+          - entity_id: binary_sensor.kitchen_door
+            name: "Kitchen Door"
+            device_class: door
+            glb_floor: 1
+            glb_mesh: "KITCHEN_DOOR"
+          - entity_id: binary_sensor.living_room_window
+            name: "Living Room Window"
+            device_class: window
+            glb_floor: 1
+            # glb_pos: [-5.0, 6.5]
+          - entity_id: binary_sensor.bedroom_window
+            name: "Bedroom Window"
+            device_class: window
+            glb_floor: 2
+            # glb_pos: [-4.0, 6.5]
+          - entity_id: binary_sensor.kitchen_window
+            name: "Kitchen Window"
+            device_class: window
+            glb_floor: 1
+            # glb_pos: [5.0, 6.5]
+          - entity_id: binary_sensor.basement_window
+            name: "Basement Window"
+            device_class: window
+            glb_floor: 3
+            # glb_pos: [-4.0, 6.5]
+          # ── Curtains / blinds — clip-plane roll-up same as garage door ──────
+          - entity_id: binary_sensor.living_room_curtain
+            name: "Living Room Curtain"
+            device_class: curtain
+            glb_floor: 1
+            glb_mesh: "FAMILY_BLIND"
+            glb_pos: [-5.0, 5.5]
+          - entity_id: binary_sensor.bedroom_blind
+            name: "Bedroom Blind"
+            device_class: blind
+            glb_floor: 2
+            glb_mesh: "FAMILY_BLIND"
+            glb_pos: [-4.0, 5.5]
+          - entity_id: binary_sensor.kitchen_blind
+            name: "Family Blind"
+            device_class: blind
+            glb_floor: 1
+            glb_mesh: "FAMILY_BLIND"
+            glb_pos: [5.0, 5.5]
+          # ── Alarm siren (switch) is in switch domain below ────────────────
 
   # ISY994 / Insteon — sample data (no real hardware required)
   - domain: isy994
@@ -247,55 +322,4 @@ integrations:
             device_class: door
 
 # ── Automations ───────────────────────────────────────────────────────────────
-automation:
-  - id: "motion_light"
-    alias: "!Turn on living room light when motion detected"
-    mode: single
-    trigger:
-      - platform: state
-        entity_id: binary_sensor.motion
-        to: "on"
-    condition:
-      - condition: time
-        after: "07:00"
-        before: "23:00"
-    action:
-      - action: call_service
-        service: light.turn_on
-        target:
-          entity_id: light.living_room
-        data:
-          brightness: 200
-
-  - id: "night_dim"
-    alias: "Dim bedroom light at 10pm"
-    mode: single
-    trigger:
-      - platform: time
-        at: "22:00"
-    action:
-      - action: condition
-        conditions:
-          - condition: state
-            entity_id: light.bedroom
-            state: "on"
-        then:
-          - action: call_service
-            service: light.turn_on
-            target:
-              entity_id: light.bedroom
-            data:
-              brightness: 50
-
-  - id: "high_temp_alert"
-    alias: "Turn on fan when temperature is high"
-    mode: single
-    trigger:
-      - platform: numeric_state
-        entity_id: sensor.temperature
-        above: 28
-    action:
-      - action: call_service
-        service: switch.turn_on
-        target:
-          entity_id: switch.fan
+automation: automations.yaml

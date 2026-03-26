@@ -67,12 +67,18 @@ export class BinarySensorIntegration implements HaIntegration {
       device_class: deviceClass,
     });
 
+    const extra: Record<string, unknown> = {};
+    if (entityConfig.glb_floor) extra.glb_floor = entityConfig.glb_floor;
+    if (entityConfig.glb_pos)   extra.glb_pos   = entityConfig.glb_pos;
+    if (entityConfig.glb_mesh)  extra.glb_mesh   = entityConfig.glb_mesh;
+
     this.stateMachine.setState(
       entityId,
       STATE_OFF,
       {
         friendly_name: name,
         device_class: deviceClass ?? null,
+        ...extra,
       },
       this.contextService.system(),
     );
