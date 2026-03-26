@@ -242,25 +242,13 @@ integrations:
             device_class: window
             glb_floor: 3
             # glb_pos: [-4.0, 6.5]
-          # ── Curtains / blinds — clip-plane roll-up same as garage door ──────
-          - entity_id: binary_sensor.living_room_curtain
-            name: "Living Room Curtain"
-            device_class: curtain
-            glb_floor: 1
-            glb_mesh: "FAMILY_BLIND"
-            glb_pos: [-5.0, 5.5]
+          # ── Curtains / blinds — clip-plane roll-up same as garage door ─────
           - entity_id: binary_sensor.bedroom_blind
             name: "Bedroom Blind"
             device_class: blind
-            glb_floor: 2
-            glb_mesh: "FAMILY_BLIND"
-            glb_pos: [-4.0, 5.5]
-          - entity_id: binary_sensor.kitchen_blind
-            name: "Family Blind"
-            device_class: blind
             glb_floor: 1
             glb_mesh: "FAMILY_BLIND"
-            glb_pos: [5.0, 5.5]
+            glb_pos: [-4.0, 5.5]
           # ── Alarm siren (switch) is in switch domain below ────────────────
 
   # ISY994 / Insteon — sample data (no real hardware required)

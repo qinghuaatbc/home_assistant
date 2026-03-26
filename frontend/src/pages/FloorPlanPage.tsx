@@ -355,6 +355,7 @@ export default function FloorPlanPage() {
         const sz = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3())
         model.scale.setScalar(Math.min(FW / sz.x, FD / sz.z) * 0.92)
         scene.add(model)
+        model.updateWorldMatrix(true, true)  // refresh after scale change so child bboxes are correct
 
         const floorGlbLights = glbLightsRef.current.filter(l => l.floor === floor)
         const floorSenGlb    = senGlbRef.current.filter(s => s.floor === floor)
