@@ -155,6 +155,7 @@ export default function FloorPlanPage() {
   const [floor, setFloor]           = useState<1 | 2 | 3>(1)
   const [glbLoading, setGlbLoading] = useState(false)
   const [glbLoaded,  setGlbLoaded]  = useState(false)
+  const [floorNames, setFloorNames] = useState<Record<string, string>>({})
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
   const [meshNames, setMeshNames] = useState<string[]>([])
@@ -162,6 +163,17 @@ export default function FloorPlanPage() {
   const [mappingDirty, setMappingDirty] = useState(false)
   const [clickedMesh, setClickedMesh] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null)
+
+  // Load floor names
+  useEffect(() => {
+    if (!token) return
+    fetch('/api/config/floors', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then((list: any[]) => {
+        const m: Record<string, string> = {}
+        list.forEach(f => { m[f.id] = f.name })
+        setFloorNames(m)
+      }).catch(() => {})
+  }, [token])
 
   const saveMappings = async (m: Record<string, string>) => {
     if (!token) return
@@ -395,7 +407,7 @@ export default function FloorPlanPage() {
 
     const targetFloor = floor
     new GLTFLoader().load(
-      `/floor${floor}.glb`,
+      `/floor_${floor}.glb`,
       (gltf) => {
         if (targetFloor !== floor) return
         setGlbLoading(false); setGlbLoaded(true)
@@ -671,10 +683,11 @@ export default function FloorPlanPage() {
             {editMode ? '✕ Done' : '✎ Edit'}
           </button>
           <div className="fp-floor-btns">
-            {([1, 2, 3] as const).map(f => (
-              <button key={f} className={`fp-floor-btn${floor === f ? ' active' : ''}`}
-                onClick={() => { setFloor(f); setSelectedId(null) }}>
-                {f === 1 ? 'Main' : f === 2 ? 'Upper' : 'Basement'}
+            {['1', '2', '3', '4', '5'].map(id => (
+              <button key={id} className={`fp-floor-btn${String(floor) === id ? ' active' : ''}`}
+                onClick={() => { setFloor(Number(id) as any); setSelectedId(null) }}
+                style={{ display: floorNames[id] ? undefined : 'none' }}>
+                {floorNames[id] || id}
               </button>
             ))}
           </div>
