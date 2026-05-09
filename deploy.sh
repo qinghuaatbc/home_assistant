@@ -32,6 +32,7 @@ rsync -az --delete \
   --exclude 'src' \
   --exclude '.env' \
   --exclude 'config/configuration.yaml' \
+  --exclude 'public/floors/' \
   -e "ssh -p $PORT -o StrictHostKeyChecking=accept-new" \
   "$(dirname "$0")/" "$HOST:$REMOTE_DIR/"
 

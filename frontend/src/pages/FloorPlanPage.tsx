@@ -765,7 +765,7 @@ export default function FloorPlanPage() {
                   {meshName}
                 </span>
                 {mapped ? (
-                  <span style={{ fontSize: 9, color: 'var(--text2)' }}>{mappings[meshName].split('.')[1]}</span>
+                  <span style={{ fontSize: 9, color: 'var(--text2)' }}>{(states.get(mappings[meshName])?.attributes?.friendly_name as string) || mappings[meshName]}</span>
                 ) : (
                   <DevicePicker meshName={meshName} states={states} mappings={mappings} onPick={async (mesh, eid) => {
                     const next = { ...mappings, [mesh]: eid }
