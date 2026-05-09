@@ -18,7 +18,7 @@ export class GlbController {
   @ApiOperation({ summary: 'Upload a GLB file for a floor' })
   async uploadGlb(@Param('floorId') floorId: string, @UploadedFile() file: any, @Res() res: Response) {
     if (!file) return res.status(400).json({ error: 'No file' });
-    const uploadDir = path.resolve(process.cwd(), 'public', 'floors');
+    const uploadDir = path.resolve(process.cwd(), 'data', 'floors');
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
     const filename = `floor${floorId}.glb`;
     try {

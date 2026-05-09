@@ -434,7 +434,7 @@ export default function FloorPlanPage() {
 
     const targetFloor = floor
     new GLTFLoader().load(
-      `/floors/floor${floor}.glb`,
+      `/data/floors/floor${floor}.glb`,
       (gltf) => {
         if (targetFloor !== floor) return
         setGlbLoading(false); setGlbLoaded(true)

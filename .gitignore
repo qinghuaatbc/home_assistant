@@ -10,3 +10,4 @@ public/floors/*.glb
 .claude/
 .DS_Store
 *.tsbuildinfo
+data/floors/*.glb

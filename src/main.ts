@@ -17,6 +17,8 @@ async function bootstrap(): Promise<void> {
 
   // Serve frontend from public/
   app.useStaticAssets(join(__dirname, '..', 'public'));
+  // Serve uploaded files from data/ (GLB, etc.)
+  app.useStaticAssets(join(__dirname, '..', 'data'), { prefix: '/data' });
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('http.port', 8123);
