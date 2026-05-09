@@ -52,18 +52,6 @@ export default (): Record<string, unknown> => {
       database: process.env.HA_DB_PATH ?? (fileConfig.database as Record<string, unknown>)?.database ?? 'ha.db',
     },
     integrations: [
-      // Merge demo config if demo.yaml exists and HA_DEMO isn't 'false'
-      ...(() => {
-        if (process.env.HA_DEMO === 'false') return [];
-        const demoPath = path.resolve(path.dirname(configPath), 'demo.yaml');
-        if (!fs.existsSync(demoPath)) return [];
-        try {
-          const content = fs.readFileSync(demoPath, 'utf-8');
-          return (yaml.parse(content) ?? []) as unknown[];
-        } catch {
-          return [];
-        }
-      })(),
       ...(((fileConfig.integrations as unknown[]) ?? []).map((int: unknown) => {
         const integration = int as Record<string, unknown>;
         if (integration.domain === 'camera' && integration.cameras) {

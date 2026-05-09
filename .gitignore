@@ -9,4 +9,3 @@ public/assets/
 .claude/
 .DS_Store
 *.tsbuildinfo
-config/configuration.yaml

@@ -98,27 +98,21 @@ function makeSensorMarker(x: number, z: number, entityId: string, deviceClass: s
   return { marker, glow, ptLight: pl, deviceClass, clipPlane }
 }
 
-function DevicePicker({ meshName, states, onPick }: { meshName: string; states: Map<string, any>; onPick: (mesh: string, entityId: string) => void }) {
+function DevicePicker({ meshName, states, mappings, onPick }: { meshName: string; states: Map<string, any>; mappings: Record<string, string>; onPick: (mesh: string, eid: string) => void }) {
   const [open, setOpen] = useState(false)
+  const mappedIds = new Set(Object.values(mappings))
   const devices = Array.from(states.entries())
-    .filter(([, s]) => !s.attributes?.glb_mesh && !s.attributes?.glb_pos)
+    .filter(([id]) => !mappedIds.has(id))
     .map(([id, s]) => ({ id, name: (s.attributes?.friendly_name as string) || id }))
-
   return (
     <div style={{ position: 'relative' }}>
       <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => setOpen(!open)}>+</button>
       {open && (
-        <div style={{
-          position: 'absolute', right: 0, top: 24, zIndex: 30, width: 200,
-          background: 'var(--card)', borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-          padding: 6, maxHeight: 200, overflowY: 'auto',
-        }}>
+        <div style={{ position: 'absolute', left: 0, top: 22, zIndex: 30, width: 200, background: 'var(--card)', borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.3)', padding: 6, maxHeight: 180, overflowY: 'auto' }}>
           {devices.length === 0 && <div style={{ fontSize: 11, color: 'var(--text2)', padding: 4 }}>No devices</div>}
           {devices.map(d => (
-            <button key={d.id} style={{
-              display: 'block', width: '100%', textAlign: 'left', padding: '4px 8px',
-              fontSize: 11, background: 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', borderRadius: 4,
-            }} onClick={() => { onPick(meshName, d.id); setOpen(false) }}
+            <button key={d.id} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '4px 8px', fontSize: 11, background: 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', borderRadius: 4 }}
+              onClick={() => { onPick(meshName, d.id); setOpen(false) }}
               onMouseEnter={e => (e.target as HTMLElement).style.background = 'var(--surface2)'}
               onMouseLeave={e => (e.target as HTMLElement).style.background = 'none'}>
               {d.name}
@@ -152,6 +146,7 @@ export default function FloorPlanPage() {
   // door/window sensor GLB meshes: highlight real door/window geometry + animate on open
   const senGlbRefs  = useRef(new Map<string, { meshes: THREE.Mesh[]; ptLight: THREE.PointLight; origColors: THREE.Color[]; doorObj: THREE.Object3D; origRotY: number; deviceClass: string; origPosY: number }>())
   const clickables  = useRef<THREE.Mesh[]>([])
+  const migratedRef = useRef(false)
   const addedSphIds = useRef(new Set<string>())
   const addedSenIds = useRef(new Set<string>())
   const glbLightsRef    = useRef<Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string }>>([])
@@ -165,31 +160,50 @@ export default function FloorPlanPage() {
   const [meshNames, setMeshNames] = useState<string[]>([])
   const [mappings, setMappings] = useState<Record<string, string>>({})
   const [mappingDirty, setMappingDirty] = useState(false)
+  const [clickedMesh, setClickedMesh] = useState<string | null>(null)
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null)
 
-  // ── Derive layout from state attributes ───────────────────────────────────
+  const saveMappings = async (m: Record<string, string>) => {
+    if (!token) return
+    setSaveStatus('saving')
+    try {
+      const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: m }) })
+      setSaveStatus(r.ok ? 'saved' : 'error')
+      if (r.ok) setTimeout(() => setSaveStatus(null), 2000)
+    } catch { setSaveStatus('error') }
+  }
+
+  // ── Derive layout from state attributes + saved mappings ─────────────────
   const { glbLights, sphereLights, sensorMarkers, sensorGlbMeshes } = useMemo(() => {
     const glb:    Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string }> = []
     const sph:    Array<{ entityId: string; name: string; floor: 1|2|3; x: number; z: number }> = []
     const sen:    Array<{ entityId: string; name: string; floor: 1|2|3; x: number; z: number; deviceClass: string }> = []
     const senGlb: Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string; deviceClass: string; pos?: [number, number] }> = []
+
+    // Build reverse map: entityId → meshName
+    const entityToMesh = new Map<string, string>()
+    for (const [mesh, eid] of Object.entries(mappings)) entityToMesh.set(eid, mesh)
+
     states.forEach((st: HaState, entityId: string) => {
       const a = st.attributes
-      const f = a.glb_floor as number | undefined; if (!f) return
       const name = (a.friendly_name as string) ?? entityId
+      const meshName = (a.glb_mesh as string) || entityToMesh.get(entityId)
+      const f = (a.glb_floor as number) || (meshName ? 1 : undefined)
+      if (!f) return
 
       if (entityId.startsWith('light.')) {
-        if (a.glb_mesh)                    glb.push({ entityId, name, floor: f as 1|2|3, meshName: a.glb_mesh as string })
+        if (meshName)                glb.push({ entityId, name, floor: f as 1|2|3, meshName })
         else if (Array.isArray(a.glb_pos)) sph.push({ entityId, name, floor: f as 1|2|3, x: (a.glb_pos as number[])[0], z: (a.glb_pos as number[])[1] })
       } else if (entityId.startsWith('binary_sensor.')) {
         const dc = (a.device_class as string) ?? 'door'
-        if (a.glb_mesh) {
+        if (meshName) {
           const pos = Array.isArray(a.glb_pos) ? [(a.glb_pos as number[])[0], (a.glb_pos as number[])[1]] as [number, number] : undefined
-          senGlb.push({ entityId, name, floor: f as 1|2|3, meshName: a.glb_mesh as string, deviceClass: dc, pos })
+          senGlb.push({ entityId, name, floor: f as 1|2|3, meshName, deviceClass: dc, pos })
         } else if (Array.isArray(a.glb_pos)) sen.push({ entityId, name, floor: f as 1|2|3, x: (a.glb_pos as number[])[0], z: (a.glb_pos as number[])[1], deviceClass: dc })
       }
     })
     return { glbLights: glb, sphereLights: sph, sensorMarkers: sen, sensorGlbMeshes: senGlb }
-  }, [states])
+  }, [states, mappings])
 
   useEffect(() => { statesRef.current    = states         }, [states])
   useEffect(() => { glbLightsRef.current = glbLights      }, [glbLights])
@@ -462,6 +476,16 @@ export default function FloorPlanPage() {
 
         setMeshNames(names.filter((v, i, a) => a.indexOf(v) === i))
         glbModelRef.current = model
+        // Add all named meshes to clickables for edit mode
+        model.traverse(child => {
+          const m = child as THREE.Mesh; if (!m.isMesh) return
+          const meshName = m.name || (m.parent?.name || '')
+          if (!meshName) return
+          if (!clickables.current.includes(m)) {
+            m.userData.meshName = meshName
+            clickables.current.push(m)
+          }
+        })
         if (fallbackRef.current) fallbackRef.current.visible = false
 
         const sz2 = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3())
@@ -553,6 +577,7 @@ export default function FloorPlanPage() {
   const onPointerUp = (e: React.PointerEvent) => {
     if (isDragging.current) return
     const el = containerRef.current, cam = cameraRef.current; if (!el || !cam) return
+    setClickedMesh(null)
     const rect = el.getBoundingClientRect()
     const mouse = new THREE.Vector2(
       ((e.clientX - rect.left) / rect.width) * 2 - 1,
@@ -562,6 +587,12 @@ export default function FloorPlanPage() {
     const hits = ray.intersectObjects(clickables.current, false)
     if (hits.length > 0) {
       const eid = hits[0].object.userData.entityId as string
+      const hitName = (hits[0].object as any).name || hits[0].object.userData.meshName as string || ''
+      if (editMode) {
+        setSelectedId(eid || null)
+        if (!eid && hitName) setClickedMesh(hitName)
+        return
+      }
       if (eid) {
         setSelectedId(eid)
         const st = statesRef.current.get(eid)
@@ -570,7 +601,6 @@ export default function FloorPlanPage() {
           callService('light', turningOn ? 'turn_on' : 'turn_off', turningOn ? { brightness: 255 } : {}, eid)
         } else if (eid.startsWith('binary_sensor.')) {
           const newState = st?.state === 'on' ? 'off' : 'on'
-          // Optimistic update — animation starts immediately, no network wait
           statesRef.current = new Map(statesRef.current).set(eid, { ...st!, state: newState })
           setEntityState(eid, newState)
         }
@@ -609,20 +639,27 @@ export default function FloorPlanPage() {
     ...sensorMarkers.filter(s => s.floor === floor).map(s => ({ ...s, isGlb: false, isSensor: true })),
   ], [glbLights, sphereLights, sensorGlbMeshes, sensorMarkers, floor])
 
-  // Load/save 3D mesh mappings
+  // Load saved mappings (once). Only migrate from YAML if no saved file yet.
   useEffect(() => {
-    if (!token) return
+    if (!token || states.size === 0 || migratedRef.current) return
+    migratedRef.current = true
     fetch('/api/config/3d-mappings', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(d => setMappings(d.mappings || {})).catch(() => {})
-  }, [token])
-  useEffect(() => {
-    if (!mappingDirty || !token || !Object.keys(mappings).length) return
-    const timer = setTimeout(() => {
-      fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings }) })
-        .then(() => setMappingDirty(false))
-    }, 2000)
-    return () => clearTimeout(timer)
-  }, [mappings, mappingDirty, token])
+      .then(r => r.json()).then((d: Record<string, string>) => {
+        // d is the mappings object directly: {meshName: entityId}
+        const keys = Object.keys(d).filter(k => k !== 'mappings') // handle legacy wrapper
+        // If saved file has content, use it as-is
+        if (keys.length > 0) { setMappings(d); return }
+        // First load: migrate from YAML attributes
+        const merged: Record<string, string> = {}
+        let added = false
+        states.forEach((st, eid) => {
+          const mesh = st.attributes?.glb_mesh as string | undefined
+          if (mesh) { merged[mesh] = eid; added = true }
+        })
+        setMappings(merged)
+        if (added) fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: merged }) })
+      }).catch(() => {})
+  }, [token, states])
 
   return (
     <div className="fp-page">
@@ -646,31 +683,52 @@ export default function FloorPlanPage() {
 
       {editMode && glbLoaded && (
         <div className="fp-edit-panel" style={{
-          position: 'absolute', left: 12, top: 60, zIndex: 20, width: 260,
+          position: 'absolute', left: 12, top: 60, zIndex: 20, width: 220,
           background: 'var(--card)', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-          padding: 12, maxHeight: '60vh', overflowY: 'auto', fontSize: 12,
+          padding: 10, maxHeight: '60vh', overflowY: 'auto', fontSize: 11,
         }}>
-          <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 13 }}>📋 Mesh to Device</div>
-          <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 8 }}>
-            Click a mesh name then select a device to bind.
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Meshes</span>
+            <button className="btn" style={{ fontSize: 10, padding: '2px 8px' }}
+              onClick={async () => {
+                if (!token) return alert('Not logged in')
+                const r = await fetch('/api/config/3d-mappings', {
+                  method: 'PUT',
+                  headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ mappings: mappings })
+                })
+                alert(r.ok ? '✅ Saved' : '❌ ' + await r.text())
+              }}>
+              💾 Save
+            </button>
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text2)', marginBottom: 6 }}>
+            Tap a mesh to bind/unbind
           </div>
           {meshNames.map(meshName => {
-            const alreadyMapped = !!mappings[meshName]
+            const mapped = !!mappings[meshName]
             return (
               <div key={meshName} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '4px 6px', borderRadius: 4, marginBottom: 2,
-                background: alreadyMapped ? 'rgba(48,209,88,0.08)' : 'transparent',
+                display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px',
+                borderRadius: 4, marginBottom: 1,
+                background: clickedMesh === meshName ? 'var(--surface2)' : mapped ? 'rgba(48,209,88,0.08)' : 'transparent',
               }}>
-                <span style={{ fontFamily: 'monospace', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ width: 14, fontSize: 10, color: mapped ? '#30d158' : 'var(--text3)', cursor: 'pointer' }}
+                  onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>
+                  {mapped ? '✓' : '○'}
+                </span>
+                <span style={{ fontFamily: 'monospace', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', flex: 1 }}
+                  onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>
                   {meshName}
                 </span>
-                {alreadyMapped || mappings[meshName] ? (
-                  <span style={{ fontSize: 10, color: '#30d158' }}>✓</span>
+                {mapped ? (
+                  <span style={{ fontSize: 9, color: 'var(--text2)' }}>{mappings[meshName].split('.')[1]}</span>
                 ) : (
-                  <DevicePicker meshName={meshName} states={states} onPick={(mesh, eid) => {
-                    setMappings(prev => ({ ...prev, [mesh]: eid }))
-                    setMappingDirty(true)
+                  <DevicePicker meshName={meshName} states={states} mappings={mappings} onPick={async (mesh, eid) => {
+                    const next = { ...mappings, [mesh]: eid }
+                    setMappings(next)
+                    const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: next }) })
+                    if (!r.ok) alert('Save failed: ' + await r.text())
                   }} />
                 )}
               </div>
@@ -702,7 +760,7 @@ export default function FloorPlanPage() {
         })}
       </div>
 
-      {selectedId && (
+      {(selectedId || (editMode && clickedMesh)) && (
         <div className="fp-panel" onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()}>
           <div className="fp-panel-row">
             <span className="fp-panel-icon">{isSensor ? sensorIcon(selDevClass) : '💡'}</span>
@@ -735,6 +793,48 @@ export default function FloorPlanPage() {
               <span className="fp-bright-val">{selBrightPct}%</span>
             </div>
           )}
+          {editMode && (() => {
+            const boundMesh = selectedId ? Object.entries(mappings).find(([, eid]) => eid === selectedId)?.[0] : null
+            const targetMesh = boundMesh || clickedMesh
+            if (!targetMesh) return null
+            const isBound = !!boundMesh
+            return (
+              <div style={{ padding: '8px 12px', borderTop: '1px solid var(--sep)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isBound ? 0 : 8 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text2)' }}>🎯 <code style={{ fontSize: 11 }}>{targetMesh}</code></span>
+                  {isBound && (
+                    <button className="btn" style={{ fontSize: 10, padding: '2px 8px', color: '#ff453a' }}
+                      onClick={async () => {
+                        const n = { ...mappings }; delete n[targetMesh]; setMappings(n)
+                        const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: n }) })
+                        if (!r.ok) alert('Save failed: ' + await r.text())
+                      }}>
+                      Unbind
+                    </button>
+                  )}
+                </div>
+                {!isBound && (() => {
+                  const mappedIds = new Set(Object.values(mappings))
+                  const available = Array.from(states.entries())
+                    .filter(([id]) => !mappedIds.has(id))
+                    .map(([id, s]) => ({ id, name: (s.attributes?.friendly_name as string) || id }))
+                  return (
+                    <select style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 12 }}
+                      defaultValue="" onChange={async e => {
+                        if (!e.target.value) return
+                        const next = { ...mappings, [targetMesh]: e.target.value }
+                        setMappings(next)
+                        const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: next }) })
+                        if (!r.ok) alert('Save failed: ' + await r.text())
+                      }}>
+                      <option value="" disabled>Select device…</option>
+                      {available.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  )
+                })()}
+              </div>
+            )
+          })()}
         </div>
       )}
     </div>

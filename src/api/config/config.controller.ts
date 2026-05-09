@@ -57,9 +57,9 @@ export class ConfigController {
 
   @Put('3d-mappings')
   @ApiOperation({ summary: 'Save 3D mesh → device mappings' })
-  async save3dMappings(@Body() body: { mappings: Record<string, string> }) {
+  async save3dMappings(@Body() body: { mappings?: Record<string, string> }) {
     const mapPath = getMappingsPath();
-    fs.writeFileSync(mapPath, JSON.stringify(body.mappings, null, 2), 'utf-8');
+    fs.writeFileSync(mapPath, JSON.stringify(body.mappings ?? {}, null, 2), 'utf-8');
     return { ok: true };
   }
 }

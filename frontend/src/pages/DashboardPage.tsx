@@ -32,6 +32,7 @@ export default function DashboardPage() {
   const [entityAreas, setEntityAreas] = useState<Map<string, string>>(new Map())
   const [disabledEntities, setDisabledEntities] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
+  const [platforms, setPlatforms] = useState<Map<string, string>>(new Map())
 
   useEffect(() => {
     if (!token) return
@@ -47,6 +48,10 @@ export default function DashboardPage() {
         })
         setEntityAreas(m)
         setDisabledEntities(disabled)
+      }).catch(() => {})
+    fetch('/api/entity_registry', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then((list: { entity_id: string; platform: string }[]) => {
+        setPlatforms(new Map(list.map(e => [e.entity_id, e.platform])))
       }).catch(() => {}).finally(() => setLoading(false))
   }, [token])
 
@@ -85,13 +90,18 @@ export default function DashboardPage() {
     if (!first) return null
     const domain = first.entity_id.split('.')[0]
     const sorted = [...entities].sort((a, b) => a.entity_id.localeCompare(b.entity_id))
-    if (domain === 'weather') return sorted.map(s => <WeatherCard key={s.entity_id} state={s} />)
-    if (domain === 'camera') return <div className="card-grid">{sorted.map(s => <CameraCard key={s.entity_id} state={s} />)}</div>
-    if (domain === 'media_player') return sorted.map(s => <MediaPlayerCard key={s.entity_id} state={s} />)
-    if (domain === 'light') return <div className="card-grid">{sorted.map(s => <LightCard key={s.entity_id} state={s} />)}</div>
-    if (domain === 'switch') return <div className="card-grid">{sorted.map(s => <SwitchCard key={s.entity_id} state={s} />)}</div>
-    if (domain === 'binary_sensor') return <div className="card-grid">{sorted.map(s => <SensorCard key={s.entity_id} state={s} binary />)}</div>
-    if (domain === 'sensor') return <div className="card-grid">{sorted.map(s => <SensorCard key={s.entity_id} state={s} />)}</div>
+    const tag = (s: any) => {
+      const plat = platforms.get(s.entity_id) || ''
+      const prefix = plat && plat !== domain ? `${plat} · ` : ''
+      return { ...s, attributes: { ...s.attributes, friendly_name: `${prefix}${s.attributes?.friendly_name || s.entity_id}` } }
+    }
+    if (domain === 'weather') return sorted.map(s => <WeatherCard key={s.entity_id} state={tag(s)} />)
+    if (domain === 'camera') return <div className="card-grid">{sorted.map(s => <CameraCard key={s.entity_id} state={tag(s)} />)}</div>
+    if (domain === 'media_player') return sorted.map(s => <MediaPlayerCard key={s.entity_id} state={tag(s)} />)
+    if (domain === 'light') return <div className="card-grid">{sorted.map(s => <LightCard key={s.entity_id} state={tag(s)} />)}</div>
+    if (domain === 'switch') return <div className="card-grid">{sorted.map(s => <SwitchCard key={s.entity_id} state={tag(s)} />)}</div>
+    if (domain === 'binary_sensor') return <div className="card-grid">{sorted.map(s => <SensorCard key={s.entity_id} state={tag(s)} binary />)}</div>
+    if (domain === 'sensor') return <div className="card-grid">{sorted.map(s => <SensorCard key={s.entity_id} state={tag(s)} />)}</div>
     return <div className="ios-list">{sorted.map(s => (
       <div className="ios-list-row" key={s.entity_id}>
         <div className="ios-list-content">

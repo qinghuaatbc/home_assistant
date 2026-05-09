@@ -1,5 +1,5 @@
-# Home Assistant production configuration
-# Demo data is in demo.yaml — remove that file or set HA_DEMO=false to disable.
+# Home Assistant configuration
+# Uncomment the `demo` integration block below to enable demo/test devices.
 
 homeassistant:
   name: "My Home"
@@ -31,56 +31,49 @@ logger:
   level: "info"
 
 integrations:
-  # ── Real hardware integrations (configure as needed) ──────────────────────
-
-  # - domain: yamaha_avr
-  #   host: "192.168.1.50"
-  #   port: 80
-  #   scan_interval: 30
-
-  # - domain: camera
-  #   cameras:
-  #     - name: "Driveway"
-  #       streams:
-  #         - label: "SD"
-  #           rtsp_url: "HA_CAMERA_DRIVEWAY_SD_URL"
-  #         - label: "HD"
-  #           rtsp_url: "HA_CAMERA_DRIVEWAY_HD_URL"
-  #           default: true
-
   - domain: mqtt
     broker: "broker.hivemq.com"
-    entities:
-      - topic: "light/01"
-        name: "MQTT Light 01"
-        type: light
-        payload_on: "ON"
-        payload_off: "OFF"
-        payload_toggle: "TOGGLE"
-      - topic: "light/02"
-        name: "MQTT Light 02"
-        type: light
-      - topic: "switch/01"
-        name: "MQTT Switch 01"
-        type: switch
 
-  # - domain: lutron_caseta
-  #   host: "192.168.1.167"
-  #   port: 23
-  #   devices:
-  #     - id: 1
-  #       name: "Living Room"
-  #       type: light
-  #     - id: 2
-  #       name: "Kitchen"
-  #       type: light
-
-  # - domain: isy994
-  #   host: "192.168.1.100"
-  #   port: 80
-  #   username: "admin"
-  #   password: "admin"
-  #   tls: false
-  #   scan_interval: 30
+  # ── Demo devices (simulated, for testing) ─────────────────────────────────
+  # Uncomment the block below to enable demo/test lights, switches, sensors.
+  #
+  # - domain: light
+  #   platforms:
+  #     - name: demo
+  #       entities:
+  #         - entity_id: light.living_room
+  #           name: "[Demo] Living Room Light"
+  #           glb_floor: 1
+  #           glb_pos: [-4.5, -5.0]
+  #         - entity_id: light.kitchen_light
+  #           name: "[Demo] Kitchen Ceiling"
+  #           glb_floor: 1
+  #           glb_mesh: "KITCHEN_LIGHT"
+  #
+  # - domain: switch
+  #   platforms:
+  #     - name: demo
+  #       entities:
+  #         - entity_id: switch.fan
+  #           name: "[Demo] Fan"
+  #
+  # - domain: binary_sensor
+  #   platforms:
+  #     - name: demo
+  #       entities:
+  #         - entity_id: binary_sensor.front_door
+  #           name: "[Demo] Front Door"
+  #           device_class: door
+  #           glb_floor: 1
+  #           glb_mesh: "FRONT_DOOR"
+  #
+  # - domain: sensor
+  #   platforms:
+  #     - name: demo
+  #       entities:
+  #         - entity_id: sensor.temperature
+  #           name: "[Demo] Temperature"
+  #           unit_of_measurement: "°C"
+  #           device_class: temperature
 
 automation: automations.yaml

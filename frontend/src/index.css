@@ -55,6 +55,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+input, textarea, select, button, pre, code {
+  color: var(--text);
+}
+
+::placeholder { color: var(--text3); }
+
 /* ── Scrollable page content ─────────────────────────────────────────────── */
 .page {
   position: absolute;
