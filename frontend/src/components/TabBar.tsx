@@ -7,7 +7,6 @@ const TABS = [
   { id: 'dashboard',   icon: '⊞',  label: 'Home'    },
   { id: 'entities',    icon: '⚙️',  label: 'Devices' },
   { id: 'floorplan',   icon: '🏠',  label: '3D'      },
-  { id: 'ai',          icon: '✦',  label: 'AI'      },
   { id: 'history',     icon: '📊',  label: 'History' },
   { id: 'events',      icon: '📋',  label: 'Events'  },
   { id: 'automations', icon: '⚡',  label: 'Auto'    },
