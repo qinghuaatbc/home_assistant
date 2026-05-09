@@ -84,6 +84,7 @@ export class LutronCasetaIntegration implements HaIntegration {
   private config: LutronCasetaConfig | null = null;
   private readonly deviceMap: DeviceMap = new Map();
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private lastLogTime = 0;
 
   constructor(
     private readonly stateMachine: StateMachineService,
@@ -118,7 +119,12 @@ export class LutronCasetaIntegration implements HaIntegration {
     // Connect to Smart Bridge
     const ok = await this.connect();
     if (!ok) {
-      this.logger.error(`Lutron: cannot reach Smart Bridge at ${cfg.host}:${this.config.port}`);
+      // Rate-limit error logging to once per 5 minutes
+      const now = Date.now();
+      if (now - this.lastLogTime > 300000) {
+        this.logger.error(`Lutron: cannot reach Smart Bridge at ${cfg.host}:${this.config.port}`);
+        this.lastLogTime = now;
+      }
       // Mark all as unavailable but don't fail — we'll reconnect
       this.markAllUnavailable();
       this.scheduleReconnect();
