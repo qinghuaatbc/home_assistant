@@ -52,7 +52,21 @@ export default (): Record<string, unknown> => {
       database: process.env.HA_DB_PATH ?? (fileConfig.database as Record<string, unknown>)?.database ?? 'ha.db',
     },
     integrations: [
-      ...((fileConfig.integrations as unknown[]) ?? []),
+      ...(((fileConfig.integrations as unknown[]) ?? []).map((int: unknown) => {
+        const integration = int as Record<string, unknown>;
+        if (integration.domain === 'camera' && integration.cameras) {
+          const cameras = (integration.cameras as Record<string, unknown>[]).map((cam) => {
+            const envPrefix = `HA_CAMERA_${(cam.name as string).toUpperCase().replace(/[^a-zA-Z0-9]/g, '_')}`;
+            const streams = (cam.streams as Record<string, unknown>[]).map((s) => ({
+              ...s,
+              rtsp_url: process.env[`${envPrefix}_${(s.label as string).toUpperCase()}_URL`] ?? s.rtsp_url,
+            }));
+            return { ...cam, streams };
+          });
+          return { ...integration, cameras };
+        }
+        return integration;
+      })),
       // Inject automation as a synthetic integration entry.
       // automation: can be an inline array OR a string path to a separate YAML file.
       ...(fileConfig.automation

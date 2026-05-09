@@ -198,6 +198,14 @@ export class CameraStreamService extends EventEmitter implements OnApplicationSh
       }
     }, 500);
 
+    proc.on('error', (err: Error) => {
+      clearInterval(readyPoll);
+      entry.process = null;
+      entry.ready = false;
+      group!.stateListener('unavailable');
+      this.logger.error(`Camera [${entityId}:${key}] FFmpeg spawn error: ${err.message}`);
+    });
+
     proc.stderr.on('data', (data: Buffer) => {
       const msg = data.toString().trim();
       if (msg) this.logger.debug(`Camera [${entityId}:${key}] FFmpeg: ${msg}`);

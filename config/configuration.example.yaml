@@ -16,7 +16,7 @@ http:
     - "http://localhost:8080"
 
 auth:
-  jwt_secret: "${HA_JWT_SECRET}"    # Override via HA_JWT_SECRET env var
+  jwt_secret: "${HA_JWT_SECRET}"
   jwt_expiry: "24h"
 
 database:
@@ -290,8 +290,15 @@ integrations:
         name: "Motion Sensor Hall"
         type: "16.1.65.0"
         value: 0            # no motion
-  # To connect to real hardware, set env vars or copy configuration.example.yaml
-  #   HA_ISY994_HOST, HA_ISY994_PORT, HA_ISY994_USERNAME, HA_ISY994_PASSWORD
+  # To connect to real hardware instead, replace the block above with:
+  # - domain: isy994
+  #   host: "192.168.1.100"
+  #   port: 80
+  #   username: "admin"
+  #   password: "admin"
+  #   tls: false
+  #   ignore_string: "_ignore_"
+  #   scan_interval: 30
     platforms:
       - name: demo
         entities:
