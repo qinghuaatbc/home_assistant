@@ -19,8 +19,22 @@ interface EntityReg {
   disabled: boolean
 }
 
+function usePinned() {
+  const [pinned, setPinned] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('ha_pinned') || '[]')) } catch { return new Set<string>() }
+  })
+  const toggle = (id: string) => setPinned(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    localStorage.setItem('ha_pinned', JSON.stringify([...next]))
+    return next
+  })
+  return { pinned, togglePin: toggle }
+}
+
 export default function EntitiesPage() {
   const { token, states, callService, setEntityState } = useHa()
+  const { pinned, togglePin } = usePinned()
   const [filter, setFilter] = useState('')
   const [reg, setReg] = useState<Map<string, EntityReg>>(new Map())
   const [editing, setEditing] = useState<string | null>(null)
@@ -143,10 +157,16 @@ export default function EntitiesPage() {
                       </div>
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
                         {!isEditing && (
-                          <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }}
-                            onClick={() => startRename(s.entity_id, name)} title="Rename">✎</button>
+                          <>
+                            <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }}
+                              onClick={() => startRename(s.entity_id, name)} title="Rename">✎</button>
+                            <button className="btn" style={{ fontSize: 14, padding: '2px 6px', opacity: pinned.has(s.entity_id) ? 1 : 0.3 }}
+                              onClick={() => togglePin(s.entity_id)} title={pinned.has(s.entity_id) ? 'Unpin from Dashboard' : 'Pin to Dashboard'}>
+                              {pinned.has(s.entity_id) ? '★' : '☆'}
+                            </button>
+                          </>
                         )}
-                        <label className="ios-toggle" onClick={e => e.stopPropagation()}>
+                        <label className="ios-toggle">
                           <input type="checkbox" checked={on} onChange={() => toggle(s)} />
                           <span className="ios-slider" />
                         </label>

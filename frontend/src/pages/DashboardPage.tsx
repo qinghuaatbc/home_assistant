@@ -18,8 +18,16 @@ const DOMAIN_META: Record<string, { label: string; icon: string }> = {
   automation:    { label: 'Automations',     icon: '⚡' },
 }
 
+function usePinned() {
+  const [pinned, setPinned] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('ha_pinned') || '[]')) } catch { return new Set<string>() }
+  })
+  return pinned
+}
+
 export default function DashboardPage() {
   const { token, states, wsConnected, health } = useHa()
+  const pinned = usePinned()
   const [areas, setAreas] = useState<{ area_id: string; name: string }[]>([])
   const [entityAreas, setEntityAreas] = useState<Map<string, string>>(new Map())
   const [disabledEntities, setDisabledEntities] = useState<Set<string>>(new Set())
@@ -147,6 +155,17 @@ export default function DashboardPage() {
         {states.size === 0 && wsConnected && (
           <div style={{ textAlign: 'center', color: 'var(--text2)', padding: '4rem 2rem', fontSize: 14 }}>
             No devices found. Check your integration configuration.
+          </div>
+        )}
+
+        {/* Pinned */}
+        {pinned.size > 0 && (
+          <div className="section" style={{ marginTop: 16 }}>
+            <div className="section-title">⭐ Pinned</div>
+            {(() => {
+              const pinnedEntities = Array.from(states.values()).filter(s => pinned.has(s.entity_id))
+              return pinnedEntities.length > 0 ? renderEntities(pinnedEntities) : null
+            })()}
           </div>
         )}
 
