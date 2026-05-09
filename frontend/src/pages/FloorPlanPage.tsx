@@ -9,8 +9,8 @@ const SR = 0.28  // sensor indicator radius
 
 function buildFallback(floor: 1 | 2 | 3): THREE.Group {
   const g = new THREE.Group()
-  const fM = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.9 })
-  const wM = new THREE.MeshStandardMaterial({ color: 0x3c3c44, roughness: 0.85 })
+  const fM = new THREE.MeshStandardMaterial({ color: 0x888899, roughness: 0.7 })
+  const wM = new THREE.MeshStandardMaterial({ color: 0x9999aa, roughness: 0.7 })
   const box = (mat: THREE.Material, x: number, y: number, z: number, w: number, h: number, d: number) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat)
     m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; g.add(m)
@@ -20,7 +20,7 @@ function buildFallback(floor: 1 | 2 | 3): THREE.Group {
   box(wM, 0, hy, -FD / 2, FW, WH, WT); box(wM, 0, hy, FD / 2, FW, WH, WT)
   box(wM, -FW / 2, hy, 0, WT, WH, FD); box(wM, FW / 2, hy, 0, WT, WH, FD)
   if (floor === 1) box(new THREE.MeshStandardMaterial({ color: 0x48484e }), 0, hy, 0, WT, WH, FD)
-  const grid = new THREE.GridHelper(FW, 19, 0x3a3a44, 0x333338)
+  const grid = new THREE.GridHelper(FW, 19, 0x666688, 0x555566)
   grid.position.y = 0.01; g.add(grid)
   return g
 }
@@ -148,8 +148,9 @@ function DevicePicker({ meshName, states, mappings, onPick }: { meshName: string
   )
 }
 
-export default function FloorPlanPage() {
-  const { token, states, callService, setEntityState } = useHa()
+export default function FloorPlanPage({ fullscreen, onFullscreenChange, standaloneToken }: { fullscreen?: boolean; onFullscreenChange?: (v: boolean) => void; standaloneToken?: string | null }) {
+  const { token: ctxToken, states, callService, setEntityState } = useHa()
+  const token = standaloneToken || ctxToken
   const containerRef = useRef<HTMLDivElement>(null)
 
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null)
@@ -254,20 +255,22 @@ export default function FloorPlanPage() {
 
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.setSize(el.clientWidth, el.clientHeight)
+    const w = Math.max(el.clientWidth, 100)
+    const h = Math.max(el.clientHeight, 100)
+    renderer.setSize(w, h)
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1
     renderer.localClippingEnabled = true
     el.appendChild(renderer.domElement); rendererRef.current = renderer
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color('#111113')
-    scene.fog = new THREE.FogExp2('#111113', 0.016)
+    scene.background = new THREE.Color('#334466')
+    scene.fog = new THREE.FogExp2('#111113', 0.008)
     sceneRef.current = scene
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.3))
-    scene.add(new THREE.HemisphereLight(0xddeeff, 0x111122, 0.2))
-    const dir = new THREE.DirectionalLight(0xffffff, 0.5)
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6))
+    scene.add(new THREE.HemisphereLight(0xddeeff, 0x111122, 0.4))
+    const dir = new THREE.DirectionalLight(0xffffff, 1.2)
     dir.position.set(8, 18, 10); dir.castShadow = true; dir.shadow.mapSize.setScalar(1024); scene.add(dir)
 
     const camera = new THREE.PerspectiveCamera(48, el.clientWidth / el.clientHeight, 0.1, 200)
@@ -652,7 +655,7 @@ export default function FloorPlanPage() {
 
   const selBrightPct = selState?.attributes?.brightness != null
     ? Math.round(((selState.attributes.brightness as number) / 255) * 100) : 100
-  const toggle    = () => selectedId && callService('light', selOn ? 'turn_off' : 'turn_on', {}, selectedId)
+  const toggle    = () => selectedId && setEntityState(selectedId, selOn ? 'off' : 'on')
   const setBright = (pct: number) =>
     selectedId && callService('light', 'turn_on', { brightness: Math.round(pct / 100 * 255) }, selectedId)
 
@@ -703,28 +706,62 @@ export default function FloorPlanPage() {
       }).catch(() => {})
   }, [token, states])
 
-  return (
-    <div className="fp-page">
-      <div className="fp-header">
-        <span className="fp-title">3D Floor Plan</span>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <button className={`btn${editMode ? ' active' : ''}`} style={{ fontSize: 10, padding: '3px 8px' }}
-            onClick={() => setEditMode(!editMode)}>
-            {editMode ? '✕ Done' : '✎ Edit'}
-          </button>
-          <div className="fp-floor-btns">
-            {['1', '2', '3', '4', '5'].map(id => (
-              <button key={id} className={`fp-floor-btn${String(floor) === id ? ' active' : ''}`}
-                onClick={() => { setFloor(Number(id) as any); setSelectedId(null) }}
-                style={{ display: floorNames[id] ? undefined : 'none' }}>
-                {floorNames[id] || id}
-              </button>
-            ))}
+  // Reset body overflow on unmount
+  useEffect(() => () => { document.body.style.overflow = '' }, [])
+
+  // ── Canvas is always rendered (ref stays stable) ──
+
+  const panel = selectedId ? (
+    <div className="fp-panel"
+      onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()}>
+      <div className="fp-panel-row">
+        <span className="fp-panel-icon">{isSensor ? sensorIcon(selDevClass) : '💡'}</span>
+        <div className="fp-panel-info">
+          <div className="fp-panel-name">{selName}</div>
+          <div className={`fp-panel-state${selOn ? ' on' : ''}`}>
+            {isSensor ? sensorLabel(selDevClass, selOn) : (selOn ? 'On' : 'Off')}
           </div>
         </div>
+        <label className="ios-toggle" onClick={e => e.stopPropagation()}>
+          <input type="checkbox" checked={selOn ?? false} onChange={toggle} />
+          <span className="ios-slider" />
+        </label>
+        <button className="fp-close" onClick={() => setSelectedId(null)}>✕</button>
       </div>
+    </div>
+  ) : null
 
-      {editMode && glbLoaded && (
+  if (fullscreen) document.body.style.overflow = 'hidden'
+  else document.body.style.overflow = ''
+
+  return (
+    <div className={`fp-page${fullscreen ? ' fp-fullscreen' : ''}`}>
+      {!fullscreen && (
+        <div className="fp-header">
+          <span className="fp-title">3D Floor Plan</span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button className="btn" style={{ fontSize: 10, padding: '3px 8px' }}
+              onClick={() => onFullscreenChange?.(true)}>⛶</button>
+            <button className={`btn${editMode ? ' active' : ''}`} style={{ fontSize: 10, padding: '3px 8px' }}
+              onClick={() => setEditMode(!editMode)}>
+              {editMode ? '✕ Done' : '✎ Edit'}
+            </button>
+            <div className="fp-floor-btns">
+              {['1', '2', '3', '4', '5'].map(id => (
+                <button key={id} className={`fp-floor-btn${String(floor) === id ? ' active' : ''}`}
+                  onClick={() => { setFloor(Number(id) as any); setSelectedId(null) }}
+                  style={{ display: floorNames[id] ? undefined : 'none' }}>
+                  {floorNames[id] || id}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
+      {editMode && glbLoaded && !fullscreen && (
         <div className="fp-edit-panel" style={{
           position: 'absolute', left: 12, top: 60, zIndex: 20, width: 220,
           background: 'var(--card)', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
@@ -736,8 +773,7 @@ export default function FloorPlanPage() {
               onClick={async () => {
                 if (!token) return alert('Not logged in')
                 const r = await fetch('/api/config/3d-mappings', {
-                  method: 'PUT',
-                  headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                  method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                   body: JSON.stringify({ mappings: mappings })
                 })
                 alert(r.ok ? '✅ Saved' : '❌ ' + await r.text())
@@ -745,31 +781,20 @@ export default function FloorPlanPage() {
               💾 Save
             </button>
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text2)', marginBottom: 6 }}>
-            Tap a mesh to bind/unbind
-          </div>
+          <div style={{ fontSize: 10, color: 'var(--text2)', marginBottom: 6 }}>Tap a mesh to bind/unbind</div>
           {meshNames.map(meshName => {
             const mapped = !!mappings[meshName]
             return (
-              <div key={meshName} style={{
-                display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px',
-                borderRadius: 4, marginBottom: 1,
-                background: clickedMesh === meshName ? 'var(--surface2)' : mapped ? 'rgba(48,209,88,0.08)' : 'transparent',
-              }}>
+              <div key={meshName} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', borderRadius: 4, marginBottom: 1, background: clickedMesh === meshName ? 'var(--surface2)' : mapped ? 'rgba(48,209,88,0.08)' : 'transparent' }}>
                 <span style={{ width: 14, fontSize: 10, color: mapped ? '#30d158' : 'var(--text3)', cursor: 'pointer' }}
-                  onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>
-                  {mapped ? '✓' : '○'}
-                </span>
+                  onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>{mapped ? '✓' : '○'}</span>
                 <span style={{ fontFamily: 'monospace', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', flex: 1 }}
-                  onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>
-                  {meshName}
-                </span>
+                  onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>{meshName}</span>
                 {mapped ? (
                   <span style={{ fontSize: 9, color: 'var(--text2)' }}>{(states.get(mappings[meshName])?.attributes?.friendly_name as string) || mappings[meshName]}</span>
                 ) : (
                   <DevicePicker meshName={meshName} states={states} mappings={mappings} onPick={async (mesh, eid) => {
-                    const next = { ...mappings, [mesh]: eid }
-                    setMappings(next)
+                    const next = { ...mappings, [mesh]: eid }; setMappings(next)
                     const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: next }) })
                     if (!r.ok) alert('Save failed: ' + await r.text())
                   }} />
@@ -784,107 +809,31 @@ export default function FloorPlanPage() {
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} />
 
       {glbLoading && <div className="fp-glb-badge"><div className="fp-spinner-sm" /> Loading model…</div>}
-      {glbLoaded  && <div className="fp-glb-badge" style={{ color: 'rgba(48,209,88,0.8)' }}>● 3D model · click fixtures</div>}
+      {glbLoaded && !fullscreen && <div className="fp-glb-badge" style={{ color: 'rgba(48,209,88,0.8)' }}>● 3D model · click fixtures</div>}
 
-      <div className="fp-legend">
-        {legendLights.map(({ entityId, name, isGlb, isSensor }) => {
-          const on = states.get(entityId)?.state === 'on'
-          const dc = states.get(entityId)?.attributes?.device_class as string | undefined
-          return (
-            <button key={entityId}
-              className={`fp-legend-item${on ? ' on' : ''}${selectedId === entityId ? ' sel' : ''}${isSensor ? ' sensor' : ''}`}
-              onClick={() => setSelectedId(p => p === entityId ? null : entityId)}>
-              <span className={`fp-dot${on ? ' on' : ''}${isGlb ? ' glb' : ''}${isSensor ? (on ? ' open' : ' closed') : ''}`} />
-              <span className="fp-legend-name">{name}</span>
-              {isGlb && !isSensor && <span className="fp-legend-3d">3D</span>}
-              {isSensor && <span className={`fp-legend-3d${on ? ' alert' : ''}`}>{on ? sensorLabel(dc, true) : sensorLabel(dc, false)}</span>}
-            </button>
-          )
-        })}
-      </div>
-
-      {(selectedId || (editMode && clickedMesh)) && (
-        <div className="fp-panel" onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()}>
-          <div className="fp-panel-row">
-            <span className="fp-panel-icon">{isSensor ? sensorIcon(selDevClass) : '💡'}</span>
-            <div className="fp-panel-info">
-              <div className="fp-panel-name">{selName}</div>
-              <div className={`fp-panel-state${selOn ? ' on' : ''}`}>
-                {isSensor ? sensorLabel(selDevClass, selOn) : (selOn ? 'On' : 'Off')}
-              </div>
-            </div>
-            {!isSensor && (
-              <label className="ios-toggle" onClick={e => e.stopPropagation()}>
-                <input type="checkbox" checked={selOn ?? false} onChange={toggle} />
-                <span className="ios-slider" />
-              </label>
-            )}
-            {isSensor && (
-              <label className="ios-toggle" onClick={e => e.stopPropagation()}>
-                <input type="checkbox" checked={selOn ?? false}
-                  onChange={() => selectedId && setEntityState(selectedId, selOn ? 'off' : 'on')} />
-                <span className="ios-slider" />
-              </label>
-            )}
-            <button className="fp-close" onClick={() => setSelectedId(null)}>✕</button>
-          </div>
-          {!isSensor && selOn && (
-            <div className="brightness-row" style={{ padding: '4px 4px 2px' }}>
-              <span className="brightness-icon">☀</span>
-              <input type="range" className="ios-range" min={1} max={100} value={selBrightPct}
-                onChange={e => setBright(Number(e.target.value))} />
-              <span className="fp-bright-val">{selBrightPct}%</span>
-            </div>
-          )}
-           {editMode && (() => {
-             const boundMesh = selectedId ? Object.entries(mappings).find(([, eid]) => eid === selectedId)?.[0] : null
-             const targetMesh = boundMesh || clickedMesh
-             if (!targetMesh) return null
-             const isBound = !!boundMesh
-             const curBehavior = behaviors[targetMesh] || guessBehavior(mappings[targetMesh] || '')
-             const setBehavior = (b: string) => setBehaviors(prev => ({ ...prev, [targetMesh]: b }))
-             return (
-               <div style={{ padding: '8px 12px', borderTop: '1px solid var(--sep)' }}>
-                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                   <span style={{ fontSize: 11, color: 'var(--text2)' }}>🎯 <code style={{ fontSize: 11 }}>{targetMesh}</code></span>
-                   {isBound && (
-                     <button className="btn" style={{ fontSize: 10, padding: '2px 8px', color: '#ff453a' }}
-                       onClick={async () => {
-                         const n = { ...mappings }; delete n[targetMesh]; setMappings(n)
-                         const nb = { ...behaviors }; delete nb[targetMesh]; setBehaviors(nb)
-                         const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: n }) })
-                         if (!r.ok) alert('Save failed: ' + await r.text())
-                       }}>
-                       Unbind
-                     </button>
-                   )}
-                 </div>
-                 <BehaviorSelect behavior={curBehavior} onChange={setBehavior} />
-                 {!isBound && (() => {
-                   const mappedIds = new Set(Object.values(mappings))
-                   const available = Array.from(states.entries())
-                     .filter(([id]) => !mappedIds.has(id))
-                     .map(([id, s]) => ({ id, name: (s.attributes?.friendly_name as string) || id }))
-                   return (
-                     <select style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 12, marginTop: 4 }}
-                       defaultValue="" onChange={async e => {
-                         if (!e.target.value) return
-                         const next = { ...mappings, [targetMesh]: e.target.value }
-                         setMappings(next)
-                         setBehaviors(prev => ({ ...prev, [targetMesh]: curBehavior }))
-                         const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: next }) })
-                         if (!r.ok) alert('Save failed: ' + await r.text())
-                       }}>
-                       <option value="" disabled>Select device…</option>
-                       {available.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                     </select>
-                   )
-                 })()}
-               </div>
-             )
-           })()}
+      {!fullscreen && (
+        <div className="fp-legend">
+          {legendLights.map(({ entityId, name, isGlb, isSensor }) => {
+            const on = states.get(entityId)?.state === 'on'
+            const dc = states.get(entityId)?.attributes?.device_class as string | undefined
+            return (
+              <button key={entityId}
+                className={`fp-legend-item${on ? ' on' : ''}${selectedId === entityId ? ' sel' : ''}${isSensor ? ' sensor' : ''}`}
+                onClick={() => { setSelectedId(p => p === entityId ? null : entityId); const st = states.get(entityId); setEntityState(entityId, st?.state === 'on' ? 'off' : 'on') }}>
+                <span className={`fp-dot${on ? ' on' : ''}${isGlb ? ' glb' : ''}${isSensor ? (on ? ' open' : ' closed') : ''}`} />
+                <span className="fp-legend-name">{name}</span>
+                {isGlb && !isSensor && <span className="fp-legend-3d">3D</span>}
+                {isSensor && <span className={`fp-legend-3d${on ? ' alert' : ''}`}>{on ? sensorLabel(dc, true) : sensorLabel(dc, false)}</span>}
+              </button>
+            )
+          })}
         </div>
       )}
+
+      {panel}
+
     </div>
   )
 }
+
+

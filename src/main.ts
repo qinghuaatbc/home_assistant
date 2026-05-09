@@ -32,6 +32,13 @@ async function bootstrap(): Promise<void> {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
+  // SPA fallback: serve index.html for client-side routes
+  const publicDir = join(__dirname, '..', 'public');
+  app.use((req: any, res: any, next: any) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/data/') || req.path.startsWith('/assets/') || req.path === '/') return next();
+    res.sendFile(join(publicDir, 'index.html'));
+  });
+
   // Global prefix for REST API (WebSocket uses its own path)
   // Auth routes are kept outside /api prefix for HA compatibility
   app.setGlobalPrefix('api');

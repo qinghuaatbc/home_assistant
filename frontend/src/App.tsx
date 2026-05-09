@@ -21,6 +21,15 @@ function AppInner() {
   const { token } = useHa()
   const [tab, setTab] = useState<Tab>('dashboard')
   const [aiOpen, setAiOpen] = useState(false)
+  const [hideTabBar, setHideTabBar] = useState(false)
+
+  // Check for standalone 3D floorplan route
+  const isFloorplanRoute = window.location.pathname === '/floorplan' || window.location.pathname === '/3d'
+  const urlToken = new URLSearchParams(window.location.search).get('token')
+
+  if (isFloorplanRoute && (token || urlToken)) {
+    return <FloorPlanPage fullscreen={true} onFullscreenChange={() => {}} standaloneToken={urlToken || token} />
+  }
 
   if (!token) return <LoginPage />
 
@@ -31,14 +40,14 @@ function AppInner() {
     <>
       {tab === 'dashboard' && page(<DashboardPage />)}
       {tab === 'entities' && page(<EntitiesPage />)}
-      {tab === 'floorplan' && page(<FloorPlanPage />)}
+      {tab === 'floorplan' && page(<FloorPlanPage fullscreen={hideTabBar} onFullscreenChange={setHideTabBar} />)}
       {tab === 'history' && page(<HistoryPage />)}
       {tab === 'events' && page(<EventsPage />)}
       {tab === 'automations' && page(<AutomationsPage />)}
       {tab === 'areas' && page(<AreasPage />)}
       {tab === 'integrations' && page(<IntegrationsPage />)}
       {tab === 'settings' && page(<SettingsPage />)}
-      <TabBar current={tab} onChange={(t) => setTab(t as Tab)} />
+      {!hideTabBar && <TabBar current={tab} onChange={(t) => setTab(t as Tab)} />}
 
       <button onClick={() => setAiOpen(!aiOpen)}
         style={{

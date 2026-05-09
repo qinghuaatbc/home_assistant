@@ -603,6 +603,11 @@ input[type=range].ios-range::-webkit-slider-thumb {
   background: #111113;
   overflow: hidden;
 }
+.fp-page.fp-fullscreen {
+  bottom: 0;
+  z-index: 999;
+  background: #334466;
+}
 
 .fp-header {
   position: absolute;
@@ -827,4 +832,29 @@ input[type=range].ios-range::-webkit-slider-thumb {
   border-top-color: var(--blue);
   border-radius: 50%;
   animation: fp-spin 0.7s linear infinite;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--surface2);
+  color: var(--text);
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { opacity: 0.8; }
+.btn:active { opacity: 0.6; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn-accent {
+  background: var(--blue);
+  color: #fff;
 }
