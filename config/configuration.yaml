@@ -30,8 +30,14 @@ logger:
   level: "info"
 
 integrations:
+  # 本地 MQTT（主）— 安装: docker run -d --name mqtt -p 1883:1883 eclipse-mosquitto
+  - domain: mqtt
+    broker: "localhost"
+
+  # 公共 MQTT（备）— 仅手动实体，关闭 auto-discovery
   - domain: mqtt
     broker: "broker.hivemq.com"
+    discovery_prefix: ""
 
   # Demo devices — comment out to disable
   - domain: demo
