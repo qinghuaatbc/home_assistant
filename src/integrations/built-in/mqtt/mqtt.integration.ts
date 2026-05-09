@@ -54,8 +54,22 @@ export interface MqttEntityConfig {
   device_class?: string;
 }
 
+/** Parsed discovery config from HA discovery topic */
+interface DiscoveredEntity {
+  entityId: string;
+  type: MqttEntityType;
+  name: string;
+  command_topic?: string;
+  state_topic?: string;
+  payload_on?: string;
+  payload_off?: string;
+  brightness?: boolean;
+  unit_of_measurement?: string;
+  device_class?: string;
+  unique_id?: string;
+}
+
 interface MqttConfig extends IntegrationConfig {
-  /** MQTT broker hostname or IP */
   broker: string;
   port?: number;
   username?: string;
@@ -63,6 +77,8 @@ interface MqttConfig extends IntegrationConfig {
   client_id?: string;
   /** Entities to register */
   entities: MqttEntityConfig[];
+  /** Auto-discovery prefix (default: homeassistant). Set empty to disable. */
+  discovery_prefix?: string;
 }
 
 /** topic → entity metadata */
@@ -96,6 +112,10 @@ export class MqttIntegration implements HaIntegration {
 
   /** state topic → entity metadata */
   private readonly topicMap = new Map<string, EntityMeta>();
+  /** Auto-discovered entities by entity_id → config */
+  private readonly discovered = new Map<string, DiscoveredEntity>();
+  /** Discovery prefix */
+  private discoveryPrefix = 'homeassistant';
 
   constructor(
     private readonly stateMachine: StateMachineService,
@@ -114,15 +134,11 @@ export class MqttIntegration implements HaIntegration {
       this.logger.error('MQTT: broker is required');
       return false;
     }
-    if (!cfg.entities?.length) {
-      this.logger.error('MQTT: at least one entity must be configured');
-      return false;
-    }
-
     this.config = { ...cfg, port: cfg.port ?? DEFAULT_BROKER_PORT };
+    this.discoveryPrefix = cfg.discovery_prefix ?? 'homeassistant';
 
-    // Register entities (start as unavailable)
-    this.registerEntities();
+    // Register manually configured entities
+    if (cfg.entities?.length) this.registerEntities();
 
     // Connect to broker
     const ok = await this.client.connect(
@@ -209,11 +225,21 @@ export class MqttIntegration implements HaIntegration {
     for (const [topic, meta] of this.topicMap) {
       this.client.subscribe(topic, meta.qos);
     }
+    // Subscribe to auto-discovery
+    if (this.discoveryPrefix) {
+      this.client.subscribe(`${this.discoveryPrefix}/+/+/config`, 0);
+      this.logger.log(`MQTT subscribed to discovery: ${this.discoveryPrefix}/+/+/config`);
+    }
   }
 
   // ── Inbound messages ─────────────────────────────────────────────────────────
 
   private handleMessage(msg: MqttMessage): void {
+    // Check for discovery message
+    if (this.discoveryPrefix && msg.topic.startsWith(this.discoveryPrefix + '/')) {
+      this.handleDiscoveryMessage(msg);
+      return;
+    }
     const meta = this.topicMap.get(msg.topic);
     if (!meta) return;
 
@@ -263,6 +289,88 @@ export class MqttIntegration implements HaIntegration {
     }
 
     this.stateMachine.setState(meta.entityId, state, attrs, this.contextService.system());
+  }
+
+  /**
+   * Handle HA MQTT discovery messages.
+   * Format: <discovery_prefix>/<component>/<object_id>/config
+   * Payload: JSON with name, command_topic, state_topic, etc.
+   */
+  private handleDiscoveryMessage(msg: MqttMessage): void {
+    const parts = msg.topic.split('/');
+    // parts = [prefix, component, object_id, 'config']
+    if (parts.length < 4 || parts[parts.length - 1] !== 'config') return;
+
+    const component = parts[parts.length - 3]; // light, switch, sensor, etc.
+    const objectId = parts[parts.length - 2];
+
+    // Empty payload = removal
+    if (!msg.payload || msg.payload.trim() === '') {
+      const entityId = `${component}.mqtt_${objectId}`;
+      this.stateMachine.removeEntity(entityId);
+      this.discovered.delete(entityId);
+      this.logger.log(`MQTT discovery removed: ${entityId}`);
+      return;
+    }
+
+    let config: Record<string, unknown>;
+    try { config = JSON.parse(msg.payload); } catch { return; }
+
+    const name = (config.name as string) || objectId;
+    const entityId = `${component}.mqtt_${objectId}`;
+    const stateTopic = (config.state_topic as string) || '';
+    const commandTopic = (config.command_topic as string) || '';
+
+    // Map HA component to MqttEntityType
+    const typeMap: Record<string, MqttEntityType> = {
+      light: 'light', switch: 'switch', sensor: 'sensor',
+      binary_sensor: 'binary_sensor', cover: 'switch',
+    };
+    const type = typeMap[component] || 'switch';
+
+    if (!stateTopic) return;
+
+    // Register in entity registry
+    this.entityRegistry.registerEntity({
+      entity_id: entityId,
+      platform: DOMAIN_MQTT,
+      name,
+      original_name: name,
+      unique_id: (config.unique_id as string) ?? `mqtt_disc_${objectId}`,
+      device_class: config.device_class as string,
+    }).catch(() => {});
+
+    // Track as discovered entity
+    const disc: DiscoveredEntity = {
+      entityId, type, name,
+      command_topic: commandTopic,
+      state_topic: stateTopic,
+      payload_on: (config.payload_on as string) ?? 'ON',
+      payload_off: (config.payload_off as string) ?? 'OFF',
+      brightness: config.brightness as boolean,
+      unit_of_measurement: config.unit_of_measurement as string,
+      device_class: config.device_class as string,
+      unique_id: config.unique_id as string,
+    };
+    this.discovered.set(entityId, disc);
+
+    // Subscribe to state topic
+    this.client.subscribe(stateTopic, 0);
+
+    // Create a topicMap entry for state updates
+    const meta: EntityMeta = {
+      entityId, type, name,
+      commandTopic: commandTopic || stateTopic,
+      payloadOn: disc.payload_on ?? 'ON',
+      payloadOff: disc.payload_off ?? 'OFF',
+      payloadToggle: 'TOGGLE',
+      qos: 0, retain: false,
+      unitOfMeasurement: disc.unit_of_measurement,
+      deviceClass: disc.device_class,
+    };
+    this.topicMap.set(stateTopic, meta);
+
+    this.logger.log(`MQTT discovery: ${entityId} (${type})`);
   }
 
   private markAllUnavailable(): void {
