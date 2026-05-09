@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import { HaProvider, useHa } from './context/HaContext'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import EntitiesPage from './pages/EntitiesPage'
 import AutomationsPage from './pages/AutomationsPage'
 import SettingsPage from './pages/SettingsPage'
-import FloorPlanPage from './pages/FloorPlanPage'
 import TabBar from './components/TabBar'
+
+const FloorPlanPage = lazy(() => import('./pages/FloorPlanPage'))
 
 type Tab = 'dashboard' | 'entities' | 'automations' | 'settings' | 'floorplan'
 
@@ -22,7 +23,11 @@ function AppInner() {
       {tab === 'entities'     && <EntitiesPage />}
       {tab === 'automations'  && <AutomationsPage />}
       {tab === 'settings'     && <SettingsPage />}
-      {tab === 'floorplan'    && <FloorPlanPage />}
+      {tab === 'floorplan'    && (
+        <Suspense fallback={<div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading 3D…</div>}>
+          <FloorPlanPage />
+        </Suspense>
+      )}
       <TabBar current={tab} onChange={(t) => setTab(t as Tab)} />
     </>
   )
