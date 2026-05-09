@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "home-assistant": {
+      "command": "node",
+      "args": ["/absolute/path/to/home_assistant/mcp-server/index.js"],
+      "env": {
+        "HA_URL": "http://6759.ddns.net:8123",
+        "HA_TOKEN": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4OTNkODJkNy01Njg3LTRiOGEtOGJmNi05MzAzNTNkMDQ0MDIiLCJ0b2tlbl90eXBlIjoibm9ybWFsIiwiaWF0IjoxNzc4MzUyODMwLCJleHAiOjE3Nzg0MzkyMzAsImlzcyI6ImhvbWVhc3Npc3RhbnQifQ.bKGyGi93p2dIz6tWcQEBpqXWPts8-KNaTktkpJvVPw0"
+      }
+    }
+  }
+}
