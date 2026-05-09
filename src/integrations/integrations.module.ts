@@ -21,6 +21,7 @@ import { RegistryModule } from '../registry/registry.module';
 import { ContextService } from '../core/context/context.service';
 import { AutomationModule } from '../automations/automation.module';
 import { AutomationIntegration } from '../automations/automation.integration';
+import { DemoIntegration } from './built-in/demo/demo.integration';
 
 @Module({
   imports: [RegistryModule, AutomationModule],
@@ -51,6 +52,8 @@ import { AutomationIntegration } from '../automations/automation.integration';
     // Camera
     CameraIntegration,
     CameraStreamService,
+    // Demo
+    DemoIntegration,
   ],
   exports: [IntegrationLoaderService],
 })
