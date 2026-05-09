@@ -98,6 +98,30 @@ function makeSensorMarker(x: number, z: number, entityId: string, deviceClass: s
   return { marker, glow, ptLight: pl, deviceClass, clipPlane }
 }
 
+function guessBehavior(entityId: string): string {
+  if (entityId.startsWith('light.')) return 'light'
+  if (entityId.startsWith('binary_sensor.')) return 'door'
+  if (entityId.startsWith('switch.')) return 'switch'
+  return 'light'
+}
+
+const BEHAVIORS = [
+  { id: 'light', label: '💡 Light', desc: 'On/off with brightness' },
+  { id: 'door', label: '🚪 Door', desc: 'Hinged open/close' },
+  { id: 'curtain', label: '🪟 Curtain', desc: 'Roll-up/down' },
+  { id: 'garage_door', label: '🚗 Garage', desc: 'Roll-up/down' },
+  { id: 'switch', label: '🔌 Switch', desc: 'On/off toggle' },
+]
+
+function BehaviorSelect({ behavior, onChange }: { behavior: string; onChange: (b: string) => void }) {
+  return (
+    <select value={behavior} onChange={e => onChange(e.target.value)}
+      style={{ width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 11, marginTop: 4 }}>
+      {BEHAVIORS.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
+    </select>
+  )
+}
+
 function DevicePicker({ meshName, states, mappings, onPick }: { meshName: string; states: Map<string, any>; mappings: Record<string, string>; onPick: (mesh: string, eid: string) => void }) {
   const [open, setOpen] = useState(false)
   const mappedIds = new Set(Object.values(mappings))
@@ -160,6 +184,7 @@ export default function FloorPlanPage() {
   const [editMode, setEditMode] = useState(false)
   const [meshNames, setMeshNames] = useState<string[]>([])
   const [mappings, setMappings] = useState<Record<string, string>>({})
+  const [behaviors, setBehaviors] = useState<Record<string, string>>({})
   const [mappingDirty, setMappingDirty] = useState(false)
   const [clickedMesh, setClickedMesh] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null)
@@ -175,14 +200,16 @@ export default function FloorPlanPage() {
       }).catch(() => {})
   }, [token])
 
-  const saveMappings = async (m: Record<string, string>) => {
+  const saveAll = async (m: Record<string, string>, b: Record<string, string>) => {
     if (!token) return
-    setSaveStatus('saving')
+    // Merge mappings + behaviors into one extended format
+    const extended: Record<string, any> = {}
+    for (const [mesh, eid] of Object.entries(m)) {
+      extended[mesh] = { entity: eid, behavior: b[mesh] || guessBehavior(eid) }
+    }
     try {
-      const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: m }) })
-      setSaveStatus(r.ok ? 'saved' : 'error')
-      if (r.ok) setTimeout(() => setSaveStatus(null), 2000)
-    } catch { setSaveStatus('error') }
+      await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: extended }) })
+    } catch {}
   }
 
   // ── Derive layout from state attributes + saved mappings ─────────────────
@@ -407,7 +434,7 @@ export default function FloorPlanPage() {
 
     const targetFloor = floor
     new GLTFLoader().load(
-      `/floor_${floor}.glb`,
+      `/floors/floor${floor}.glb`,
       (gltf) => {
         if (targetFloor !== floor) return
         setGlbLoading(false); setGlbLoaded(true)
@@ -608,14 +635,9 @@ export default function FloorPlanPage() {
       if (eid) {
         setSelectedId(eid)
         const st = statesRef.current.get(eid)
-        if (eid.startsWith('light.')) {
-          const turningOn = st?.state !== 'on'
-          callService('light', turningOn ? 'turn_on' : 'turn_off', turningOn ? { brightness: 255 } : {}, eid)
-        } else if (eid.startsWith('binary_sensor.')) {
-          const newState = st?.state === 'on' ? 'off' : 'on'
-          statesRef.current = new Map(statesRef.current).set(eid, { ...st!, state: newState })
-          setEntityState(eid, newState)
-        }
+        const newState = st?.state === 'on' ? 'off' : 'on'
+        statesRef.current = new Map(statesRef.current).set(eid, { ...st!, state: newState })
+        setEntityState(eid, newState)
       }
     } else setSelectedId(null)
   }
@@ -656,20 +678,28 @@ export default function FloorPlanPage() {
     if (!token || states.size === 0 || migratedRef.current) return
     migratedRef.current = true
     fetch('/api/config/3d-mappings', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then((d: Record<string, string>) => {
-        // d is the mappings object directly: {meshName: entityId}
-        const keys = Object.keys(d).filter(k => k !== 'mappings') // handle legacy wrapper
-        // If saved file has content, use it as-is
-        if (keys.length > 0) { setMappings(d); return }
-        // First load: migrate from YAML attributes
+      .then(r => r.json()).then((d: any) => {
+        const keys = Object.keys(d).filter(k => k !== 'mappings')
+        if (keys.length > 0) {
+          // Parse old format (string) and new format ({entity, behavior})
+          const m: Record<string, string> = {}
+          const b: Record<string, string> = {}
+          for (const [mesh, val] of Object.entries(d)) {
+            if (typeof val === 'string') { m[mesh] = val; b[mesh] = guessBehavior(val) }
+            else { const v = val as any; m[mesh] = v.entity; b[mesh] = v.behavior || guessBehavior(v.entity) }
+          }
+          setMappings(m); setBehaviors(b)
+          return
+        }
         const merged: Record<string, string> = {}
+        const beh: Record<string, string> = {}
         let added = false
         states.forEach((st, eid) => {
           const mesh = st.attributes?.glb_mesh as string | undefined
-          if (mesh) { merged[mesh] = eid; added = true }
+          if (mesh) { merged[mesh] = eid; beh[mesh] = guessBehavior(eid); added = true }
         })
-        setMappings(merged)
-        if (added) fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: merged }) })
+        setMappings(merged); setBehaviors(beh)
+        if (added) saveAll(merged, beh)
       }).catch(() => {})
   }, [token, states])
 
@@ -806,48 +836,53 @@ export default function FloorPlanPage() {
               <span className="fp-bright-val">{selBrightPct}%</span>
             </div>
           )}
-          {editMode && (() => {
-            const boundMesh = selectedId ? Object.entries(mappings).find(([, eid]) => eid === selectedId)?.[0] : null
-            const targetMesh = boundMesh || clickedMesh
-            if (!targetMesh) return null
-            const isBound = !!boundMesh
-            return (
-              <div style={{ padding: '8px 12px', borderTop: '1px solid var(--sep)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isBound ? 0 : 8 }}>
-                  <span style={{ fontSize: 11, color: 'var(--text2)' }}>🎯 <code style={{ fontSize: 11 }}>{targetMesh}</code></span>
-                  {isBound && (
-                    <button className="btn" style={{ fontSize: 10, padding: '2px 8px', color: '#ff453a' }}
-                      onClick={async () => {
-                        const n = { ...mappings }; delete n[targetMesh]; setMappings(n)
-                        const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: n }) })
-                        if (!r.ok) alert('Save failed: ' + await r.text())
-                      }}>
-                      Unbind
-                    </button>
-                  )}
-                </div>
-                {!isBound && (() => {
-                  const mappedIds = new Set(Object.values(mappings))
-                  const available = Array.from(states.entries())
-                    .filter(([id]) => !mappedIds.has(id))
-                    .map(([id, s]) => ({ id, name: (s.attributes?.friendly_name as string) || id }))
-                  return (
-                    <select style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 12 }}
-                      defaultValue="" onChange={async e => {
-                        if (!e.target.value) return
-                        const next = { ...mappings, [targetMesh]: e.target.value }
-                        setMappings(next)
-                        const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: next }) })
-                        if (!r.ok) alert('Save failed: ' + await r.text())
-                      }}>
-                      <option value="" disabled>Select device…</option>
-                      {available.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
-                  )
-                })()}
-              </div>
-            )
-          })()}
+           {editMode && (() => {
+             const boundMesh = selectedId ? Object.entries(mappings).find(([, eid]) => eid === selectedId)?.[0] : null
+             const targetMesh = boundMesh || clickedMesh
+             if (!targetMesh) return null
+             const isBound = !!boundMesh
+             const curBehavior = behaviors[targetMesh] || guessBehavior(mappings[targetMesh] || '')
+             const setBehavior = (b: string) => setBehaviors(prev => ({ ...prev, [targetMesh]: b }))
+             return (
+               <div style={{ padding: '8px 12px', borderTop: '1px solid var(--sep)' }}>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                   <span style={{ fontSize: 11, color: 'var(--text2)' }}>🎯 <code style={{ fontSize: 11 }}>{targetMesh}</code></span>
+                   {isBound && (
+                     <button className="btn" style={{ fontSize: 10, padding: '2px 8px', color: '#ff453a' }}
+                       onClick={async () => {
+                         const n = { ...mappings }; delete n[targetMesh]; setMappings(n)
+                         const nb = { ...behaviors }; delete nb[targetMesh]; setBehaviors(nb)
+                         const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: n }) })
+                         if (!r.ok) alert('Save failed: ' + await r.text())
+                       }}>
+                       Unbind
+                     </button>
+                   )}
+                 </div>
+                 <BehaviorSelect behavior={curBehavior} onChange={setBehavior} />
+                 {!isBound && (() => {
+                   const mappedIds = new Set(Object.values(mappings))
+                   const available = Array.from(states.entries())
+                     .filter(([id]) => !mappedIds.has(id))
+                     .map(([id, s]) => ({ id, name: (s.attributes?.friendly_name as string) || id }))
+                   return (
+                     <select style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 12, marginTop: 4 }}
+                       defaultValue="" onChange={async e => {
+                         if (!e.target.value) return
+                         const next = { ...mappings, [targetMesh]: e.target.value }
+                         setMappings(next)
+                         setBehaviors(prev => ({ ...prev, [targetMesh]: curBehavior }))
+                         const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: next }) })
+                         if (!r.ok) alert('Save failed: ' + await r.text())
+                       }}>
+                       <option value="" disabled>Select device…</option>
+                       {available.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                     </select>
+                   )
+                 })()}
+               </div>
+             )
+           })()}
         </div>
       )}
     </div>
