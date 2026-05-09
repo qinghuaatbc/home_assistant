@@ -10,8 +10,9 @@ const FloorPlanPage = lazy(() => import('./pages/FloorPlanPage'))
 const AutomationsPage = lazy(() => import('./pages/AutomationsPage'))
 const EventsPage = lazy(() => import('./pages/EventsPage'))
 const HistoryPage = lazy(() => import('./pages/HistoryPage'))
+const AreasPage = lazy(() => import('./pages/AreasPage'))
 
-type Tab = 'dashboard' | 'entities' | 'floorplan' | 'history' | 'events' | 'automations' | 'settings'
+type Tab = 'dashboard' | 'entities' | 'floorplan' | 'history' | 'events' | 'automations' | 'areas' | 'settings'
 
 function AppInner() {
   const { token } = useHa()
@@ -30,6 +31,7 @@ function AppInner() {
       {tab === 'history' && page(<HistoryPage />)}
       {tab === 'events' && page(<EventsPage />)}
       {tab === 'automations' && page(<AutomationsPage />)}
+      {tab === 'areas' && page(<AreasPage />)}
       {tab === 'settings' && page(<SettingsPage />)}
       <TabBar current={tab} onChange={(t) => setTab(t as Tab)} />
     </>

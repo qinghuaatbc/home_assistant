@@ -10,6 +10,7 @@ const TABS = [
   { id: 'history',     icon: '📊',  label: 'History' },
   { id: 'events',      icon: '📋',  label: 'Events'  },
   { id: 'automations', icon: '⚡',  label: 'Auto'    },
+  { id: 'areas',       icon: '🏠',  label: 'Areas'   },
   { id: 'settings',    icon: '☰',  label: 'More'    },
 ]
 

@@ -44,6 +44,15 @@ export class RegistryController {
     return this.entityRegistry.getEntity(entityId);
   }
 
+  @Put('entity_registry/:entity_id')
+  @ApiOperation({ summary: 'Update entity registry entry (e.g. area_id)' })
+  async updateEntity(
+    @Param('entity_id') entityId: string,
+    @Body() dto: { area_id?: string | null; name?: string },
+  ) {
+    return this.entityRegistry.updateEntity(entityId, dto);
+  }
+
   // ---- Device Registry ----
 
   @Get('device_registry')
