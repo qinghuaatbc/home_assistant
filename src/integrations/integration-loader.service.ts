@@ -18,6 +18,7 @@ import { LutronCasetaIntegration } from './built-in/lutron-caseta/lutron-caseta.
 import { MqttIntegration } from './built-in/mqtt/mqtt.integration';
 import { CameraIntegration } from './built-in/camera/camera.integration';
 import { AutomationIntegration } from '../automations/automation.integration';
+import { DemoIntegration } from './built-in/demo/demo.integration';
 import {
   EVENT_HOMEASSISTANT_START,
   EVENT_COMPONENT_LOADED,
@@ -68,8 +69,8 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     mqttIntegration: MqttIntegration,
     cameraIntegration: CameraIntegration,
     automationIntegration: AutomationIntegration,
+    demoIntegration: DemoIntegration,
   ) {
-    // Register built-in integrations
     this.builtInRegistry.set('light', lightIntegration);
     this.builtInRegistry.set('switch', switchIntegration);
     this.builtInRegistry.set('sensor', sensorIntegration);
@@ -81,6 +82,7 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     this.builtInRegistry.set('mqtt', mqttIntegration);
     this.builtInRegistry.set('camera', cameraIntegration);
     this.builtInRegistry.set('automation', automationIntegration);
+    this.builtInRegistry.set('demo', demoIntegration);
   }
 
   /**

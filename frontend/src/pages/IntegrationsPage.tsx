@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react'
 import { useHa } from '../context/HaContext'
 
 const INTEGRATIONS = [
+  { domain: 'demo', name: 'Demo', icon: '🧪', desc: 'Simulated test devices (lights, switches, sensors)',
+    fields: [
+      { key: 'enable', label: 'Enable demo devices', type: 'checkbox', default: true },
+    ]},
   { domain: 'mqtt', name: 'MQTT', icon: '📡', desc: 'Connect MQTT devices (Tasmota, ESPHome, Sonoff...)',
     fields: [
       { key: 'broker', label: 'Broker', placeholder: 'broker.hivemq.com', default: 'broker.hivemq.com' },
@@ -101,7 +105,7 @@ export default function IntegrationsPage() {
                   <label style={{ fontSize: 11, color: 'var(--text2)', display: 'block', marginBottom: 2 }}>{field.label}</label>
                   <input type={field.type || 'text'} value={cfg[field.key] || ''}
                     onChange={e => updateField(int.domain, field.key, e.target.value)}
-                    placeholder={field.placeholder}
+                    placeholder={(field as any).placeholder || ''}
                     style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
                 </div>
               ))}
@@ -179,7 +183,7 @@ function FloorsManager({ token }: { token: string | null }) {
 
   return (
     <div className="ios-list">
-      {floors.map(f => (
+      {(floors || []).map(f => (
         <div key={f.id} className="ios-list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>

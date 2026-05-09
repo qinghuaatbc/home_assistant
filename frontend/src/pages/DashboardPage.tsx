@@ -37,12 +37,13 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!token) return
     fetch('/api/area_registry', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(setAreas).catch(() => {})
+      .then(r => r.json()).then((data: any) => { if (Array.isArray(data)) setAreas(data) }).catch(() => {})
     fetch('/api/entity_registry', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then((list: { entity_id: string; area_id: string | null; disabled: boolean }[]) => {
+      .then(r => r.json()).then((data: any) => {
+        if (!Array.isArray(data)) return
         const m = new Map<string, string>()
         const disabled = new Set<string>()
-        list.forEach(e => {
+        data.forEach((e: any) => {
           if (e.area_id) m.set(e.entity_id, e.area_id)
           if (e.disabled) disabled.add(e.entity_id)
         })
@@ -50,8 +51,8 @@ export default function DashboardPage() {
         setDisabledEntities(disabled)
       }).catch(() => {})
     fetch('/api/entity_registry', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then((list: { entity_id: string; platform: string }[]) => {
-        setPlatforms(new Map(list.map(e => [e.entity_id, e.platform])))
+      .then(r => r.json()).then((data: any) => {
+        if (Array.isArray(data)) setPlatforms(new Map(data.map((e: any) => [e.entity_id, e.platform])))
       }).catch(() => {}).finally(() => setLoading(false))
   }, [token])
 
@@ -91,9 +92,11 @@ export default function DashboardPage() {
     const domain = first.entity_id.split('.')[0]
     const sorted = [...entities].sort((a, b) => a.entity_id.localeCompare(b.entity_id))
     const tag = (s: any) => {
-      const plat = platforms.get(s.entity_id) || ''
-      const prefix = plat && plat !== domain ? `${plat} · ` : ''
-      return { ...s, attributes: { ...s.attributes, friendly_name: `${prefix}${s.attributes?.friendly_name || s.entity_id}` } }
+      let plat = platforms.get(s.entity_id) || ''
+      if (plat && plat !== domain) {
+        return { ...s, attributes: { ...s.attributes, friendly_name: `${plat} · ${s.attributes?.friendly_name || s.entity_id}` } }
+      }
+      return s
     }
     if (domain === 'weather') return sorted.map(s => <WeatherCard key={s.entity_id} state={tag(s)} />)
     if (domain === 'camera') return <div className="card-grid">{sorted.map(s => <CameraCard key={s.entity_id} state={tag(s)} />)}</div>

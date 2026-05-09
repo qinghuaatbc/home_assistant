@@ -1,0 +1,70 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { StateMachineService } from '../../../core/state-machine/state-machine.service';
+import { ServiceRegistryService } from '../../../core/service-registry/service-registry.service';
+import { EntityRegistryService } from '../../../registry/entity-registry/entity-registry.service';
+import { ContextService } from '../../../core/context/context.service';
+import { HaIntegration, IntegrationConfig, IntegrationManifest } from '../../interfaces/integration.interface';
+
+const DEMO_ENTITIES: Array<{ entity_id: string; name: string; type: string; attrs?: Record<string, unknown> }> = [
+  { entity_id: 'light.living_room', name: 'Living Room Light', type: 'light' },
+  { entity_id: 'light.bedroom', name: 'Bedroom Light', type: 'light' },
+  { entity_id: 'light.kitchen', name: 'Kitchen Light', type: 'light' },
+  { entity_id: 'light.kitchen_light', name: 'Kitchen Ceiling', type: 'light' },
+  { entity_id: 'light.dining_light', name: 'Dining Room Light', type: 'light' },
+  { entity_id: 'light.office_light', name: 'Office Light', type: 'light' },
+  { entity_id: 'switch.fan', name: 'Living Room Fan', type: 'switch' },
+  { entity_id: 'switch.tv', name: 'TV Switch', type: 'switch' },
+  { entity_id: 'switch.alarm_siren', name: 'Alarm Siren', type: 'switch' },
+  { entity_id: 'binary_sensor.front_door', name: 'Front Door', type: 'binary_sensor', attrs: { device_class: 'door' } },
+  { entity_id: 'binary_sensor.back_door', name: 'Back Door', type: 'binary_sensor', attrs: { device_class: 'door' } },
+  { entity_id: 'binary_sensor.garage_door', name: 'Garage Door', type: 'binary_sensor', attrs: { device_class: 'garage_door' } },
+  { entity_id: 'binary_sensor.motion', name: 'Motion Sensor', type: 'binary_sensor', attrs: { device_class: 'motion' } },
+  { entity_id: 'sensor.temperature', name: 'Temperature', type: 'sensor', attrs: { unit_of_measurement: '°C', device_class: 'temperature' } },
+  { entity_id: 'sensor.humidity', name: 'Humidity', type: 'sensor', attrs: { unit_of_measurement: '%', device_class: 'humidity' } },
+  { entity_id: 'media_player.living_room_speaker', name: 'Living Room Speaker', type: 'media_player' },
+  { entity_id: 'media_player.bedroom_speaker', name: 'Bedroom Speaker', type: 'media_player' },
+];
+
+@Injectable()
+export class DemoIntegration implements HaIntegration {
+  private readonly logger = new Logger(DemoIntegration.name);
+  readonly manifest: IntegrationManifest = { domain: 'demo', name: 'Demo', version: '1.0.0' };
+
+  constructor(
+    private readonly stateMachine: StateMachineService,
+    private readonly serviceRegistry: ServiceRegistryService,
+    private readonly entityRegistry: EntityRegistryService,
+    private readonly contextService: ContextService,
+  ) {}
+
+  async setup(config: IntegrationConfig): Promise<boolean> {
+    const selected = (config.entities as Array<{ entity_id: string }>) || DEMO_ENTITIES;
+    const entities = selected.length > 0 ? selected : DEMO_ENTITIES;
+
+    for (const e of entities) {
+      const full = DEMO_ENTITIES.find(d => d.entity_id === e.entity_id) || e as any;
+
+      await this.entityRegistry.registerEntity({
+        entity_id: full.entity_id,
+        platform: 'demo',
+        name: full.name,
+        original_name: full.name,
+      });
+
+      await this.stateMachine.setState(
+        full.entity_id,
+        full.type === 'binary_sensor' ? 'off' : 'off',
+        {
+          friendly_name: full.name,
+          ...(full.attrs || {}),
+        },
+        this.contextService.system(),
+      );
+    }
+
+    this.logger.log(`Demo: ${entities.length} entities loaded`);
+    return true;
+  }
+
+  async teardown(): Promise<void> {}
+}
