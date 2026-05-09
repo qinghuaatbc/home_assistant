@@ -7,6 +7,7 @@ import { HistoryController } from './history/history.controller';
 import { ConfigController } from './config/config.controller';
 import { RegistryController } from './registry/registry.controller';
 import { BackupController } from './backup/backup.controller';
+import { AiController } from './ai/ai.controller';
 import { AuthModule } from '../auth/auth.module';
 import { RegistryModule } from '../registry/registry.module';
 import { ContextService } from '../core/context/context.service';
@@ -21,6 +22,8 @@ import { ContextService } from '../core/context/context.service';
     HistoryController,
     ConfigController,
     RegistryController,
+    BackupController,
+    AiController,
   ],
   providers: [ContextService],
 })
