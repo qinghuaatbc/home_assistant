@@ -3,13 +3,14 @@ import { HaProvider, useHa } from './context/HaContext'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import EntitiesPage from './pages/EntitiesPage'
-import AutomationsPage from './pages/AutomationsPage'
 import SettingsPage from './pages/SettingsPage'
 import TabBar from './components/TabBar'
 
 const FloorPlanPage = lazy(() => import('./pages/FloorPlanPage'))
+const EventsPage = lazy(() => import('./pages/EventsPage'))
+const BackupPage = lazy(() => import('./pages/BackupPage'))
 
-type Tab = 'dashboard' | 'entities' | 'automations' | 'settings' | 'floorplan'
+type Tab = 'dashboard' | 'entities' | 'floorplan' | 'events' | 'settings'
 
 function AppInner() {
   const { token } = useHa()
@@ -17,17 +18,16 @@ function AppInner() {
 
   if (!token) return <LoginPage />
 
+  const page = (el: React.ReactNode) =>
+    <Suspense fallback={<div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text2)', fontSize: 14 }}>Loading…</div>}>{el}</Suspense>
+
   return (
     <>
-      {tab === 'dashboard'    && <DashboardPage />}
-      {tab === 'entities'     && <EntitiesPage />}
-      {tab === 'automations'  && <AutomationsPage />}
-      {tab === 'settings'     && <SettingsPage />}
-      {tab === 'floorplan'    && (
-        <Suspense fallback={<div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading 3D…</div>}>
-          <FloorPlanPage />
-        </Suspense>
-      )}
+      {tab === 'dashboard' && page(<DashboardPage />)}
+      {tab === 'entities' && page(<EntitiesPage />)}
+      {tab === 'floorplan' && page(<FloorPlanPage />)}
+      {tab === 'events' && page(<EventsPage />)}
+      {tab === 'settings' && page(<SettingsPage />)}
       <TabBar current={tab} onChange={(t) => setTab(t as Tab)} />
     </>
   )

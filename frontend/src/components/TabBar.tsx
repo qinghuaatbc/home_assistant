@@ -7,8 +7,8 @@ const TABS = [
   { id: 'dashboard',   icon: '⊞',  label: 'Home'       },
   { id: 'entities',    icon: '⚙️',  label: 'Devices'    },
   { id: 'floorplan',   icon: '🏠',  label: '3D Plan'    },
-  { id: 'automations', icon: '⚡',  label: 'Automations' },
-  { id: 'settings',    icon: '☰',  label: 'Settings'   },
+  { id: 'events',      icon: '📋',  label: 'Events'     },
+  { id: 'settings',    icon: '☰',  label: 'More'       },
 ]
 
 export default function TabBar({ current, onChange }: Props) {
