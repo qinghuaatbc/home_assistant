@@ -1,0 +1,117 @@
+# Demo integration configs — loaded when config/demo.yaml exists
+# Remove this file or set HA_DEMO=false to disable.
+
+- domain: yamaha_avr
+  mock: true
+  receivers:
+    - name: "Living Room Receiver"
+      model: "RX-V685"
+      zone: "Main_Zone"
+      power: true
+      volume: 0.35
+      muted: false
+      source: "HDMI1"
+      sources: ["HDMI1", "HDMI2", "HDMI3", "AV1", "Audio1", "Spotify", "Bluetooth"]
+
+- domain: weather
+  city: "Vancouver, BC"
+  temperature_unit: celsius
+  wind_speed_unit: kmh
+  scan_interval: 600
+
+- domain: light
+  platforms:
+    - name: demo
+      entities:
+        - entity_id: light.living_room
+          name: "Living Room Light"
+          brightness: 255
+          glb_floor: 1
+          glb_pos: [-4.5, -5.0]
+        - entity_id: light.bedroom
+          name: "Bedroom Light"
+          brightness: 128
+          glb_floor: 2
+          glb_pos: [-4.5, -2.0]
+        - entity_id: light.kitchen
+          name: "Kitchen Light"
+          brightness: 255
+          glb_floor: 3
+          glb_pos: [4.5, -1.0]
+        - entity_id: light.kitchen_light
+          name: "Kitchen Ceiling"
+          brightness: 200
+          glb_floor: 1
+          glb_mesh: "KITCHEN_LIGHT"
+        - entity_id: light.dining_light
+          name: "Dining Room Light"
+          brightness: 255
+          glb_floor: 1
+          glb_mesh: "DINING_LIGHT"
+        - entity_id: light.office_light
+          name: "Office Light"
+          brightness: 150
+          glb_floor: 1
+          glb_mesh: "OFFICE_LIGHT"
+
+- domain: switch
+  platforms:
+    - name: demo
+      entities:
+        - entity_id: switch.fan
+          name: "Living Room Fan"
+        - entity_id: switch.tv
+          name: "TV Switch"
+        - entity_id: switch.alarm_siren
+          name: "Alarm Siren"
+        - entity_id: switch.alarm_armed
+          name: "Alarm Armed"
+
+- domain: binary_sensor
+  platforms:
+    - name: demo
+      entities:
+        - entity_id: binary_sensor.front_door
+          name: "Front Door"
+          device_class: door
+          glb_floor: 1
+          glb_mesh: "FRONT_DOOR"
+        - entity_id: binary_sensor.garage_door
+          name: "Garage Door"
+          device_class: garage_door
+          glb_floor: 1
+          glb_mesh: "GARAGE_1"
+        - entity_id: binary_sensor.bedroom_blind
+          name: "Bedroom Blind"
+          device_class: blind
+          glb_floor: 1
+          glb_mesh: "FAMILY_BLIND"
+
+- domain: sensor
+  platforms:
+    - name: demo
+      entities:
+        - entity_id: sensor.temperature
+          name: "Indoor Temperature"
+          unit_of_measurement: "°C"
+          device_class: temperature
+        - entity_id: sensor.humidity
+          name: "Indoor Humidity"
+          unit_of_measurement: "%"
+          device_class: humidity
+
+- domain: isy994
+  mock: true
+  nodes:
+    - address: "11 22 33 1"
+      name: "Living Room Dimmer"
+      type: "1.32.65.0"
+      value: 200
+    - address: "11 22 33 2"
+      name: "Kitchen Dimmer"
+      type: "1.32.65.0"
+      value: 0
+    - address: "11 22 55 1"
+      name: "Front Door Sensor"
+      type: "16.1.65.0"
+      value: 0

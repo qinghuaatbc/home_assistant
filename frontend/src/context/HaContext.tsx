@@ -17,11 +17,17 @@ export interface HaState {
   last_updated: string
 }
 
+interface HaHealth {
+  status: string
+  uptime: number
+}
+
 interface HaCtx {
   token: string | null
   login: (username: string, password: string) => Promise<string | null>
   logout: () => void
   wsConnected: boolean
+  health: HaHealth | null
   states: Map<string, HaState>
   callService: (domain: string, service: string, data?: Record<string, unknown>, entityId?: string | string[]) => Promise<void>
   setEntityState: (entityId: string, state: string, attributes?: Record<string, unknown>) => Promise<void>
@@ -38,6 +44,7 @@ export function useHa() {
 export function HaProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('ha_token'))
   const [wsConnected, setWsConnected] = useState(false)
+  const [health, setHealth] = useState<HaHealth | null>(null)
   const [states, setStates] = useState<Map<string, HaState>>(new Map())
   const wsRef = useRef<Socket | null>(null)
   const cmdId = useRef(1)
@@ -109,6 +116,15 @@ export function HaProvider({ children }: { children: ReactNode }) {
     })
   }, [token, states])
 
+  // Poll health endpoint
+  useEffect(() => {
+    if (!token) return
+    const fetchHealth = () => fetch('/api/health').then(r => r.json()).then(setHealth).catch(() => {})
+    fetchHealth()
+    const timer = setInterval(fetchHealth, 30000)
+    return () => clearInterval(timer)
+  }, [token])
+
   // Connect WebSocket when token is available
   useEffect(() => {
     if (!token) return
@@ -169,7 +185,7 @@ export function HaProvider({ children }: { children: ReactNode }) {
   }, [token])
 
   return (
-    <Ctx.Provider value={{ token, login, logout, wsConnected, states, callService, setEntityState }}>
+    <Ctx.Provider value={{ token, login, logout, wsConnected, health, states, callService, setEntityState }}>
       {children}
     </Ctx.Provider>
   )

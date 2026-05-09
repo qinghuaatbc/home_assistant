@@ -19,7 +19,7 @@ const DOMAIN_META: Record<string, { label: string; icon: string }> = {
 }
 
 export default function DashboardPage() {
-  const { states, wsConnected } = useHa()
+  const { states, wsConnected, health } = useHa()
 
   const groups = useMemo(() => {
     const map = new Map<string, typeof states extends Map<string, infer V> ? V[] : never[]>()
@@ -49,11 +49,16 @@ export default function DashboardPage() {
         <div className="nav-header">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div className="nav-title">Home</div>
-            <span
-              className={`ws-dot ${wsConnected ? 'connected' : ''}`}
-              title={wsConnected ? 'Live' : 'Connecting…'}
-              style={{ marginBottom: 10 }}
-            />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+              {health && (
+                <span className={`ws-dot ${health.status === 'ok' ? 'connected' : ''}`}
+                  title={`Server: ${health.status} · up ${Math.round(health.uptime / 60)}m`}
+                  style={{ position: 'static' }} />
+              )}
+              <span className={`ws-dot ${wsConnected ? 'connected' : ''}`}
+                title={wsConnected ? 'WebSocket live' : 'Connecting…'}
+                style={{ position: 'static' }} />
+            </div>
           </div>
         </div>
 
@@ -73,9 +78,17 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {states.size === 0 && (
+        {!wsConnected && (
+          <div className="section" style={{ marginTop: 16 }}>
+            <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,69,58,0.1)', border: '1px solid rgba(255,69,58,0.3)', color: '#ff453a', fontSize: 13, textAlign: 'center' }}>
+              ⚠️ WebSocket disconnected — changes won't update live
+            </div>
+          </div>
+        )}
+
+        {states.size === 0 && wsConnected && (
           <div style={{ textAlign: 'center', color: 'var(--text2)', padding: '4rem 2rem', fontSize: 14 }}>
-            {wsConnected ? 'No devices found.' : 'Connecting to Home Assistant…'}
+            No devices found. Check your integration configuration.
           </div>
         )}
 
