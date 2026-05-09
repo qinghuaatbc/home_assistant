@@ -8,9 +8,9 @@ import TabBar from './components/TabBar'
 
 const FloorPlanPage = lazy(() => import('./pages/FloorPlanPage'))
 const EventsPage = lazy(() => import('./pages/EventsPage'))
-const BackupPage = lazy(() => import('./pages/BackupPage'))
+const HistoryPage = lazy(() => import('./pages/HistoryPage'))
 
-type Tab = 'dashboard' | 'entities' | 'floorplan' | 'events' | 'settings'
+type Tab = 'dashboard' | 'entities' | 'floorplan' | 'history' | 'events' | 'settings'
 
 function AppInner() {
   const { token } = useHa()
@@ -26,6 +26,7 @@ function AppInner() {
       {tab === 'dashboard' && page(<DashboardPage />)}
       {tab === 'entities' && page(<EntitiesPage />)}
       {tab === 'floorplan' && page(<FloorPlanPage />)}
+      {tab === 'history' && page(<HistoryPage />)}
       {tab === 'events' && page(<EventsPage />)}
       {tab === 'settings' && page(<SettingsPage />)}
       <TabBar current={tab} onChange={(t) => setTab(t as Tab)} />
