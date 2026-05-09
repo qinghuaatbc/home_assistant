@@ -35,28 +35,58 @@ integrations:
     broker: "broker.hivemq.com"
 
   # ── Demo devices (simulated, for testing) ─────────────────────────────────
-  # Uncomment the block below to enable demo/test lights, switches, sensors.
+  # Uncomment the blocks below to enable demo/test devices.
+  # The more you uncomment, the fuller the dashboard will look.
   #
+  ── Lights ──────────────────────────────────────────────────────────────
   # - domain: light
   #   platforms:
   #     - name: demo
   #       entities:
   #         - entity_id: light.living_room
   #           name: "[Demo] Living Room Light"
+  #           brightness: 255
   #           glb_floor: 1
   #           glb_pos: [-4.5, -5.0]
+  #         - entity_id: light.bedroom
+  #           name: "[Demo] Bedroom Light"
+  #           brightness: 128
+  #           glb_floor: 2
+  #           glb_pos: [-4.5, -2.0]
+  #         - entity_id: light.kitchen
+  #           name: "[Demo] Kitchen Light"
+  #           brightness: 255
+  #           glb_floor: 3
+  #           glb_pos: [4.5, -1.0]
   #         - entity_id: light.kitchen_light
   #           name: "[Demo] Kitchen Ceiling"
+  #           brightness: 200
   #           glb_floor: 1
   #           glb_mesh: "KITCHEN_LIGHT"
+  #         - entity_id: light.dining_light
+  #           name: "[Demo] Dining Room Light"
+  #           brightness: 255
+  #           glb_floor: 1
+  #           glb_mesh: "DINING_LIGHT"
+  #         - entity_id: light.office_light
+  #           name: "[Demo] Office Light"
+  #           brightness: 150
+  #           glb_floor: 1
+  #           glb_mesh: "OFFICE_LIGHT"
   #
+  # ── Switches ────────────────────────────────────────────────────────────
   # - domain: switch
   #   platforms:
   #     - name: demo
   #       entities:
   #         - entity_id: switch.fan
-  #           name: "[Demo] Fan"
+  #           name: "[Demo] Living Room Fan"
+  #         - entity_id: switch.tv
+  #           name: "[Demo] TV Switch"
+  #         - entity_id: switch.alarm_siren
+  #           name: "[Demo] Alarm Siren"
   #
+  # ── Door / Window Sensors ──────────────────────────────────────────────
   # - domain: binary_sensor
   #   platforms:
   #     - name: demo
@@ -66,7 +96,24 @@ integrations:
   #           device_class: door
   #           glb_floor: 1
   #           glb_mesh: "FRONT_DOOR"
+  #         - entity_id: binary_sensor.back_door
+  #           name: "[Demo] Back Door"
+  #           device_class: door
+  #         - entity_id: binary_sensor.garage_door
+  #           name: "[Demo] Garage Door"
+  #           device_class: garage_door
+  #           glb_floor: 1
+  #           glb_mesh: "GARAGE_1"
+  #         - entity_id: binary_sensor.bedroom_blind
+  #           name: "[Demo] Bedroom Blind"
+  #           device_class: blind
+  #           glb_floor: 1
+  #           glb_mesh: "FAMILY_BLIND"
+  #         - entity_id: binary_sensor.motion
+  #           name: "[Demo] Motion Sensor"
+  #           device_class: motion
   #
+  # ── Sensors ─────────────────────────────────────────────────────────────
   # - domain: sensor
   #   platforms:
   #     - name: demo
@@ -75,5 +122,21 @@ integrations:
   #           name: "[Demo] Temperature"
   #           unit_of_measurement: "°C"
   #           device_class: temperature
+  #           state_class: measurement
+  #         - entity_id: sensor.humidity
+  #           name: "[Demo] Humidity"
+  #           unit_of_measurement: "%"
+  #           device_class: humidity
+  #           state_class: measurement
+  #
+  # ── Media Player ────────────────────────────────────────────────────────
+  # - domain: media_player
+  #   platforms:
+  #     - name: demo
+  #       entities:
+  #         - entity_id: media_player.living_room_speaker
+  #           name: "[Demo] Living Room Speaker"
+  #         - entity_id: media_player.bedroom_speaker
+  #           name: "[Demo] Bedroom Speaker"
 
 automation: automations.yaml
