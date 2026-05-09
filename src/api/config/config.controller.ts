@@ -1,8 +1,10 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { StateMachineService } from '../../core/state-machine/state-machine.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /** GET /api/config - Returns HA configuration */
 @ApiTags('config')
@@ -29,5 +31,25 @@ export class ConfigController {
       external_url: null,
       internal_url: null,
     };
+  }
+
+  @Get('automations')
+  @ApiOperation({ summary: 'Get automations YAML content' })
+  getAutomations() {
+    const configPath = process.env.HA_CONFIG_PATH
+      ?? path.resolve(process.cwd(), 'config', 'configuration.yaml');
+    const autoPath = path.resolve(path.dirname(configPath), 'automations.yaml');
+    if (!fs.existsSync(autoPath)) return { content: '' };
+    return { content: fs.readFileSync(autoPath, 'utf-8') };
+  }
+
+  @Put('automations')
+  @ApiOperation({ summary: 'Update automations YAML content' })
+  async updateAutomations(@Body() body: { content: string }) {
+    const configPath = process.env.HA_CONFIG_PATH
+      ?? path.resolve(process.cwd(), 'config', 'configuration.yaml');
+    const autoPath = path.resolve(path.dirname(configPath), 'automations.yaml');
+    fs.writeFileSync(autoPath, body.content, 'utf-8');
+    return { ok: true };
   }
 }
