@@ -1,5 +1,6 @@
 import { useState, lazy, Suspense } from 'react'
 import { HaProvider, useHa } from './context/HaContext'
+import { ToastProvider } from './context/ToastContext'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import EntitiesPage from './pages/EntitiesPage'
@@ -41,7 +42,9 @@ function AppInner() {
 export default function App() {
   return (
     <HaProvider>
-      <AppInner />
+      <ToastProvider>
+        <AppInner />
+      </ToastProvider>
     </HaProvider>
   )
 }

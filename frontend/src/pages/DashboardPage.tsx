@@ -22,17 +22,24 @@ export default function DashboardPage() {
   const { token, states, wsConnected, health } = useHa()
   const [areas, setAreas] = useState<{ area_id: string; name: string }[]>([])
   const [entityAreas, setEntityAreas] = useState<Map<string, string>>(new Map())
+  const [disabledEntities, setDisabledEntities] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!token) return
     fetch('/api/area_registry', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then(setAreas).catch(() => {})
     fetch('/api/entity_registry', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then((list: { entity_id: string; area_id: string | null }[]) => {
+      .then(r => r.json()).then((list: { entity_id: string; area_id: string | null; disabled: boolean }[]) => {
         const m = new Map<string, string>()
-        list.forEach(e => { if (e.area_id) m.set(e.entity_id, e.area_id) })
+        const disabled = new Set<string>()
+        list.forEach(e => {
+          if (e.area_id) m.set(e.entity_id, e.area_id)
+          if (e.disabled) disabled.add(e.entity_id)
+        })
         setEntityAreas(m)
-      }).catch(() => {})
+        setDisabledEntities(disabled)
+      }).catch(() => {}).finally(() => setLoading(false))
   }, [token])
 
   const totalOn = useMemo(() => {
@@ -41,12 +48,13 @@ export default function DashboardPage() {
     return n
   }, [states])
 
-  // Group by area, then by domain
+  // Group by area, then by domain (skip disabled)
   const byArea = useMemo(() => {
     const unassigned: Record<string, unknown[]> = {}
     const grouped: Record<string, Record<string, unknown[]>> = {}
 
     for (const s of states.values()) {
+      if (disabledEntities.has(s.entity_id)) continue
       const areaId = entityAreas.get(s.entity_id)
       const domain = s.entity_id.split('.')[0]
       if (areaId) {
@@ -60,7 +68,7 @@ export default function DashboardPage() {
     }
 
     return { grouped, unassigned }
-  }, [states, entityAreas])
+  }, [states, entityAreas, disabledEntities])
 
   const areaMap = new Map(areas.map(a => [a.area_id, a.name]))
 
@@ -102,6 +110,16 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {loading && (
+          <div className="section" style={{ marginTop: 12 }}>
+            {[1,2,3].map(i => (
+              <div key={i} className="ios-list-row" style={{ opacity: 0.4 }}>
+                <div className="ios-list-content"><div className="ios-list-title" style={{ background: 'var(--border)', height: 14, width: '60%', borderRadius: 4 }} /></div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="section" style={{ marginTop: 12 }}>
           <div className="stat-row">
