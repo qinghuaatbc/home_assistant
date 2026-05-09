@@ -1,11 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useHa, HaState } from '../context/HaContext'
-import LightCard from '../components/cards/LightCard'
-import SwitchCard from '../components/cards/SwitchCard'
-import SensorCard from '../components/cards/SensorCard'
-import MediaPlayerCard from '../components/cards/MediaPlayerCard'
-import WeatherCard from '../components/cards/WeatherCard'
-import CameraCard from '../components/cards/CameraCard'
 
 const DOMAIN_META: Record<string, { label: string; icon: string }> = {
   light:         { label: 'Lights',        icon: '💡' },
@@ -18,160 +12,155 @@ const DOMAIN_META: Record<string, { label: string; icon: string }> = {
   automation:    { label: 'Automations',   icon: '⚡' },
 }
 
-function EntityRow({ state }: { state: HaState }) {
-  const domain = state.entity_id.split('.')[0]
-  const meta = DOMAIN_META[domain] ?? { icon: '🔧' }
-  const name = (state.attributes.friendly_name as string) ?? state.entity_id
-  const on = state.state === 'on'
-
-  return (
-    <div className="ios-list-row">
-      <div
-        className="ios-list-icon"
-        style={{ background: on ? 'rgba(48,209,88,0.15)' : 'rgba(255,255,255,0.06)' }}
-      >
-        {meta.icon}
-      </div>
-      <div className="ios-list-content">
-        <div className="ios-list-title">{name}</div>
-        <div className="ios-list-subtitle">{state.entity_id}</div>
-      </div>
-      <div className="ios-list-right">
-        <span style={{ color: on ? 'var(--green)' : 'var(--text3)', fontSize: 13 }}>
-          {state.state}
-        </span>
-        <span style={{ color: 'var(--text3)', fontSize: 14 }}>›</span>
-      </div>
-    </div>
-  )
+interface EntityReg {
+  entity_id: string
+  name: string | null
+  area_id: string | null
+  disabled: boolean
 }
 
 export default function EntitiesPage() {
-  const { states } = useHa()
-  const [filter, setFilter] = useState('all')
+  const { token, states, callService, setEntityState } = useHa()
+  const [filter, setFilter] = useState('')
+  const [reg, setReg] = useState<Map<string, EntityReg>>(new Map())
+  const [editing, setEditing] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
 
-  const domains = useMemo(() => {
-    const set = new Set<string>()
-    for (const s of states.values()) set.add(s.entity_id.split('.')[0])
-    return ['all', ...Array.from(set).sort()]
-  }, [states])
+  useEffect(() => {
+    if (!token) return
+    fetch('/api/entity_registry', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then((list: EntityReg[]) => {
+        const m = new Map(list.map(e => [e.entity_id, e]))
+        setReg(m)
+      }).catch(() => {})
+  }, [token])
 
-  const filtered = useMemo(() => {
+  const updateReg = async (entityId: string, changes: Partial<EntityReg>) => {
+    const r = await fetch(`/api/entity_registry/${entityId}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(changes),
+    })
+    if (r.ok) {
+      setReg(prev => {
+        const next = new Map(prev)
+        const existing = next.get(entityId) || { entity_id: entityId, name: null, area_id: null, disabled: false }
+        next.set(entityId, { ...existing, ...changes })
+        return next
+      })
+    }
+  }
+
+  const entities = useMemo(() => {
     const list = Array.from(states.values())
-    return filter === 'all'
-      ? list.sort((a, b) => a.entity_id.localeCompare(b.entity_id))
-      : list
-          .filter((s) => s.entity_id.split('.')[0] === filter)
-          .sort((a, b) => a.entity_id.localeCompare(b.entity_id))
+    if (filter) {
+      const f = filter.toLowerCase()
+      return list.filter(s => s.entity_id.includes(f) || (s.attributes.friendly_name as string || '').toLowerCase().includes(f))
+    }
+    return list
   }, [states, filter])
 
-  const groups = useMemo(() => {
-    if (filter !== 'all') return null
-    const map = new Map<string, HaState[]>()
-    for (const s of filtered) {
-      const d = s.entity_id.split('.')[0]
-      if (!map.has(d)) map.set(d, [])
-      map.get(d)!.push(s)
+  const toggle = (s: HaState) => {
+    const domain = s.entity_id.split('.')[0]
+    if (domain === 'light' || domain === 'switch') {
+      callService(domain, s.state === 'on' ? 'turn_off' : 'turn_on', {}, s.entity_id)
+    } else if (s.entity_id.startsWith('binary_sensor.')) {
+      setEntityState(s.entity_id, s.state === 'on' ? 'off' : 'on')
     }
-    return map
-  }, [filtered, filter])
+  }
+
+  const startRename = (id: string, current: string) => {
+    setEditing(id)
+    setEditName(current)
+  }
+
+  const submitRename = async (id: string) => {
+    if (editName.trim() && editName !== id) {
+      await updateReg(id, { name: editName.trim() })
+    }
+    setEditing(null)
+  }
+
+  const groups = useMemo(() => {
+    const m = new Map<string, HaState[]>()
+    for (const s of entities) {
+      const d = s.entity_id.split('.')[0]
+      if (reg.get(s.entity_id)?.disabled) continue
+      if (!m.has(d)) m.set(d, [])
+      m.get(d)!.push(s)
+    }
+    return m
+  }, [entities, reg])
+
+  const ordered = useMemo(() => {
+    const order = ['weather', 'camera', 'media_player', 'light', 'switch', 'binary_sensor', 'sensor', 'automation']
+    return [...order.filter(d => groups.has(d)), ...[...groups.keys()].filter(d => !order.includes(d)).sort()]
+  }, [groups])
 
   return (
     <div className="page">
       <div className="page-inner">
         <div className="nav-header">
           <div className="nav-title">Devices</div>
-          <div className="seg-ctrl">
-            {domains.map((d) => (
-              <button
-                key={d}
-                className={`seg-btn ${filter === d ? 'active' : ''}`}
-                onClick={() => setFilter(d)}
-              >
-                {d === 'all' ? 'All' : (DOMAIN_META[d]?.label ?? d)}
-              </button>
-            ))}
+          <div style={{ marginBottom: 10 }}>
+            <input value={filter} onChange={e => setFilter(e.target.value)}
+              placeholder="Search devices…" style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
           </div>
         </div>
 
-        {filtered.length === 0 && (
-          <div style={{ textAlign: 'center', color: 'var(--text2)', padding: '3rem', fontSize: 14 }}>
-            No devices.
-          </div>
-        )}
+        {ordered.map(domain => {
+          const meta = DOMAIN_META[domain] ?? { label: domain, icon: '🔧' }
+          const items = groups.get(domain)!
+          return (
+            <div className="section" key={domain} style={{ marginTop: 16 }}>
+              <div className="section-title">{meta.icon} {meta.label} ({items.length})</div>
+              <div className="ios-list">
+                {items.sort((a, b) => a.entity_id.localeCompare(b.entity_id)).map(s => {
+                  const name = reg.get(s.entity_id)?.name || (s.attributes.friendly_name as string) || s.entity_id
+                  const on = s.state === 'on'
+                  const isEditing = editing === s.entity_id
 
-        {filter === 'all' && groups ? (
-          Array.from(groups.entries())
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([domain, items]) => (
-              <div className="section" key={domain}>
-                <div className="section-title">
-                  {DOMAIN_META[domain]?.icon ?? '🔧'} {DOMAIN_META[domain]?.label ?? domain}
-                  <span style={{ marginLeft: 6, color: 'var(--text3)', fontWeight: 400 }}>
-                    ({items.length})
-                  </span>
-                </div>
-                <div className="ios-list">
-                  {items.map((s) => <EntityRow key={s.entity_id} state={s} />)}
-                </div>
+                  return (
+                    <div className="ios-list-row" key={s.entity_id} style={{ cursor: 'pointer' }} onClick={() => !isEditing && toggle(s)}>
+                      <div className="ios-list-icon" style={{ background: on ? 'rgba(48,209,88,0.15)' : 'rgba(255,255,255,0.06)' }}>
+                        {meta.icon}
+                      </div>
+                      <div className="ios-list-content" style={{ flex: 1, minWidth: 0 }} onClick={e => e.stopPropagation()}>
+                        {isEditing ? (
+                          <form onSubmit={e => { e.preventDefault(); submitRename(s.entity_id) }} style={{ display: 'flex', gap: 6 }}>
+                            <input value={editName} onChange={e => setEditName(e.target.value)}
+                              style={{ flex: 1, padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13 }}
+                              onBlur={() => submitRename(s.entity_id)} autoFocus />
+                          </form>
+                        ) : (
+                          <div className="ios-list-title" onDoubleClick={() => startRename(s.entity_id, name)}
+                            title="Double-click to rename">{name}</div>
+                        )}
+                        <div className="ios-list-subtitle">
+                          <span style={{ color: on ? 'var(--green)' : 'var(--text2)', fontWeight: on ? 600 : 400 }}>{s.state}</span>
+                          <span style={{ marginLeft: 8 }}>{s.entity_id}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                        {!isEditing && (
+                          <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }}
+                            onClick={() => startRename(s.entity_id, name)} title="Rename">✎</button>
+                        )}
+                        <label className="ios-toggle" onClick={e => e.stopPropagation()}>
+                          <input type="checkbox" checked={on} onChange={() => toggle(s)} />
+                          <span className="ios-slider" />
+                        </label>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            ))
-        ) : (
-          <>
-            {/* Show full cards for controllable domains */}
-            {filter === 'light' && (
-              <div className="section">
-                <div className="card-grid">
-                  {filtered.map((s) => <LightCard key={s.entity_id} state={s} />)}
-                </div>
-              </div>
-            )}
-            {filter === 'switch' && (
-              <div className="section">
-                <div className="card-grid">
-                  {filtered.map((s) => <SwitchCard key={s.entity_id} state={s} />)}
-                </div>
-              </div>
-            )}
-            {filter === 'sensor' && (
-              <div className="section">
-                <div className="card-grid">
-                  {filtered.map((s) => <SensorCard key={s.entity_id} state={s} />)}
-                </div>
-              </div>
-            )}
-            {filter === 'binary_sensor' && (
-              <div className="section">
-                <div className="card-grid">
-                  {filtered.map((s) => <SensorCard key={s.entity_id} state={s} binary />)}
-                </div>
-              </div>
-            )}
-            {filter === 'weather' && (
-              <div className="section">
-                {filtered.map((s) => <WeatherCard key={s.entity_id} state={s} />)}
-              </div>
-            )}
-            {filter === 'camera' && (
-              <div className="section">
-                <div className="card-grid">
-                  {filtered.map((s) => <CameraCard key={s.entity_id} state={s} />)}
-                </div>
-              </div>
-            )}
-            {filter === 'media_player' && (
-              <div className="section">
-                {filtered.map((s) => <MediaPlayerCard key={s.entity_id} state={s} />)}
-              </div>
-            )}
-            {!['light','switch','sensor','binary_sensor','weather','camera','media_player'].includes(filter) && filter !== 'all' && (
-              <div className="section">
-                <div className="ios-list">
-                  {filtered.map((s) => <EntityRow key={s.entity_id} state={s} />)}
-                </div>
-              </div>
-            )}
-          </>
+            </div>
+          )
+        })}
+
+        {states.size === 0 && (
+          <div style={{ textAlign: 'center', color: 'var(--text2)', padding: '3rem', fontSize: 14 }}>No devices found.</div>
         )}
       </div>
     </div>
