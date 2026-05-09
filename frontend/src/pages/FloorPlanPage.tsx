@@ -98,8 +98,40 @@ function makeSensorMarker(x: number, z: number, entityId: string, deviceClass: s
   return { marker, glow, ptLight: pl, deviceClass, clipPlane }
 }
 
+function DevicePicker({ meshName, states, onPick }: { meshName: string; states: Map<string, any>; onPick: (mesh: string, entityId: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const devices = Array.from(states.entries())
+    .filter(([, s]) => !s.attributes?.glb_mesh && !s.attributes?.glb_pos)
+    .map(([id, s]) => ({ id, name: (s.attributes?.friendly_name as string) || id }))
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => setOpen(!open)}>+</button>
+      {open && (
+        <div style={{
+          position: 'absolute', right: 0, top: 24, zIndex: 30, width: 200,
+          background: 'var(--card)', borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+          padding: 6, maxHeight: 200, overflowY: 'auto',
+        }}>
+          {devices.length === 0 && <div style={{ fontSize: 11, color: 'var(--text2)', padding: 4 }}>No devices</div>}
+          {devices.map(d => (
+            <button key={d.id} style={{
+              display: 'block', width: '100%', textAlign: 'left', padding: '4px 8px',
+              fontSize: 11, background: 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', borderRadius: 4,
+            }} onClick={() => { onPick(meshName, d.id); setOpen(false) }}
+              onMouseEnter={e => (e.target as HTMLElement).style.background = 'var(--surface2)'}
+              onMouseLeave={e => (e.target as HTMLElement).style.background = 'none'}>
+              {d.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function FloorPlanPage() {
-  const { states, callService, setEntityState } = useHa()
+  const { token, states, callService, setEntityState } = useHa()
   const containerRef = useRef<HTMLDivElement>(null)
 
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null)
@@ -129,6 +161,10 @@ export default function FloorPlanPage() {
   const [glbLoading, setGlbLoading] = useState(false)
   const [glbLoaded,  setGlbLoaded]  = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [editMode, setEditMode] = useState(false)
+  const [meshNames, setMeshNames] = useState<string[]>([])
+  const [mappings, setMappings] = useState<Record<string, string>>({})
+  const [mappingDirty, setMappingDirty] = useState(false)
 
   // ── Derive layout from state attributes ───────────────────────────────────
   const { glbLights, sphereLights, sensorMarkers, sensorGlbMeshes } = useMemo(() => {
@@ -362,10 +398,13 @@ export default function FloorPlanPage() {
         const floorGlbLights = glbLightsRef.current.filter(l => l.floor === floor)
         const floorSenGlb    = senGlbRef.current.filter(s => s.floor === floor)
 
+        // Collect all mesh names for edit mode
+        const names: string[] = []
         // Match light meshes by traversal
         model.traverse(child => {
           const m = child as THREE.Mesh; if (!m.isMesh) return
           m.castShadow = true; m.receiveShadow = true
+          if (child.name) names.push(child.name)
           const lcfg = floorGlbLights.find(l => l.meshName === child.name)
           if (!lcfg) return
           const mat = (m.material as THREE.MeshStandardMaterial).clone()
@@ -421,6 +460,7 @@ export default function FloorPlanPage() {
           senGlbRefs.current.set(cfg.entityId, { meshes, ptLight: pl, origColors, doorObj, origRotY: doorObj.rotation.y, deviceClass: cfg.deviceClass, origPosY })
         })
 
+        setMeshNames(names.filter((v, i, a) => a.indexOf(v) === i))
         glbModelRef.current = model
         if (fallbackRef.current) fallbackRef.current.visible = false
 
@@ -569,19 +609,75 @@ export default function FloorPlanPage() {
     ...sensorMarkers.filter(s => s.floor === floor).map(s => ({ ...s, isGlb: false, isSensor: true })),
   ], [glbLights, sphereLights, sensorGlbMeshes, sensorMarkers, floor])
 
+  // Load/save 3D mesh mappings
+  useEffect(() => {
+    if (!token) return
+    fetch('/api/config/3d-mappings', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(d => setMappings(d.mappings || {})).catch(() => {})
+  }, [token])
+  useEffect(() => {
+    if (!mappingDirty || !token || !Object.keys(mappings).length) return
+    const timer = setTimeout(() => {
+      fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings }) })
+        .then(() => setMappingDirty(false))
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [mappings, mappingDirty, token])
+
   return (
     <div className="fp-page">
       <div className="fp-header">
         <span className="fp-title">3D Floor Plan</span>
-        <div className="fp-floor-btns">
-          {([1, 2, 3] as const).map(f => (
-            <button key={f} className={`fp-floor-btn${floor === f ? ' active' : ''}`}
-              onClick={() => { setFloor(f); setSelectedId(null) }}>
-              {f === 1 ? 'Main' : f === 2 ? 'Upper' : 'Basement'}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button className={`btn${editMode ? ' active' : ''}`} style={{ fontSize: 10, padding: '3px 8px' }}
+            onClick={() => setEditMode(!editMode)}>
+            {editMode ? '✕ Done' : '✎ Edit'}
+          </button>
+          <div className="fp-floor-btns">
+            {([1, 2, 3] as const).map(f => (
+              <button key={f} className={`fp-floor-btn${floor === f ? ' active' : ''}`}
+                onClick={() => { setFloor(f); setSelectedId(null) }}>
+                {f === 1 ? 'Main' : f === 2 ? 'Upper' : 'Basement'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {editMode && glbLoaded && (
+        <div className="fp-edit-panel" style={{
+          position: 'absolute', left: 12, top: 60, zIndex: 20, width: 260,
+          background: 'var(--card)', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+          padding: 12, maxHeight: '60vh', overflowY: 'auto', fontSize: 12,
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 13 }}>📋 Mesh to Device</div>
+          <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 8 }}>
+            Click a mesh name then select a device to bind.
+          </div>
+          {meshNames.map(meshName => {
+            const alreadyMapped = !!mappings[meshName]
+            return (
+              <div key={meshName} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '4px 6px', borderRadius: 4, marginBottom: 2,
+                background: alreadyMapped ? 'rgba(48,209,88,0.08)' : 'transparent',
+              }}>
+                <span style={{ fontFamily: 'monospace', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {meshName}
+                </span>
+                {alreadyMapped || mappings[meshName] ? (
+                  <span style={{ fontSize: 10, color: '#30d158' }}>✓</span>
+                ) : (
+                  <DevicePicker meshName={meshName} states={states} onPick={(mesh, eid) => {
+                    setMappings(prev => ({ ...prev, [mesh]: eid }))
+                    setMappingDirty(true)
+                  }} />
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       <div className="fp-canvas" ref={containerRef}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} />

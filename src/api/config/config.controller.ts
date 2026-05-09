@@ -6,7 +6,14 @@ import { StateMachineService } from '../../core/state-machine/state-machine.serv
 import * as fs from 'fs';
 import * as path from 'path';
 
-/** GET /api/config - Returns HA configuration */
+const MAPPINGS_FILE = '3d-mappings.json';
+
+function getMappingsPath(): string {
+  const configPath = process.env.HA_CONFIG_PATH
+    ?? path.resolve(process.cwd(), 'config', 'configuration.yaml');
+  return path.resolve(path.dirname(configPath), MAPPINGS_FILE);
+}
+
 @ApiTags('config')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -21,24 +28,13 @@ export class ConfigController {
   @ApiOperation({ summary: 'Get Home Assistant configuration' })
   getConfig() {
     const haConfig = this.configService.get('homeassistant');
-    return {
-      ...haConfig,
-      version: '2026.3.0',
-      state: 'RUNNING',
-      components: [],
-      config_source: 'storage',
-      safe_mode: false,
-      external_url: null,
-      internal_url: null,
-    };
+    return { ...haConfig, version: '2026.3.0', state: 'RUNNING' };
   }
 
   @Get('automations')
   @ApiOperation({ summary: 'Get automations YAML content' })
   getAutomations() {
-    const configPath = process.env.HA_CONFIG_PATH
-      ?? path.resolve(process.cwd(), 'config', 'configuration.yaml');
-    const autoPath = path.resolve(path.dirname(configPath), 'automations.yaml');
+    const autoPath = getMappingsPath().replace(MAPPINGS_FILE, 'automations.yaml');
     if (!fs.existsSync(autoPath)) return { content: '' };
     return { content: fs.readFileSync(autoPath, 'utf-8') };
   }
@@ -46,10 +42,24 @@ export class ConfigController {
   @Put('automations')
   @ApiOperation({ summary: 'Update automations YAML content' })
   async updateAutomations(@Body() body: { content: string }) {
-    const configPath = process.env.HA_CONFIG_PATH
-      ?? path.resolve(process.cwd(), 'config', 'configuration.yaml');
-    const autoPath = path.resolve(path.dirname(configPath), 'automations.yaml');
+    const autoPath = getMappingsPath().replace(MAPPINGS_FILE, 'automations.yaml');
     fs.writeFileSync(autoPath, body.content, 'utf-8');
+    return { ok: true };
+  }
+
+  @Get('3d-mappings')
+  @ApiOperation({ summary: 'Get 3D mesh → device mappings' })
+  get3dMappings() {
+    const mapPath = getMappingsPath();
+    if (!fs.existsSync(mapPath)) return { mappings: [] };
+    return JSON.parse(fs.readFileSync(mapPath, 'utf-8'));
+  }
+
+  @Put('3d-mappings')
+  @ApiOperation({ summary: 'Save 3D mesh → device mappings' })
+  async save3dMappings(@Body() body: { mappings: Record<string, string> }) {
+    const mapPath = getMappingsPath();
+    fs.writeFileSync(mapPath, JSON.stringify(body.mappings, null, 2), 'utf-8');
     return { ok: true };
   }
 }

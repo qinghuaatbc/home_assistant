@@ -4,14 +4,15 @@ interface Props {
 }
 
 const TABS = [
-  { id: 'dashboard',   icon: '⊞',  label: 'Home'    },
-  { id: 'entities',    icon: '⚙️',  label: 'Devices' },
-  { id: 'floorplan',   icon: '🏠',  label: '3D'      },
-  { id: 'history',     icon: '📊',  label: 'History' },
-  { id: 'events',      icon: '📋',  label: 'Events'  },
-  { id: 'automations', icon: '⚡',  label: 'Auto'    },
-  { id: 'areas',       icon: '🏠',  label: 'Areas'   },
-  { id: 'settings',    icon: '☰',  label: 'More'    },
+  { id: 'dashboard',    icon: '⊞',  label: 'Home'    },
+  { id: 'entities',     icon: '⚙️',  label: 'Devices' },
+  { id: 'floorplan',    icon: '🏠',  label: '3D'      },
+  { id: 'history',      icon: '📊',  label: 'History' },
+  { id: 'events',       icon: '📋',  label: 'Events'  },
+  { id: 'automations',  icon: '⚡',  label: 'Auto'    },
+  { id: 'areas',        icon: '🏠',  label: 'Areas'   },
+  { id: 'integrations', icon: '🔌',  label: 'Integ'   },
+  { id: 'settings',     icon: '☰',  label: 'More'    },
 ]
 
 export default function TabBar({ current, onChange }: Props) {
