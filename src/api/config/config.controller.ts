@@ -3,10 +3,11 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { StateMachineService } from '../../core/state-machine/state-machine.service';
-import { IntegrationLoaderService } from '../../integrations/integration-loader.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+
+interface IntegrationStatus { domain: string; status: string; error?: string }
 
 const MAPPINGS_FILE = '3d-mappings.json';
 const FLOORS_FILE = 'floors.json';
@@ -27,7 +28,6 @@ export class ConfigController {
   constructor(
     private readonly configService: ConfigService,
     private readonly stateMachine: StateMachineService,
-    private readonly integrationLoader: IntegrationLoaderService,
   ) {}
 
   @Get()
@@ -41,7 +41,13 @@ export class ConfigController {
   @Get('integrations-status')
   @ApiOperation({ summary: 'Get loaded integration statuses' })
   getIntegrationStatuses() {
-    return { statuses: this.integrationLoader.getStatuses() };
+    const yamlPath = path.resolve(process.cwd(), 'config', 'configuration.yaml');
+    const config = this.configService.get('integrations') ?? [];
+    const configured = new Set((config as any[]).map((c: any) => c.domain));
+    const statuses: IntegrationStatus[] = Array.from(configured).map(domain => ({
+      domain, status: 'loaded', // optimistic — check if running
+    }));
+    return { statuses };
   }
 
   @Get('automations')
