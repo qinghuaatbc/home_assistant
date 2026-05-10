@@ -185,6 +185,30 @@ const STATE_WORDS: Record<Lang, Record<string, string>> = {
   fa: { on: 'روشن', off: 'خاموش', open: 'باز', closed: 'بسته' },
 }
 
+const NAME_TRANSLATIONS: Record<Lang, Record<string, string>> = {
+  en: {},
+  zh: {
+    'Living Room Light': '客厅灯', 'Bedroom Light': '卧室灯', 'Kitchen Light': '厨房灯',
+    'Kitchen Ceiling': '厨房吊灯', 'Dining Room Light': '餐厅灯', 'Office Light': '办公室灯',
+    'Living Room Fan': '客厅风扇', 'TV Switch': '电视开关', 'Alarm Siren': '警报器',
+    'Front Door': '前门', 'Back Door': '后门', 'Garage Door': '车库门',
+    'Motion Sensor': ' motion 传感器', 'Temperature': '温度', 'Humidity': '湿度',
+    'Living Room Speaker': '客厅音箱', 'Bedroom Speaker': '卧室音箱',
+  },
+  fa: {
+    'Living Room Light': 'چراغ پذیرایی', 'Bedroom Light': 'چراغ خواب', 'Kitchen Light': 'چراغ آشپزخانه',
+    'Kitchen Ceiling': 'سقفی آشپزخانه', 'Dining Room Light': 'چراغ ناهارخوری', 'Office Light': 'چراغ دفتر',
+    'Living Room Fan': 'پنکه پذیرایی', 'TV Switch': 'کلید تلویزیون', 'Alarm Siren': 'آژیر خطر',
+    'Front Door': 'در جلو', 'Back Door': 'در عقب', 'Garage Door': 'در گاراژ',
+    'Motion Sensor': 'حسگر حرکت', 'Temperature': 'دما', 'Humidity': 'رطوبت',
+    'Living Room Speaker': 'بلندگوی پذیرایی', 'Bedroom Speaker': 'بلندگوی خواب',
+  },
+}
+
+function translateName(name: string, lang: Lang): string {
+  return NAME_TRANSLATIONS[lang][name] || name
+}
+
 export function speakState(entityName: string, state: string) {
   if (!voiceEnabled) return
   const lang = LANG_VOICES[currentLang].lang
@@ -192,12 +216,11 @@ export function speakState(entityName: string, state: string) {
     : state === 'off' ? STATE_WORDS[currentLang].off
     : state === 'open' ? STATE_WORDS[currentLang].open
     : STATE_WORDS[currentLang].closed
-  if (currentLang === 'zh') {
-    say(`${entityName} ${label}`, lang)
-  } else if (currentLang === 'fa') {
-    say(`${label} ${entityName}`, lang)
+  const tName = translateName(entityName, currentLang)
+  if (currentLang === 'fa') {
+    say(`${label} ${tName}`, lang)
   } else {
-    say(`${entityName} ${label}`, lang)
+    say(`${tName} ${label}`, lang)
   }
 }
 

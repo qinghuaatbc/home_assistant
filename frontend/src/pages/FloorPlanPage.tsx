@@ -136,6 +136,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const [floor, setFloor]           = useState<FloorId>(1)
   const [glbLoading, setGlbLoading] = useState(false)
   const [glbLoaded,  setGlbLoaded]  = useState(false)
+  const [glbError,   setGlbError]   = useState(false)
   const [floorNames, setFloorNames] = useState<Record<string, string>>({})
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
@@ -230,36 +231,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
 
   // ── Init Three.js via hook ───────────────────────────────────────────────
   const sceneHandle = useThreeScene(containerRef, (t) => {
-    glbRefs.current.forEach(({ mesh, ptLight, origColor }, eid) => {
-      const st  = statesRef.current.get(eid)
-      const on  = st?.state === 'on'
-      const b   = ((st?.attributes?.brightness as number) ?? 255) / 255
-      const mat = mesh.material as THREE.MeshStandardMaterial
-      if (on) {
-          const p = 0.95 + 0.05 * Math.sin(t * 2.5)
-          mat.emissive.set(1, 0.98, 0.8); mat.emissiveIntensity = p * b * 20
-          mat.color.set(1, 1, 1);         ptLight.intensity = b * 25 * p
-        } else {
-          mat.emissive.setScalar(0); mat.emissiveIntensity = 0
-          mat.color.copy(origColor);  ptLight.intensity = 0
-        }
-    })
-    sphRefs.current.forEach(({ bulb, glow, ptLight }, eid) => {
-      const st  = statesRef.current.get(eid)
-      const on  = st?.state === 'on'
-      const b   = ((st?.attributes?.brightness as number) ?? 255) / 255
-      const bM  = bulb.material as THREE.MeshStandardMaterial
-      const gM  = glow.material as THREE.MeshStandardMaterial
-      if (on) {
-          const p = 0.9 + 0.1 * Math.sin(t * 2.8)
-          bM.emissiveIntensity = p * b * 15; bM.opacity = 1
-          gM.opacity = 0.2 + 0.1 * Math.sin(t * 2.8); gM.emissiveIntensity = p * b * 5
-          ptLight.intensity = b * 20 * p
-        } else {
-          bM.emissiveIntensity = 0.15; bM.opacity = 0.55
-          gM.opacity = 0.08; gM.emissiveIntensity = 0.05; ptLight.intensity = 0
-        }
-    })
+    // Only animate doors (smooth lerp needs per-frame updates)
     senGlbRefs.current.forEach(({ doorObj, deviceClass }, eid) => {
       const open = statesRef.current.get(eid)?.state === 'on'
       if (deviceClass === 'garage_door' || deviceClass === 'curtain' || deviceClass === 'blind') {
@@ -279,6 +251,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         doorObj.rotation.z = THREE.MathUtils.lerp(doorObj.rotation.z, targetRotZ, 0.03)
       }
     })
+    // Sensor curtain animation (clip-plane)
     senRefs.current.forEach(({ marker, glow, ptLight, deviceClass, clipPlane }, eid) => {
       const st   = statesRef.current.get(eid)
       const open = st?.state === 'on'
@@ -293,14 +266,56 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         const step = height * 0.018
         const diff = target - clipPlane.constant
         clipPlane.constant = Math.abs(diff) < step ? target : clipPlane.constant + Math.sign(diff) * step
+      }
+    })
+  })
+
+  // Update lights/sensors instantly when state changes (not per-frame)
+  const updateVisuals = useCallback(() => {
+    glbRefs.current.forEach(({ mesh, ptLight, origColor }, eid) => {
+      const st  = statesRef.current.get(eid)
+      if (!st) return
+      const on  = st.state === 'on'
+      const b   = ((st.attributes?.brightness as number) ?? 255) / 255
+      const mat = mesh.material as THREE.MeshStandardMaterial
+      if (on) {
+        mat.emissive.set(1, 0.98, 0.8); mat.emissiveIntensity = b * 20
+        mat.color.set(1, 1, 1);         ptLight.intensity = b * 25
+      } else {
+        mat.emissive.setScalar(0); mat.emissiveIntensity = 0
+        mat.color.copy(origColor);  ptLight.intensity = 0
+      }
+    })
+    sphRefs.current.forEach(({ bulb, glow, ptLight }, eid) => {
+      const st = statesRef.current.get(eid)
+      if (!st) return
+      const on  = st.state === 'on'
+      const b   = ((st.attributes?.brightness as number) ?? 255) / 255
+      const bM  = bulb.material as THREE.MeshStandardMaterial
+      const gM  = glow.material as THREE.MeshStandardMaterial
+      if (on) {
+        bM.emissiveIntensity = b * 15; bM.opacity = 1
+        gM.opacity = 0.3; gM.emissiveIntensity = b * 5
+        ptLight.intensity = b * 20
+      } else {
+        bM.emissiveIntensity = 0.15; bM.opacity = 0.55
+        gM.opacity = 0.08; gM.emissiveIntensity = 0.05; ptLight.intensity = 0
+      }
+    })
+    senRefs.current.forEach(({ marker, glow, ptLight, deviceClass, clipPlane }, eid) => {
+      const st = statesRef.current.get(eid)
+      if (!st) return
+      const open = st.state === 'on'
+      const mM   = marker.material as THREE.MeshStandardMaterial
+      const gM   = glow.material as THREE.MeshStandardMaterial
+      if ((deviceClass === 'curtain' || deviceClass === 'blind') && clipPlane) {
         mM.color.set(0.5, 0.75, 1); mM.emissive.set(0.1, 0.3, 0.8)
         mM.emissiveIntensity = 0.3; mM.opacity = 0.7
       } else if (open) {
-        const p = 0.7 + 0.3 * Math.sin(t * 4)
         mM.color.set(1, 0.2, 0.1); mM.emissive.set(1, 0.1, 0.05)
-        mM.emissiveIntensity = p * 1.5; mM.opacity = 1
-        gM.color.set(1, 0.2, 0.1); gM.opacity = 0.18 + 0.1 * Math.sin(t * 4)
-        ptLight.color.set(1, 0.15, 0.05); ptLight.intensity = p * 2
+        mM.emissiveIntensity = 1.5; mM.opacity = 1
+        gM.color.set(1, 0.2, 0.1); gM.opacity = 0.2
+        ptLight.color.set(1, 0.15, 0.05); ptLight.intensity = 2
       } else {
         mM.color.set(0.15, 0.9, 0.35); mM.emissive.set(0.05, 0.5, 0.1)
         mM.emissiveIntensity = 0.4; mM.opacity = 0.85
@@ -308,7 +323,10 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         ptLight.color.set(0.2, 1, 0.4); ptLight.intensity = 0
       }
     })
-  })
+  }, [])
+
+  // Trigger visual update when localRev changes
+  useEffect(() => { updateVisuals() }, [localRev, updateVisuals])
 
   useEffect(() => {
     const h = sceneHandle.current
@@ -458,7 +476,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         controlsRef.current!.target.set(0, 0, 0); controlsRef.current!.update()
       },
       undefined,
-      () => setGlbLoading(false),
+      () => { setGlbLoading(false); setGlbError(true) },
     )
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [floor])
@@ -685,6 +703,37 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       }).catch(() => {})
   }, [token, states])
 
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
+      if (e.key === 'Escape') { setSelectedId(null) }
+      if (e.key === 'e' || e.key === 'E') { if (!fullscreen) setEditMode(!editMode) }
+      if (e.key === '1') setFloor(1)
+      if (e.key === '2') setFloor(2)
+      if (e.key === '3') setFloor(3)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  // ── Binding history (undo) ──────────────────────────────────────────────
+  const [hist, setHist] = useState<Array<{ m: Mappings; b: BehaviorMap }>>([])
+  const [histIdx, setHistIdx] = useState(-1)
+  const pushHist = useCallback((m: Mappings, b: BehaviorMap) => {
+    setHist(prev => { const next = prev.slice(0, histIdx + 1); next.push({ m: JSON.parse(JSON.stringify(m)), b: JSON.parse(JSON.stringify(b)) }); return next.slice(-20) })
+    setHistIdx(prev => Math.min(prev + 1, 19))
+  }, [histIdx])
+  const undoHist = useCallback(() => {
+    if (histIdx < 0 || !hist[histIdx]) return
+    setMappings(hist[histIdx].m); setBehaviors(hist[histIdx].b)
+    setHistIdx(prev => prev - 1)
+  }, [hist, histIdx])
+  // Override save/pick/delete to push history first
+  const saveWithHist = (m: Mappings, b: BehaviorMap) => { pushHist(mappings, behaviors); saveMappings(m, b) }
+  const editPanelOnPick = (mesh: string, eid: string, next: Mappings, beh: BehaviorMap) => { pushHist(mappings, behaviors); setMappings(next); setBehaviors(beh); saveMappings(next, beh) }
+  const editPanelOnDelete = (next: Mappings, beh: BehaviorMap) => { pushHist(mappings, behaviors); setMappings(next); setBehaviors(beh); saveMappings(next, beh) }
+
   // Reset body overflow on unmount
   useEffect(() => () => { document.body.style.overflow = '' }, [])
 
@@ -733,20 +782,28 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
 
 
       {editMode && glbLoaded && !fullscreen && (
-        <EditPanel
-          token={token}
-          meshNames={meshNames}
-          mappings={mappings}
-          behaviors={behaviors}
-          states={states}
-          clickedMesh={clickedMesh}
-          onSetMappings={setMappings}
-          onSetBehaviors={setBehaviors}
-          onSetClickedMesh={(n) => { setClickedMesh(n); setSelectedId(null) }}
-          onPick={(mesh, eid, next, beh) => { setMappings(next); setBehaviors(beh); saveMappings(next, beh) }}
-          onDelete={(next, beh) => { setMappings(next); setBehaviors(beh); saveMappings(next, beh) }}
-          onSaveMappings={() => { if (token) { saveMappings(mappings, behaviors); toast('Saved', 'success') } }}
-        />
+        <>
+          <EditPanel
+            token={token}
+            meshNames={meshNames}
+            mappings={mappings}
+            behaviors={behaviors}
+            states={states}
+            clickedMesh={clickedMesh}
+            onSetMappings={setMappings}
+            onSetBehaviors={setBehaviors}
+            onSetClickedMesh={(n) => { setClickedMesh(n); setSelectedId(null) }}
+            onPick={editPanelOnPick}
+            onDelete={editPanelOnDelete}
+            onSaveMappings={() => { if (token) { saveWithHist(mappings, behaviors); toast('Saved', 'success') } }}
+          />
+          <div style={{ position: 'absolute', left: 12, top: 56, zIndex: 25 }}>
+            <button className="btn" style={{ fontSize: 10, padding: '2px 6px', opacity: histIdx >= 0 ? 1 : 0.3 }}
+              disabled={histIdx < 0} onClick={undoHist}>
+              ↩️
+            </button>
+          </div>
+        </>
       )}
 
       <div className="fp-canvas" ref={containerRef}
@@ -779,6 +836,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       </div>
 
       {glbLoading && <div className="fp-glb-badge"><div className="fp-spinner-sm" /> Loading model…</div>}
+      {glbError && <div className="fp-glb-badge" style={{ color: '#ff453a', cursor: 'pointer' }} onClick={() => { setGlbError(false); setGlbLoaded(false); setGlbLoading(true); /* re-trigger floor effect */ setFloor(f => f as FloorId) }}>⚠️ Model not found · Tap to retry</div>}
       {glbLoaded && !fullscreen && <div className="fp-glb-badge" style={{ color: 'rgba(48,209,88,0.8)' }}>● 3D model · click fixtures</div>}
 
       {!fullscreen && (
