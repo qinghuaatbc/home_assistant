@@ -545,20 +545,30 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     () => cameraRef.current,
     () => clickables.current,
     (result) => {
-      setClickedMesh(null)
-      if (editMode) {
-        setSelectedId(result.entityId || null)
-        if (result.meshName) setClickedMesh(result.meshName)
-        return
+      // Look up mesh name from entityId (for mapped meshes) or from hit
+      let meshName = result.meshName
+      if (!meshName && result.entityId) {
+        for (const [m, v] of Object.entries(mappings)) {
+          const e = typeof v === 'string' ? v : v.entity
+          if (e === result.entityId) { meshName = m; break }
+        }
       }
-      if (result.entityId) {
-        setSelectedId(result.entityId)
-        const st = statesRef.current.get(result.entityId)
-        const newState = st?.state === 'on' ? 'off' : 'on'
-        statesRef.current = new Map(statesRef.current).set(result.entityId, { ...st!, state: newState })
-        setLocalRev(n => n + 1)
-        haSetState(result.entityId, newState)
-      } else setSelectedId(null)
+      setClickedMesh(null)
+      setTimeout(() => {
+        if (editMode) {
+          setSelectedId(result.entityId || null)
+          if (meshName) setClickedMesh(meshName)
+          return
+        }
+        if (result.entityId) {
+          setSelectedId(result.entityId)
+          const st = statesRef.current.get(result.entityId)
+          const newState = st?.state === 'on' ? 'off' : 'on'
+          statesRef.current = new Map(statesRef.current).set(result.entityId, { ...st!, state: newState })
+          setLocalRev(n => n + 1)
+          haSetState(result.entityId, newState)
+        } else setSelectedId(null)
+      }, 0)
     },
   )
 

@@ -1,4 +1,4 @@
-import { useCallback, RefObject } from 'react'
+import { useCallback, useRef, RefObject } from 'react'
 import * as THREE from 'three'
 
 export interface ClickResult {
@@ -15,6 +15,8 @@ export function useSceneClick(
 ) {
   const isDragging = { current: false }
   const ptrDown = { x: 0, y: 0 }
+  const onHitRef = useRef(onHit)
+  onHitRef.current = onHit
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     isDragging.current = false
@@ -46,7 +48,7 @@ export function useSceneClick(
       const obj = hits[0].object
       const entityId = obj.userData.entityId as string | undefined
       const meshName = (obj.name as string) || (obj.userData.meshName as string) || ''
-      onHit({ entityId: entityId || '', meshName, object: obj })
+      onHitRef.current({ entityId: entityId || '', meshName, object: obj })
     }
   }, [])
 
