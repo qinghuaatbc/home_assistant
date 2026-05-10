@@ -41,7 +41,7 @@ export default function AiChatPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div style={{
-      position: 'fixed', bottom: 130, right: 16, width: 260,
+      position: 'fixed', bottom: 70, right: 16, width: 260,
       background: '#1c1c1e', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
       zIndex: 9999, display: 'flex', flexDirection: 'column', maxHeight: 320, overflow: 'hidden',
       border: '1px solid #333',

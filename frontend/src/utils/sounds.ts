@@ -1,5 +1,6 @@
 let ctx: AudioContext | null = null
 let muted = false
+const cache = new Map<string, AudioBuffer>()
 
 export function setSoundMuted(v: boolean) { muted = v }
 export function isSoundMuted() { return muted }
@@ -7,133 +8,113 @@ export function isSoundMuted() { return muted }
 function getCtx(): AudioContext {
   if (muted) return null!
   if (!ctx) ctx = new AudioContext()
+  if (ctx.state === 'suspended') ctx.resume()
   return ctx
 }
 
-export function playTone(freq: number, duration: number, type: OscillatorType = 'sine', volume = 0.15) {
-  const c = getCtx()
-  if (!c) return
-  const o = c.createOscillator()
-  const g = c.createGain()
-  o.type = type
-  o.frequency.setValueAtTime(freq, c.currentTime)
-  g.gain.setValueAtTime(volume, c.currentTime)
-  g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + duration)
-  o.connect(g).connect(c.destination)
-  o.start()
-  o.stop(c.currentTime + duration)
+function renderTone(freq: number, dur: number, sr: number, type: OscillatorType = 'sine', vol = 0.15): AudioBuffer {
+  const len = Math.max(1, Math.floor(sr * dur))
+  const buf = ctx!.createBuffer(1, len, sr)
+  const d = buf.getChannelData(0)
+  const ramp = Math.floor(len * 0.05)
+  for (let i = 0; i < len; i++) {
+    const t = i / sr
+    const env = i < ramp ? i / ramp : i > len - ramp ? (len - i) / ramp : 1
+    let v = 0
+    if (type === 'sine') v = Math.sin(2 * Math.PI * freq * t)
+    else if (type === 'square') v = Math.sin(2 * Math.PI * freq * t) >= 0 ? 1 : -1
+    else if (type === 'sawtooth') v = 2 * ((freq * t) % 1) - 1
+    else v = Math.sin(2 * Math.PI * freq * t)
+    d[i] = v * vol * env
+  }
+  return buf
 }
 
-function playNoise(duration: number, volume = 0.08) {
+function renderNoise(dur: number, sr: number, vol = 0.08): AudioBuffer {
+  const len = Math.max(1, Math.floor(sr * dur))
+  const buf = ctx!.createBuffer(1, len, sr)
+  const d = buf.getChannelData(0)
+  for (let i = 0; i < len; i++) {
+    const env = Math.pow(1 - i / len, 2)
+    d[i] = (Math.random() * 2 - 1) * vol * env
+  }
+  return buf
+}
+
+function getBuf(key: string, gen: () => AudioBuffer): AudioBuffer {
+  let b = cache.get(key)
+  if (!b) { b = gen(); cache.set(key, b) }
+  return b
+}
+
+function playBuf(buf: AudioBuffer, vol = 1, delay = 0) {
   const c = getCtx()
   if (!c) return
-  const buf = c.createBuffer(1, c.sampleRate * duration, c.sampleRate)
-  const data = buf.getChannelData(0)
-  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2)
-  const src = c.createBufferSource()
-  src.buffer = buf
-  const g = c.createGain()
-  g.gain.setValueAtTime(volume, c.currentTime)
-  g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + duration)
-  src.connect(g).connect(c.destination)
-  src.start()
+  try {
+    const src = c.createBufferSource()
+    const g = c.createGain()
+    src.buffer = buf
+    g.gain.value = vol
+    src.connect(g); g.connect(c.destination)
+    src.start(c.currentTime + delay)
+  } catch {}
+}
+
+export function playTone(freq: number, dur: number, type: OscillatorType = 'sine', vol = 0.15) {
+  const c = getCtx()
+  if (!c) return
+  const key = `t_${freq}_${dur}_${type}_${vol}`
+  playBuf(getBuf(key, () => renderTone(freq, dur, c.sampleRate, type, vol)))
+}
+
+function playNoise(dur: number, vol = 0.08) {
+  const c = getCtx()
+  if (!c) return
+  const key = `n_${dur}_${vol}`
+  playBuf(getBuf(key, () => renderNoise(dur, c.sampleRate, vol)))
+}
+
+export function playDing() {
+  playTone(1000, 0.06, 'sine', 0.08)
 }
 
 export function playLightToggle(on: boolean) {
-  if (on) {
-    playTone(1800, 0.06, 'square', 0.06)
-    playTone(1200, 0.04, 'sine', 0.08)
-  } else {
-    playTone(1200, 0.06, 'square', 0.06)
-    playTone(800, 0.04, 'sine', 0.08)
-  }
+  playTone(on ? 1800 : 1200, 0.06, 'sine', 0.08)
+  setTimeout(() => playTone(on ? 1200 : 800, 0.04, 'sine', 0.06), 40)
 }
 
 export function playDoorToggle(open: boolean) {
-  const c = getCtx()
-  if (!c) return
   if (open) {
-    // Creak open: low groan rising into a squeak
-    const dur = 0.5
-    const o1 = c.createOscillator()
-    const g1 = c.createGain()
-    o1.type = 'sawtooth'
-    o1.frequency.setValueAtTime(90, c.currentTime)
-    o1.frequency.linearRampToValueAtTime(160, c.currentTime + dur * 0.6)
-    o1.frequency.linearRampToValueAtTime(200, c.currentTime + dur)
-    g1.gain.setValueAtTime(0.08, c.currentTime)
-    g1.gain.linearRampToValueAtTime(0.04, c.currentTime + dur * 0.5)
-    g1.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur)
-    o1.connect(g1).connect(c.destination)
-    o1.start(); o1.stop(c.currentTime + dur)
-    playNoise(dur * 0.8, 0.05)
-    // Latch release click at the end
-    setTimeout(() => playTone(800, 0.04, 'square', 0.05), dur * 1000)
+    playNoise(0.3, 0.05)
+    playTone(100, 0.3, 'sawtooth', 0.04)
+    setTimeout(() => playTone(600, 0.04, 'sine', 0.04), 250)
   } else {
-    // Close: swoosh → wooden thud → latch click
-    const t = c.currentTime
-    // Air swoosh as door swings
-    const swoosh = c.createOscillator()
-    const sg = c.createGain()
-    swoosh.type = 'sine'
-    swoosh.frequency.setValueAtTime(200, t)
-    swoosh.frequency.exponentialRampToValueAtTime(80, t + 0.2)
-    sg.gain.setValueAtTime(0.04, t); sg.gain.exponentialRampToValueAtTime(0.001, t + 0.25)
-    swoosh.connect(sg).connect(c.destination)
-    swoosh.start(t); swoosh.stop(t + 0.25)
-    playNoise(0.2, 0.03)
-    // Wood thud when door hits frame
-    setTimeout(() => {
-      for (let i = 0; i < 2; i++) {
-        const o = c.createOscillator()
-        const g = c.createGain()
-        o.type = 'sine'
-        const tt = c.currentTime + i * 0.06
-        o.frequency.setValueAtTime(80 - i * 20, tt)
-        o.frequency.exponentialRampToValueAtTime(30, tt + 0.08)
-        g.gain.setValueAtTime(0.12 - i * 0.04, tt)
-        g.gain.exponentialRampToValueAtTime(0.001, tt + 0.1)
-        o.connect(g).connect(c.destination)
-        o.start(tt); o.stop(tt + 0.1)
-      }
-      // Latch click
-      playTone(1400, 0.03, 'square', 0.07)
-    }, 200)
+    playNoise(0.08, 0.1)
+    setTimeout(() => playTone(70, 0.1, 'sine', 0.1), 40)
+    setTimeout(() => playTone(1200, 0.03, 'sine', 0.06), 180)
   }
 }
 
 export function playGarageToggle(open: boolean) {
-  const dur = 0.6
-  playNoise(dur, 0.06)
-  const c = getCtx()
-  const o = c.createOscillator()
-  const g = c.createGain()
-  o.type = 'sawtooth'
-  o.frequency.setValueAtTime(open ? 100 : 80, c.currentTime)
-  o.frequency.linearRampToValueAtTime(open ? 50 : 120, c.currentTime + dur)
-  g.gain.setValueAtTime(0.05, c.currentTime)
-  g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur)
-  o.connect(g).connect(c.destination)
-  o.start()
-  o.stop(c.currentTime + dur)
+  playNoise(0.4, 0.05)
+  playTone(open ? 80 : 60, 0.4, 'sawtooth', 0.04)
 }
 
 export function playCurtainToggle(open: boolean) {
-  playNoise(0.4, 0.04)
-  playTone(open ? 300 : 250, 0.4, 'sine', 0.03)
+  playNoise(0.3, 0.04)
+  playTone(open ? 300 : 250, 0.3, 'sine', 0.03)
 }
 
 export function playMediaToggle(on: boolean) {
   playTone(440, 0.1, 'sine', 0.1)
-  if (on) {
-    setTimeout(() => playTone(880, 0.15, 'sine', 0.08), 100)
-  }
+  if (on) setTimeout(() => playTone(880, 0.15, 'sine', 0.08), 100)
 }
 
 export function playSwitchToggle(on: boolean) {
-  playTone(on ? 1500 : 1000, 0.04, 'square', 0.05)
+  playTone(on ? 1500 : 1000, 0.04, 'sine', 0.05)
 }
 
+// ── Voice / Speech ───────────────────────────────────────────────────────
 let voiceEnabled = true
 export function setVoiceEnabled(v: boolean) { voiceEnabled = v }
 export function isVoiceEnabled() { return voiceEnabled }
@@ -154,7 +135,6 @@ function getVoices() {
   cachedVoices = speechSynthesis.getVoices()
   return cachedVoices
 }
-// Preload voices
 if (typeof speechSynthesis !== 'undefined') {
   speechSynthesis.getVoices()
   speechSynthesis.onvoiceschanged = () => { cachedVoices = speechSynthesis.getVoices() }
@@ -222,8 +202,4 @@ export function speakState(entityName: string, state: string) {
   } else {
     say(`${tName} ${label}`, lang)
   }
-}
-
-export function playDing() {
-  playTone(1000, 0.06, 'sine', 0.08)
 }

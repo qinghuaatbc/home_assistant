@@ -74,12 +74,19 @@ export interface SceneContent {
   updateVisuals: () => void
 }
 
+const BEHAVIOR_PREFIX: Record<string, string> = {
+  light: 'light.', door: 'binary_sensor.', window: 'binary_sensor.',
+  curtain: 'binary_sensor.', garage_door: 'binary_sensor.',
+  media_player: 'media_player.', switch: 'switch.',
+}
+
 interface Props {
-  scene: THREE.Scene | null
-  camera: THREE.PerspectiveCamera | null
-  controls: any | null // OrbitControls
-  renderer: THREE.WebGLRenderer | null
+  getScene: () => THREE.Scene | null
+  getCamera: () => THREE.PerspectiveCamera | null
+  getControls: () => any | null
+  getRenderer: () => THREE.WebGLRenderer | null
   floor: FloorId
+  behaviorFilter: string
   statesRef: React.MutableRefObject<Map<string, HaState>>
   glbLights: Array<{ entityId: string; name: string; floor: FloorId; meshName: string }>
   sphereLights: Array<{ entityId: string; name: string; floor: FloorId; x: number; z: number }>
@@ -112,7 +119,7 @@ export function useSceneContent(p: Props) {
 
   // ── Full scene rebuild on floor change ─────────────────────────────────
   useEffect(() => {
-    const scene = p.scene; if (!scene) return
+    const scene = p.getScene(); if (!scene) return
     if (fallbackRef.current) { scene.remove(fallbackRef.current); fallbackRef.current = null }
     glbRefs.current.forEach(({ mesh, ptLight }) => { scene.remove(mesh); scene.remove(ptLight) })
     glbRefs.current.clear()
@@ -135,8 +142,8 @@ export function useSceneContent(p: Props) {
     p.onGlbStart()
 
     const fb = buildFallback(p.floor); scene.add(fb); fallbackRef.current = fb
-    if (p.camera) { p.camera.position.set(0, 14, 13); p.camera.lookAt(0, 0, 0) }
-    if (p.controls) { p.controls.target.set(0, 1, 0); p.controls.update() }
+    const cam1 = p.getCamera(); if (cam1) { cam1.position.set(0, 14, 13); cam1.lookAt(0, 0, 0) }
+    const ctrl1 = p.getControls(); if (ctrl1) { ctrl1.target.set(0, 1, 0); ctrl1.update() }
 
     const targetFloor = p.floor
     new GLTFLoader().load(
@@ -213,8 +220,8 @@ export function useSceneContent(p: Props) {
         if (fallbackRef.current) fallbackRef.current.visible = false
         const sz2 = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3())
         const d = Math.max(sz2.x, sz2.z)
-        if (p.camera) { p.camera.position.set(0, d * 0.9, d * 0.75); p.camera.lookAt(0, 0, 0) }
-        if (p.controls) { p.controls.target.set(0, 0, 0); p.controls.update() }
+        const cam2 = p.getCamera(); if (cam2) { cam2.position.set(0, d * 0.9, d * 0.75); cam2.lookAt(0, 0, 0) }
+        const ctrl2 = p.getControls(); if (ctrl2) { ctrl2.target.set(0, 0, 0); ctrl2.update() }
       },
       undefined,
       () => p.onGlbError(),
@@ -223,7 +230,7 @@ export function useSceneContent(p: Props) {
 
   // ── Late-arriving entities ────────────────────────────────────────────────
   useEffect(() => {
-    const scene = p.scene; const model = glbModelRef.current; if (!scene || !model) return
+    const scene = p.getScene(); const model = glbModelRef.current; if (!scene || !model) return
     p.sensorGlbMeshes.filter(s => s.floor === p.floor && !senGlbRefs.current.has(s.entityId) && !senRefs.current.has(s.entityId)).forEach(cfg => {
       const doorObj = model.getObjectByName(cfg.meshName)
       if (!doorObj) {
@@ -267,7 +274,7 @@ export function useSceneContent(p: Props) {
       m.updateWorldMatrix(true, false)
       const wp = new THREE.Vector3(); m.getWorldPosition(wp)
       const pl = new THREE.PointLight(new THREE.Color(1, 0.92, 0.7), 0, 12, 1.4)
-      pl.position.copy(wp); p.scene?.add(pl)
+      pl.position.copy(wp); p.getScene()?.add(pl)
       m.userData.entityId = lcfg.entityId
       glbRefs.current.set(lcfg.entityId, { mesh: m, ptLight: pl, origColor: mat.color.clone() })
       if (!clickables.current.includes(m)) clickables.current.push(m)
@@ -275,7 +282,7 @@ export function useSceneContent(p: Props) {
   }, [p.glbLights, p.floor])
 
   useEffect(() => {
-    const scene = p.scene; if (!scene) return
+    const scene = p.getScene(); if (!scene) return
     p.sphereLights.filter(l => l.floor === p.floor).forEach(cfg => {
       if (addedSphIds.current.has(cfg.entityId)) return
       addedSphIds.current.add(cfg.entityId)
@@ -286,7 +293,7 @@ export function useSceneContent(p: Props) {
   }, [p.sphereLights, p.floor])
 
   useEffect(() => {
-    const scene = p.scene; if (!scene) return
+    const scene = p.getScene(); if (!scene) return
     p.sensorMarkers.filter(s => s.floor === p.floor).forEach(cfg => {
       if (addedSenIds.current.has(cfg.entityId)) return
       addedSenIds.current.add(cfg.entityId)
@@ -295,6 +302,28 @@ export function useSceneContent(p: Props) {
       clickables.current.push(refs.marker)
     })
   }, [p.sensorMarkers, p.floor])
+
+  // ── Behavior filter: show/hide 3D objects ──────────────────────────────
+  useEffect(() => {
+    const setVis = (eid: string, objs: THREE.Object3D[]) => {
+      let match = p.behaviorFilter === ''
+      if (!match) {
+        const dc = p.statesRef.current.get(eid)?.attributes?.device_class as string | undefined
+        if (eid.startsWith('light.')) match = p.behaviorFilter === 'light'
+        else if (eid.startsWith('media_player.')) match = p.behaviorFilter === 'media_player'
+        else if (eid.startsWith('switch.')) match = p.behaviorFilter === 'switch'
+        else if (dc === 'garage_door') match = p.behaviorFilter === 'garage_door'
+        else if (dc === 'curtain' || dc === 'blind') match = p.behaviorFilter === 'curtain'
+        else if (dc === 'door') match = p.behaviorFilter === 'door'
+        else if (dc === 'window') match = p.behaviorFilter === 'window'
+      }
+      objs.forEach(o => { o.visible = match })
+    }
+    glbRefs.current.forEach(({ mesh, ptLight }, eid) => setVis(eid, [mesh, ptLight]))
+    sphRefs.current.forEach(({ bulb, glow, ptLight }, eid) => setVis(eid, [bulb, glow, ptLight]))
+    senRefs.current.forEach(({ marker, glow, ptLight }, eid) => setVis(eid, [marker, glow, ptLight]))
+    senGlbRefs.current.forEach(({ meshes, ptLight }, eid) => setVis(eid, [...meshes, ptLight]))
+  }, [p.behaviorFilter])
 
   // ── Per-frame: smooth door/curtain animation ──────────────────────────
   const onAnimate = useCallback((t: number) => {

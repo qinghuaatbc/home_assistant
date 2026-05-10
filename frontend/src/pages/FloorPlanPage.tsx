@@ -44,6 +44,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const [camLocked, setCamLocked] = useState(false)
   const [langIdx, setLangIdx] = useState(0)
   const LANG_LIST: Lang[] = ['en', 'zh', 'fa']
+  const [behaviorFilter, setBehaviorFilter] = useState('')
   const getState = (eid: string) => statesRef.current.get(eid) || states.get(eid)
 
   // Load floor names (also refresh on visibility change, e.g. returning from Integrations page)
@@ -141,11 +142,11 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   }, [camLocked])
 
   const { clickables, onAnimate, updateVisuals } = useSceneContent({
-    scene: sceneRef.current,
-    camera: cameraRef.current,
-    controls: controlsRef.current,
-    renderer: rendererRef.current,
-    floor, statesRef,
+    getScene: () => sceneRef.current,
+    getCamera: () => cameraRef.current,
+    getControls: () => controlsRef.current,
+    getRenderer: () => rendererRef.current,
+    floor, statesRef, behaviorFilter,
     glbLights, sphereLights, sensorMarkers, sensorGlbMeshes,
     glbLoading, glbLoaded, glbError,
     onGlbStart: () => { setGlbLoaded(false); setGlbLoading(true) },
@@ -398,6 +399,17 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
 
       <div className="fp-canvas" ref={containerRef}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+        <div style={{ position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', gap: 4 }}>
+          <button className="fp-floor-btn" style={{ fontSize: 11, padding: '3px 8px', opacity: behaviorFilter === '' ? 1 : 0.4 }}
+            onClick={() => setBehaviorFilter('')}>All</button>
+          {BEHAVIORS.map(b => (
+            <button key={b.id} className={`fp-floor-btn${behaviorFilter === b.id ? ' active' : ''}`}
+              style={{ fontSize: 11, padding: '3px 8px' }}
+              onClick={() => setBehaviorFilter(behaviorFilter === b.id ? '' : b.id)}>
+              {b.label.split(' ')[0]}
+            </button>
+          ))}
+        </div>
         <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', gap: 6 }}>
           {['1', '2', '3', '4', '5'].map(id => (
             <button key={id} className={`fp-floor-btn${String(floor) === id ? ' active' : ''}`}
