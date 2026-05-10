@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { useHa, HaState } from '../context/HaContext'
+import { guessBehavior, BEHAVIORS, BehaviorSelect, BrightnessSlider, DevicePicker } from '../components/DevicePicker'
 
 const FW = 19, FD = 14, WH = 2.8, WT = 0.15, BR = 0.35
 const SR = 0.28  // sensor indicator radius
@@ -98,78 +99,7 @@ function makeSensorMarker(x: number, z: number, entityId: string, deviceClass: s
   return { marker, glow, ptLight: pl, deviceClass, clipPlane }
 }
 
-function guessBehavior(entityId: string): string {
-  if (entityId.startsWith('light.')) return 'light'
-  if (entityId.startsWith('media_player.')) return 'media_player'
-  if (entityId.startsWith('binary_sensor.')) return 'door'
-  if (entityId.startsWith('switch.')) return 'switch'
-  return 'light'
-}
 
-const BEHAVIORS = [
-  { id: 'light', label: '💡 Light', desc: 'On/off with brightness' },
-  { id: 'door', label: '🚪 Door', desc: 'Hinged open/close' },
-  { id: 'window', label: '🪟 Window', desc: 'Open/close window' },
-  { id: 'curtain', label: '🪟 Curtain', desc: 'Roll-up/down' },
-  { id: 'garage_door', label: '🚗 Garage', desc: 'Roll-up/down' },
-  { id: 'media_player', label: '🎵 Music', desc: 'Media playback' },
-  { id: 'switch', label: '🔌 Switch', desc: 'On/off toggle' },
-]
-
-function BehaviorSelect({ behavior, onChange }: { behavior: string; onChange: (b: string) => void }) {
-  return (
-    <select value={behavior} onChange={e => onChange(e.target.value)}
-      style={{ width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 11, marginTop: 4 }}>
-      {BEHAVIORS.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
-    </select>
-  )
-}
-
-function BrightnessSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const [v, setV] = useState(value)
-  useEffect(() => { setV(value) }, [value])
-  return (
-    <div className="fp-panel-row" style={{ marginTop: 6, gap: 4 }}>
-      <span style={{ fontSize: 12, color: 'var(--text2)', width: 20 }}>☀</span>
-      <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }} onPointerDown={e => e.stopPropagation()} onClick={() => { const n = Math.max(1, v - 10); setV(n); onChange(n) }}>−</button>
-      <input type="range" className="ios-range" min={1} max={100} value={v}
-        onInput={e => setV(Number((e.target as HTMLInputElement).value))}
-        onPointerUp={e => { const n = Number((e.target as HTMLInputElement).value); setV(n); onChange(n) }}
-        style={{ flex: 1 }} />
-      <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }} onPointerDown={e => e.stopPropagation()} onClick={() => { const n = Math.min(100, v + 10); setV(n); onChange(n) }}>+</button>
-      <span style={{ fontSize: 12, color: 'var(--text2)', minWidth: 28, textAlign: 'right' }}>{v}%</span>
-    </div>
-  )
-}
-
-function DevicePicker({ meshName, states, onPick }: { meshName: string; states: Map<string, any>; mappings?: Record<string, string>; onPick: (mesh: string, eid: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ x: 0, y: 0 })
-  const devices = Array.from(states.entries())
-    .map(([id, s]) => ({ id, name: (s.attributes?.friendly_name as string) || id }))
-  const btnRef = useRef<HTMLButtonElement>(null)
-  return (
-    <>
-      <button ref={btnRef} className="btn" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => {
-        if (!open && btnRef.current) { const r = btnRef.current.getBoundingClientRect(); setPos({ x: r.left, y: r.bottom + 4 }) }
-        setOpen(!open)
-      }}>+</button>
-      {open && (
-        <div style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 9999, width: 280, background: '#1c1c1e', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.5)', padding: 4, maxHeight: 350, overflowY: 'auto', fontSize: 14 }}>
-          {devices.length === 0 && <div style={{ padding: 8, color: '#888', fontSize: 13 }}>No devices</div>}
-          {devices.map(d => (
-            <div key={d.id} style={{ padding: '8px 12px', fontSize: 14, color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap', borderBottom: '1px solid #333' }}
-              onClick={() => { onPick(meshName, d.id); setOpen(false) }}
-              onMouseEnter={e => (e.target as HTMLElement).style.background = '#2c2c2e'}
-              onMouseLeave={e => (e.target as HTMLElement).style.background = 'transparent'}>
-              {d.name}
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  )
-}
 
 export default function FloorPlanPage({ fullscreen, onFullscreenChange, standaloneToken }: { fullscreen?: boolean; onFullscreenChange?: (v: boolean) => void; standaloneToken?: string | null }) {
   const { token: ctxToken, states, callService } = useHa()
