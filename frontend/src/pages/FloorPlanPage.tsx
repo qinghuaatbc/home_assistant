@@ -6,7 +6,7 @@ import { useHa } from '../context/HaContext'
 import { useToast } from '../context/ToastContext'
 import { HaState, Mappings, MappingEntry, BehaviorMap, FloorId } from '../types'
 import { guessBehavior, BEHAVIORS, BrightnessSlider, DevicePicker } from '../components/DevicePicker'
-import { playLightToggle, playDoorToggle, playGarageToggle, playCurtainToggle, playMediaToggle, playSwitchToggle, setSoundMuted, isSoundMuted } from '../utils/sounds'
+import { playLightToggle, playDoorToggle, playGarageToggle, playCurtainToggle, playMediaToggle, playSwitchToggle, playTone, playDing, speakState, Lang, setLang, getLang } from '../utils/sounds'
 import EditPanel from '../components/EditPanel'
 import { useThreeScene } from '../hooks/useThreeScene'
 import { useSceneClick } from '../hooks/useSceneClick'
@@ -146,8 +146,10 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const [clickedMesh, setClickedMesh] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null)
   const [localRev, setLocalRev] = useState(0) // increment to trigger re-render after local toggle
-  const [soundOn, setSoundOn] = useState(!isSoundMuted())
+  const [soundMode, setSoundMode] = useState(0) // 0=silent, 1=ding, 2=voice
   const [camLocked, setCamLocked] = useState(false)
+  const [langIdx, setLangIdx] = useState(0)
+  const LANG_LIST: Lang[] = ['en', 'zh', 'fa']
   const getState = (eid: string) => statesRef.current.get(eid) || states.get(eid)
 
   // Load floor names
@@ -602,15 +604,23 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   }
 
   const playBehaviorSound = (eid: string, on: boolean) => {
-    if (eid.startsWith('light.')) playLightToggle(on)
-    else if (eid.startsWith('media_player.')) playMediaToggle(on)
-    else if (eid.startsWith('switch.')) playSwitchToggle(on)
-    else if (eid.startsWith('binary_sensor.')) {
-      const dc = states.get(eid)?.attributes?.device_class as string
-      if (dc === 'garage_door') playGarageToggle(on)
-      else if (dc === 'curtain' || dc === 'blind') playCurtainToggle(on)
-      else playDoorToggle(on)
-    } else playSwitchToggle(on)
+    if (soundMode === 0) return
+    const name = states.get(eid)?.attributes?.friendly_name as string || eid
+    const stateLabel = eid.startsWith('binary_sensor.') ? (on ? 'open' : 'closed') : (on ? 'on' : 'off')
+    if (soundMode === 1) {
+      playDing()
+    } else {
+      if (eid.startsWith('light.')) playLightToggle(on)
+      else if (eid.startsWith('media_player.')) playMediaToggle(on)
+      else if (eid.startsWith('switch.')) playSwitchToggle(on)
+      else if (eid.startsWith('binary_sensor.')) {
+        const dc = states.get(eid)?.attributes?.device_class as string
+        if (dc === 'garage_door') playGarageToggle(on)
+        else if (dc === 'curtain' || dc === 'blind') playCurtainToggle(on)
+        else playDoorToggle(on)
+      } else playSwitchToggle(on)
+      speakState(name, stateLabel)
+    }
   }
 
   const selBrightPct = selState?.attributes?.brightness != null
@@ -755,10 +765,16 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
             onClick={() => setCamLocked(!camLocked)}>
             {camLocked ? '🔒' : '🔓'}
           </button>
-          <button className="fp-floor-btn" style={{ fontSize: 16, padding: '4px 10px', opacity: soundOn ? 1 : 0.4 }}
-            onClick={() => { setSoundMuted(soundOn); setSoundOn(!soundOn) }}>
-            {soundOn ? '🔊' : '🔇'}
+          <button className="fp-floor-btn" style={{ fontSize: 14, padding: '4px 10px' }}
+            onClick={() => setSoundMode((soundMode + 1) % 3)}>
+            {soundMode === 0 ? '🔇' : soundMode === 1 ? '🔔' : '🗣'}
           </button>
+          {soundMode === 2 && (
+            <button className="fp-floor-btn" style={{ fontSize: 11, padding: '4px 6px' }}
+              onClick={() => { const n = (langIdx + 1) % 3; setLangIdx(n); setLang(LANG_LIST[n]) }}>
+              {LANG_LIST[langIdx] === 'en' ? 'EN' : LANG_LIST[langIdx] === 'zh' ? '中文' : 'فارسی'}
+            </button>
+          )}
         </div>
       </div>
 

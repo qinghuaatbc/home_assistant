@@ -10,7 +10,7 @@ function getCtx(): AudioContext {
   return ctx
 }
 
-function playTone(freq: number, duration: number, type: OscillatorType = 'sine', volume = 0.15) {
+export function playTone(freq: number, duration: number, type: OscillatorType = 'sine', volume = 0.15) {
   const c = getCtx()
   if (!c) return
   const o = c.createOscillator()
@@ -132,4 +132,55 @@ export function playMediaToggle(on: boolean) {
 
 export function playSwitchToggle(on: boolean) {
   playTone(on ? 1500 : 1000, 0.04, 'square', 0.05)
+}
+
+let voiceEnabled = true
+export function setVoiceEnabled(v: boolean) { voiceEnabled = v }
+export function isVoiceEnabled() { return voiceEnabled }
+
+export type Lang = 'en' | 'zh' | 'fa'
+const LANG_VOICES: Record<Lang, { lang: string; label: string }> = {
+  en: { lang: 'en-US', label: 'EN' },
+  zh: { lang: 'zh-CN', label: '中文' },
+  fa: { lang: 'fa-IR', label: 'فارسی' },
+}
+let currentLang: Lang = 'en'
+export function setLang(l: Lang) { currentLang = l }
+export function getLang() { return currentLang }
+
+function say(text: string, lang: string) {
+  if (!('speechSynthesis' in window)) return
+  window.speechSynthesis.cancel()
+  const msg = new SpeechSynthesisUtterance(text)
+  msg.lang = lang
+  msg.rate = 1.0
+  msg.pitch = 1.0
+  msg.volume = 0.7
+  window.speechSynthesis.speak(msg)
+}
+
+const STATE_WORDS: Record<Lang, Record<string, string>> = {
+  en: { on: 'on', off: 'off', open: 'open', closed: 'closed' },
+  zh: { on: '开', off: '关', open: '开', closed: '关' },
+  fa: { on: 'روشن', off: 'خاموش', open: 'باز', closed: 'بسته' },
+}
+
+export function speakState(entityName: string, state: string) {
+  if (!voiceEnabled) return
+  const lang = LANG_VOICES[currentLang].lang
+  const label = state === 'on' ? STATE_WORDS[currentLang].on
+    : state === 'off' ? STATE_WORDS[currentLang].off
+    : state === 'open' ? STATE_WORDS[currentLang].open
+    : STATE_WORDS[currentLang].closed
+  if (currentLang === 'zh') {
+    say(`${entityName} ${label}`, lang)
+  } else if (currentLang === 'fa') {
+    say(`${label} ${entityName}`, lang)
+  } else {
+    say(`${entityName} ${label}`, lang)
+  }
+}
+
+export function playDing() {
+  playTone(1000, 0.06, 'sine', 0.08)
 }

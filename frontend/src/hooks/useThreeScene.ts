@@ -32,7 +32,7 @@ export function useThreeScene(
     el.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x1a1a2e)
+    scene.background = new THREE.Color(0x2a2a4e)
     scene.add(new THREE.AmbientLight(0xffffff, 0.6))
     scene.add(new THREE.HemisphereLight(0xddeeff, 0x111122, 0.4))
     const dir = new THREE.DirectionalLight(0xffffff, 1.2)
