@@ -133,8 +133,8 @@ export class ConfigController {
     if (!fs.existsSync(fp)) return { ok: true };
     const floors: any[] = JSON.parse(fs.readFileSync(fp, 'utf-8')).filter((f: any) => f.id !== id);
     fs.writeFileSync(fp, JSON.stringify(floors, null, 2), 'utf-8');
-    // Delete associated GLB file
-    const glbPath = path.resolve(process.cwd(), 'public', `floor_${id}.glb`);
+    // Delete associated GLB file from data/floors/
+    const glbPath = path.resolve(process.cwd(), 'data', 'floors', `floor${id}.glb`);
     if (fs.existsSync(glbPath)) fs.unlinkSync(glbPath);
     return { ok: true };
   }

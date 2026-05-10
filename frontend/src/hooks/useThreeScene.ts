@@ -56,9 +56,13 @@ export function useThreeScene(
     const handle: SceneHandle = { renderer, scene, camera, controls }
     handleRef.current = handle
 
+    let prevH = el.clientHeight
     const onResize = () => {
       const w = Math.max(el.clientWidth, 100)
       const h = Math.max(el.clientHeight, 100)
+      // Ignore drastic height changes (>20%) — likely mobile keyboard open/close
+      if (Math.abs(h - prevH) / prevH > 0.2 && Math.abs(w - prevH) < 50) return
+      prevH = h
       camera.aspect = w / h
       camera.updateProjectionMatrix()
       renderer.setSize(w, h)

@@ -11,6 +11,15 @@ export default function AiChatPanel({ onClose }: { onClose: () => void }) {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
   useEffect(() => { if (inputRef.current) inputRef.current.focus() }, [])
+  useEffect(() => {
+    const html = document.documentElement
+    const origOverflow = html.style.overflow
+    const origHeight = html.style.height
+    const scrollY = window.scrollY
+    html.style.overflow = 'hidden'
+    html.style.height = '100vh'
+    return () => { html.style.overflow = origOverflow; html.style.height = origHeight; window.scrollTo(0, scrollY) }
+  }, [])
 
   const send = async () => {
     const text = prompt.trim()
@@ -31,43 +40,41 @@ export default function AiChatPanel({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <>
-      <div className="modal-backdrop" onClick={onClose} style={{ zIndex: 9998 }} />
-      <div style={{
-        position: 'fixed', bottom: 80, right: 16, width: 360, maxWidth: 'calc(100vw - 32px)',
-        background: 'var(--card)', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-        zIndex: 9999, display: 'flex', flexDirection: 'column', maxHeight: '70vh', overflow: 'hidden',
-      }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>✦ AI</span>
-          <button onClick={onClose} className="modal-close" style={{ fontSize: 16 }}>✕</button>
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 200 }}>
-          {messages.length === 0 && (
-            <div style={{ textAlign: 'center', color: 'var(--text2)', padding: '2rem 0', fontSize: 12 }}>
-              Ask about your home —<br />"what's on?" "turn off lights"
-            </div>
-          )}
-          {messages.map((m, i) => (
-            <div key={i} style={{
-              alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '90%',
-              padding: '8px 12px', borderRadius: 10, fontSize: 13, lineHeight: 1.4,
-              background: m.role === 'user' ? '#4d8fff' : 'var(--surface2)',
-              color: m.role === 'user' ? '#fff' : 'var(--text)',
-            }}>{m.text}</div>
-          ))}
-          {loading && <div style={{ alignSelf: 'flex-start', padding: '8px 12px', fontSize: 13, color: 'var(--text2)' }}>Thinking…</div>}
-          <div ref={bottomRef} />
-        </div>
-        <div style={{ display: 'flex', gap: 8, padding: '8px 12px', borderTop: '1px solid var(--border)' }}>
-          <input ref={inputRef} value={prompt} onChange={e => setPrompt(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && send()}
-            placeholder="Ask AI…" style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13 }}
-            disabled={loading || !token} />
-          <button className="btn btn-accent" onClick={send} disabled={loading || !prompt.trim()}
-            style={{ fontSize: 12, padding: '8px 12px' }}>→</button>
-        </div>
+    <div style={{
+      position: 'fixed', bottom: 130, right: 16, width: 260,
+      background: '#1c1c1e', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+      zIndex: 9999, display: 'flex', flexDirection: 'column', maxHeight: 320, overflow: 'hidden',
+      border: '1px solid #333',
+    }} onClick={e => e.stopPropagation()}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid #333' }}>
+        <span style={{ fontWeight: 600, fontSize: 12, color: '#fff' }}>✦ AI</span>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>
       </div>
-    </>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 100 }}>
+        {messages.length === 0 && (
+          <div style={{ textAlign: 'center', color: '#888', padding: '1.5rem 0', fontSize: 12 }}>
+            Ask about your home<br/>"turn on lights"
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} style={{
+            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '90%',
+            padding: '6px 10px', borderRadius: 8, fontSize: 12, lineHeight: 1.4,
+            background: m.role === 'user' ? '#4d8fff' : '#2c2c2e',
+            color: '#fff',
+          }}>{m.text}</div>
+        ))}
+        {loading && <div style={{ alignSelf: 'flex-start', padding: '6px 10px', fontSize: 12, color: '#888' }}>Thinking…</div>}
+        <div ref={bottomRef} />
+      </div>
+      <div style={{ display: 'flex', gap: 4, padding: '4px 6px', borderTop: '1px solid #333', alignItems: 'center' }}>
+        <input ref={inputRef} value={prompt} onChange={e => setPrompt(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && send()}
+          placeholder="Ask AI…" style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #555', background: '#222', color: '#fff', fontSize: 16, minWidth: 0 }}
+          disabled={loading || !token} />
+        <button className="btn" style={{ fontSize: 12, padding: '4px 10px' }}
+          onClick={send} disabled={loading || !prompt.trim()}>Send</button>
+      </div>
+    </div>
   )
 }

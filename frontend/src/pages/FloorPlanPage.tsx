@@ -6,8 +6,8 @@ import { useHa } from '../context/HaContext'
 import { useToast } from '../context/ToastContext'
 import { HaState, Mappings, MappingEntry, BehaviorMap, FloorId } from '../types'
 import { guessBehavior, BEHAVIORS, BrightnessSlider, DevicePicker } from '../components/DevicePicker'
-import { playLightToggle, playDoorToggle, playGarageToggle, playCurtainToggle, playMediaToggle, playSwitchToggle, playTone, playDing, speakState, Lang, setLang, getLang } from '../utils/sounds'
 import EditPanel from '../components/EditPanel'
+import { playLightToggle, playDoorToggle, playGarageToggle, playCurtainToggle, playMediaToggle, playSwitchToggle, playDing, speakState, Lang, setLang } from '../utils/sounds'
 import { useThreeScene } from '../hooks/useThreeScene'
 import { useSceneClick } from '../hooks/useSceneClick'
 
@@ -147,21 +147,26 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const [clickedMesh, setClickedMesh] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null)
   const [localRev, setLocalRev] = useState(0) // increment to trigger re-render after local toggle
-  const [soundMode, setSoundMode] = useState(0) // 0=silent, 1=ding, 2=voice
+  const [soundMode, setSoundMode] = useState(0)
   const [camLocked, setCamLocked] = useState(false)
   const [langIdx, setLangIdx] = useState(0)
   const LANG_LIST: Lang[] = ['en', 'zh', 'fa']
   const getState = (eid: string) => statesRef.current.get(eid) || states.get(eid)
 
-  // Load floor names
+  // Load floor names (also refresh on visibility change, e.g. returning from Integrations page)
   useEffect(() => {
     if (!token) return
-    fetch('/api/config/floors', { headers: { Authorization: `Bearer ${token}` } })
+    let cancelled = false
+    const load = () => fetch('/api/config/floors', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then((list: any[]) => {
+        if (cancelled) return
         const m: Record<string, string> = {}
         list.forEach(f => { m[f.id] = f.name })
         setFloorNames(m)
       }).catch(() => {})
+    load()
+    const iv = setInterval(load, 5000)
+    return () => { cancelled = true; clearInterval(iv) }
   }, [token])
 
   const saveAll = async (m: Mappings, b: BehaviorMap) => {
@@ -325,8 +330,8 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     })
   }, [])
 
-  // Trigger visual update when localRev changes
-  useEffect(() => { updateVisuals() }, [localRev, updateVisuals])
+  // Trigger visual update when states change (local toggles + AI/web remote changes)
+  useEffect(() => { updateVisuals() }, [localRev, states, updateVisuals])
 
   useEffect(() => {
     const h = sceneHandle.current
@@ -859,7 +864,6 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       )}
 
       {panel}
-
     </div>
   )
 }

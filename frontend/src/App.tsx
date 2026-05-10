@@ -1,4 +1,5 @@
 import { useState, lazy, Suspense } from 'react'
+import { createPortal } from 'react-dom'
 import { HaProvider, useHa } from './context/HaContext'
 import { ToastProvider } from './context/ToastContext'
 import LoginPage from './pages/LoginPage'
@@ -20,7 +21,6 @@ type Tab = 'dashboard' | 'entities' | 'floorplan' | 'history' | 'events' | 'auto
 function AppInner() {
   const { token } = useHa()
   const [tab, setTab] = useState<Tab>('dashboard')
-  const [aiOpen, setAiOpen] = useState(false)
   const [hideTabBar, setHideTabBar] = useState(false)
 
   // Standalone 3D floorplan route — uses token from URL param or localStorage
@@ -33,6 +33,7 @@ function AppInner() {
       <HaProvider>
         <ToastProvider>
           <FloorPlanPage fullscreen={true} onFullscreenChange={() => {}} standaloneToken={urlToken} />
+          <FloatingAiButton />
         </ToastProvider>
       </HaProvider>
     )
@@ -55,21 +56,28 @@ function AppInner() {
       {tab === 'integrations' && page(<IntegrationsPage />)}
       {tab === 'settings' && page(<SettingsPage />)}
       {!hideTabBar && <TabBar current={tab} onChange={(t) => setTab(t as Tab)} />}
+    </>
+  )
+}
 
-      <button onClick={() => setAiOpen(!aiOpen)}
+function FloatingAiButton() {
+  const [open, setOpen] = useState(false)
+  return createPortal(
+    <>
+      <button onClick={() => setOpen(!open)}
         style={{
-          position: 'fixed', bottom: 80, right: 16, zIndex: 9997,
+          position: 'fixed', bottom: 140, right: 16, zIndex: 9999,
           width: 44, height: 44, borderRadius: 22, border: 'none',
-          background: aiOpen ? '#ff453a' : '#4d8fff', color: '#fff',
+          background: open ? '#ff453a' : '#4d8fff', color: '#fff',
           fontSize: 18, cursor: 'pointer', boxShadow: '0 4px 16px rgba(77,143,255,0.4)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
-        title={aiOpen ? 'Close AI' : 'Open AI'}>
-        {aiOpen ? '✕' : '✦'}
+        title={open ? 'Close AI' : 'Open AI'}>
+        {open ? '✕' : '✦'}
       </button>
-
-      {aiOpen && <AiChatPanel onClose={() => setAiOpen(false)} />}
-    </>
+      {open && <AiChatPanel onClose={() => setOpen(false)} />}
+    </>,
+    document.body,
   )
 }
 
@@ -78,6 +86,7 @@ export default function App() {
     <HaProvider>
       <ToastProvider>
         <AppInner />
+        <FloatingAiButton />
       </ToastProvider>
     </HaProvider>
   )

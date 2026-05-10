@@ -19,6 +19,7 @@ import { MqttIntegration } from './built-in/mqtt/mqtt.integration';
 import { CameraIntegration } from './built-in/camera/camera.integration';
 import { AutomationIntegration } from '../automations/automation.integration';
 import { DemoIntegration } from './built-in/demo/demo.integration';
+import { EnvisalinkIntegration } from './built-in/envisalink/envisalink.integration';
 import {
   EVENT_HOMEASSISTANT_START,
   EVENT_COMPONENT_LOADED,
@@ -70,6 +71,7 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     cameraIntegration: CameraIntegration,
     automationIntegration: AutomationIntegration,
     demoIntegration: DemoIntegration,
+    envisalinkIntegration: EnvisalinkIntegration,
   ) {
     this.builtInRegistry.set('light', lightIntegration);
     this.builtInRegistry.set('switch', switchIntegration);
@@ -83,6 +85,7 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     this.builtInRegistry.set('camera', cameraIntegration);
     this.builtInRegistry.set('automation', automationIntegration);
     this.builtInRegistry.set('demo', demoIntegration);
+    this.builtInRegistry.set('envisalink', envisalinkIntegration);
   }
 
   /**

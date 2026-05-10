@@ -6,14 +6,19 @@ import { ContextService } from '../../core/context/context.service';
 
 const CALL_SERVICE_TOOL = {
   name: 'call_service',
-  description: 'Call a Home Assistant service to control a device',
+  description: 'Call a Home Assistant service to control one or more devices. Use this when the user asks to control specific devices or all devices of a type (e.g. "all lights", "turn on everything", "open all doors").',
   input_schema: {
     type: 'object',
     properties: {
-      domain: { type: 'string' },
-      service: { type: 'string' },
-      entity_id: { type: 'string' },
-      data: { type: 'object' },
+      domain: { type: 'string', description: 'e.g. light, switch, binary_sensor, media_player' },
+      service: { type: 'string', description: 'e.g. turn_on, turn_off, toggle' },
+      entity_id: {
+        oneOf: [
+          { type: 'string', description: 'Single entity like light.living_room' },
+          { type: 'array', items: { type: 'string' }, description: 'Multiple entities like ["light.living_room","light.bedroom"]' },
+        ],
+      },
+      data: { type: 'object', description: 'Optional service data like brightness, volume_level, etc.' },
     },
     required: ['domain', 'service', 'entity_id'],
   },
@@ -55,7 +60,7 @@ export class AiController {
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 1024,
-          system: `You are a home automation assistant.\nDevices:\n${statesList}\n\nUse the call_service tool to control devices when asked.`,
+          system: `You are a home automation assistant controlling a smart home.\n\nAvailable devices:\n${statesList}\n\nWhen the user asks to control multiple devices (e.g. "turn on all lights", "open every door"), call call_service once with entity_id as an array of all matching entities.\n\nDevice naming convention:\n- Lights: light.living_room, light.bedroom, light.kitchen, light.kitchen_light, light.dining_light, light.office_light\n- Switches: switch.fan, switch.tv\n- Binary sensors: binary_sensor.front_door, binary_sensor.back_door, binary_sensor.garage_door\n- Sensors: sensor.temperature, sensor.humidity\n- Media: media_player.living_room_speaker, media_player.bedroom_speaker`,
           messages: [{ role: 'user', content: body.prompt }],
           tools: [CALL_SERVICE_TOOL],
         }),
@@ -68,38 +73,38 @@ export class AiController {
 
       if (toolUse) {
         const { domain, service, entity_id, data: serviceData } = toolUse.input;
-        this.logger.log(`AI: ${domain}.${service} ${entity_id}`);
+        const ids = Array.isArray(entity_id) ? entity_id : [entity_id];
+        this.logger.log(`AI: ${domain}.${service} ${ids.join(', ')}`);
 
-        // Try real service call, fall back to direct state update for demo entities
-        let stateUpdated = false;
-        try {
-          await this.serviceRegistry.call({
-            domain,
-            service,
-            service_data: serviceData ?? {},
-            target: { entity_id: [entity_id] },
-            context: this.contextService.system(),
-          });
-          stateUpdated = true;
-        } catch (callErr: any) {
-          this.logger.warn(`AI service call failed (demo?): ${callErr.message}`);
+        let allFailed = true;
+        for (const eid of ids) {
+          let updated = false;
+          try {
+            await this.serviceRegistry.call({
+              domain,
+              service,
+              service_data: serviceData ?? {},
+              target: { entity_id: [eid] },
+              context: this.contextService.system(),
+            });
+            updated = true;
+          } catch (callErr: any) {
+            this.logger.warn(`AI service call failed for ${eid}: ${callErr.message}`);
+          }
+          if (!updated) {
+            const isOn = service === 'turn_on';
+            try {
+              this.stateMachine.setState(eid, isOn ? 'on' : 'off', {}, this.contextService.system());
+              updated = true;
+            } catch (setErr: any) {
+              this.logger.error(`AI force state failed for ${eid}: ${setErr.message}`);
+            }
+          }
+          if (updated) allFailed = false;
         }
 
-        // For demo / unavailable entities, force state update directly
-        if (!stateUpdated) {
-          const isOn = service === 'turn_on';
-          const newState = isOn ? 'on' : 'off';
-          try {
-            this.stateMachine.setState(
-              entity_id,
-              newState,
-              { friendly_name: entity_id },
-              this.contextService.system(),
-            );
-            this.logger.log(`AI force-set ${entity_id} → ${newState}`);
-          } catch (setErr: any) {
-            this.logger.error(`AI force state failed: ${setErr.message}`);
-          }
+        if (allFailed) {
+          return { response: 'Failed to control any devices. Check device names.' };
         }
 
         // Second call: AI confirms

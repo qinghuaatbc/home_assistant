@@ -6,6 +6,7 @@
   --surface:     #2c2c2e;
   --surface2:    #3a3a3c;
   --surface3:    #48484a;
+  --card:        #2c2c2e;
   --sep:         rgba(255,255,255,0.08);
   --text:        #ffffff;
   --text2:       rgba(235,235,245,0.60);
@@ -30,6 +31,7 @@
   --surface:     #ffffff;
   --surface2:    #f2f2f7;
   --surface3:    #e5e5ea;
+  --card:        #ffffff;
   --sep:         rgba(60,60,67,0.12);
   --text:        #000000;
   --text2:       rgba(60,60,67,0.60);
@@ -72,7 +74,7 @@ input, textarea, select, button, pre, code {
 }
 
 .page-inner {
-  padding: 0 0 1.5rem;
+  padding: 0 16px 1.5rem;
   min-height: 100%;
 }
 

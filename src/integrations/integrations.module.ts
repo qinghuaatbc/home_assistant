@@ -22,6 +22,7 @@ import { ContextService } from '../core/context/context.service';
 import { AutomationModule } from '../automations/automation.module';
 import { AutomationIntegration } from '../automations/automation.integration';
 import { DemoIntegration } from './built-in/demo/demo.integration';
+import { EnvisalinkIntegration } from './built-in/envisalink/envisalink.integration';
 
 @Module({
   imports: [RegistryModule, AutomationModule],
@@ -54,6 +55,8 @@ import { DemoIntegration } from './built-in/demo/demo.integration';
     CameraStreamService,
     // Demo
     DemoIntegration,
+    // EnvisaLink (DSC / Honeywell)
+    EnvisalinkIntegration,
   ],
   exports: [IntegrationLoaderService],
 })
