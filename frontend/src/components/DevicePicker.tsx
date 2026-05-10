@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { HaState, DeviceItem } from '../types'
 
 export function guessBehavior(entityId: string): string {
   if (entityId.startsWith('light.')) return 'light'
@@ -8,7 +9,13 @@ export function guessBehavior(entityId: string): string {
   return 'light'
 }
 
-export const BEHAVIORS = [
+export interface BehaviorOption {
+  id: string
+  label: string
+  desc: string
+}
+
+export const BEHAVIORS: BehaviorOption[] = [
   { id: 'light', label: '💡 Light', desc: 'On/off with brightness' },
   { id: 'door', label: '🚪 Door', desc: 'Hinged open/close' },
   { id: 'window', label: '🪟 Window', desc: 'Open/close window' },
@@ -44,10 +51,10 @@ export function BrightnessSlider({ value, onChange }: { value: number; onChange:
   )
 }
 
-export function DevicePicker({ meshName, states, onPick }: { meshName: string; states: Map<string, any>; mappings?: Record<string, string>; onPick: (mesh: string, eid: string) => void }) {
+export function DevicePicker({ meshName, states, onPick }: { meshName: string; states: Map<string, HaState>; onPick: (mesh: string, eid: string) => void }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ x: 0, y: 0 })
-  const devices = Array.from(states.entries())
+  const devices: DeviceItem[] = Array.from(states.entries())
     .map(([id, s]) => ({ id, name: (s.attributes?.friendly_name as string) || id }))
   const btnRef = useRef<HTMLButtonElement>(null)
   return (

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { useHa, HaState } from '../context/HaContext'
+import { useHa } from '../context/HaContext'
+import { HaState, Mappings, MappingEntry, BehaviorMap, FloorId, GlbLightCfg, SphereLightCfg, SensorCfg, SensorGlbCfg } from '../types'
 import { guessBehavior, BEHAVIORS, BehaviorSelect, BrightnessSlider, DevicePicker } from '../components/DevicePicker'
 
 const FW = 19, FD = 14, WH = 2.8, WT = 0.15, BR = 0.35
@@ -131,15 +132,15 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const glbLightsRef    = useRef<Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string }>>([])
   const senGlbRef       = useRef<Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string; deviceClass: string; pos?: [number, number] }>>([])
 
-  const [floor, setFloor]           = useState<1 | 2 | 3>(1)
+  const [floor, setFloor]           = useState<FloorId>(1)
   const [glbLoading, setGlbLoading] = useState(false)
   const [glbLoaded,  setGlbLoaded]  = useState(false)
   const [floorNames, setFloorNames] = useState<Record<string, string>>({})
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editMode, setEditMode] = useState(false)
   const [meshNames, setMeshNames] = useState<string[]>([])
-  const [mappings, setMappings] = useState<Record<string, string>>({})
-  const [behaviors, setBehaviors] = useState<Record<string, string>>({})
+  const [mappings, setMappings] = useState<Mappings>({})
+  const [behaviors, setBehaviors] = useState<BehaviorMap>({})
   const [mappingDirty, setMappingDirty] = useState(false)
   const [clickedMesh, setClickedMesh] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null)
@@ -155,11 +156,11 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       }).catch(() => {})
   }, [token])
 
-  const saveAll = async (m: Record<string, string>, b: Record<string, string>) => {
+  const saveAll = async (m: Mappings, b: BehaviorMap) => {
     if (!token) return
-    // Merge mappings + behaviors into one extended format
-    const extended: Record<string, any> = {}
-    for (const [mesh, eid] of Object.entries(m)) {
+    const extended: Record<string, MappingEntry> = {}
+    for (const [mesh, val] of Object.entries(m)) {
+      const eid = typeof val === 'string' ? val : val.entity
       extended[mesh] = { entity: eid, behavior: b[mesh] || guessBehavior(eid) }
     }
     try {
@@ -174,9 +175,11 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     const sen:    Array<{ entityId: string; name: string; floor: 1|2|3; x: number; z: number; deviceClass: string }> = []
     const senGlb: Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string; deviceClass: string; pos?: [number, number] }> = []
 
-    // Build reverse map: entityId → meshName
     const entityToMesh = new Map<string, string>()
-    for (const [mesh, eid] of Object.entries(mappings)) entityToMesh.set(eid, mesh)
+    for (const [mesh, val] of Object.entries(mappings)) {
+      const eid = typeof val === 'string' ? val : val.entity
+      entityToMesh.set(eid, mesh)
+    }
 
     states.forEach((st: HaState, entityId: string) => {
       const a = st.attributes
@@ -605,7 +608,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     const hits = ray.intersectObjects(clickables.current, false)
     if (hits.length > 0) {
       const eid = hits[0].object.userData.entityId as string
-      const hitName = (hits[0].object as any).name || hits[0].object.userData.meshName as string || ''
+      const hitName = (hits[0].object.name as string) || (hits[0].object.userData.meshName as string) || ''
       if (editMode) {
         setSelectedId(eid || null)
         if (hitName) setClickedMesh(hitName)
@@ -755,8 +758,11 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
             <button className="btn" style={{ fontSize: 10, padding: '2px 8px' }}
               onClick={async () => {
                 if (!token) return alert('Not logged in')
-                const ext: Record<string, any> = {}
-                for (const [mesh, eid] of Object.entries(mappings)) ext[mesh] = { entity: eid, behavior: behaviors[mesh] || guessBehavior(eid) }
+                const ext: Record<string, MappingEntry> = {}
+                for (const [mesh, val] of Object.entries(mappings)) {
+                  const eid = typeof val === 'string' ? val : val.entity
+                  ext[mesh] = { entity: eid, behavior: behaviors[mesh] || guessBehavior(eid) }
+                }
                 const r = await fetch('/api/config/3d-mappings', {
                   method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                   body: JSON.stringify({ mappings: ext })
@@ -777,9 +783,9 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
                   <span style={{ fontFamily: 'monospace', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', flex: 1 }}
                     onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>{meshName}</span>
                     {mapped ? (
-                    <span style={{ fontSize: 9, color: 'var(--text2)' }}>{BEHAVIORS.find(b => b.id === (behaviors[meshName] || guessBehavior(mappings[meshName])))?.label || ''} {(states.get(mappings[meshName])?.attributes?.friendly_name as string) || mappings[meshName]}</span>
+                    <span style={{ fontSize: 9, color: 'var(--text2)' }}>{BEHAVIORS.find(b => b.id === (behaviors[meshName] || guessBehavior(typeof mappings[meshName] === 'string' ? mappings[meshName] as string : (mappings[meshName] as any)?.entity)))?.label || ''} {(() => { const mv = mappings[meshName]; const eid = typeof mv === 'string' ? mv : (mv as any)?.entity; return eid ? (states.get(eid)?.attributes?.friendly_name as string) || eid : '' })()}</span>
                   ) : (
-                    <DevicePicker meshName={meshName} states={states} mappings={mappings} onPick={async (mesh, eid) => {
+                    <DevicePicker meshName={meshName} states={states} onPick={async (mesh, eid) => {
                       const next = { ...mappings, [mesh]: eid }; setMappings(next)
                       setBehaviors(prev => ({ ...prev, [mesh]: guessBehavior(eid) }))
                       const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: next }) })
@@ -790,8 +796,11 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
                     onClick={async () => {
                       const next = { ...mappings }; delete next[meshName]; setMappings(next)
                       const beh = { ...behaviors }; delete beh[meshName]; setBehaviors(beh)
-                      const ext: Record<string, any> = {}
-                      for (const [m, eid] of Object.entries(next)) ext[m] = { entity: eid, behavior: beh[m] || guessBehavior(eid) }
+                      const ext: Record<string, MappingEntry> = {}
+                      for (const [m, val] of Object.entries(next)) {
+                        const eid = typeof val === 'string' ? val : val.entity
+                        ext[m] = { entity: eid, behavior: beh[m] || guessBehavior(eid) }
+                      }
                       await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: ext }) })
                     }}>✕</button>}
                 </div>
