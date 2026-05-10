@@ -30,11 +30,7 @@ logger:
   level: "info"
 
 integrations:
-  # MQTT — 默认用公共 broker。装了本地 Mosquitto 后改为 localhost
-  - domain: mqtt
-    broker: "broker.hivemq.com"
-
-  # Demo devices — comment out to disable
+  # Demo devices
   - domain: demo
 
 automation: automations.yaml
