@@ -148,14 +148,34 @@ let currentLang: Lang = 'en'
 export function setLang(l: Lang) { currentLang = l }
 export function getLang() { return currentLang }
 
+let cachedVoices: SpeechSynthesisVoice[] | null = null
+function getVoices() {
+  if (cachedVoices) return cachedVoices
+  cachedVoices = speechSynthesis.getVoices()
+  return cachedVoices
+}
+// Preload voices
+if (typeof speechSynthesis !== 'undefined') {
+  speechSynthesis.getVoices()
+  speechSynthesis.onvoiceschanged = () => { cachedVoices = speechSynthesis.getVoices() }
+}
+
+function pickVoice(lang: string): SpeechSynthesisVoice | undefined {
+  const voices = getVoices()
+  return voices.find(v => v.lang.startsWith(lang) && v.localService)
+    || voices.find(v => v.lang.startsWith(lang))
+}
+
 function say(text: string, lang: string) {
   if (!('speechSynthesis' in window)) return
   window.speechSynthesis.cancel()
   const msg = new SpeechSynthesisUtterance(text)
+  const voice = pickVoice(lang)
+  if (voice) msg.voice = voice
   msg.lang = lang
-  msg.rate = 1.0
-  msg.pitch = 1.0
-  msg.volume = 0.7
+  msg.rate = 0.9
+  msg.pitch = 1.1
+  msg.volume = 0.8
   window.speechSynthesis.speak(msg)
 }
 
