@@ -43,19 +43,22 @@ export function playLightToggle(on: boolean) {
 }
 
 export function playDoorToggle(open: boolean) {
-  const dur = 0.3
+  const dur = 0.8
   const c = getCtx()
-  const o = c.createOscillator()
-  const g = c.createGain()
-  o.type = 'sawtooth'
-  o.frequency.setValueAtTime(open ? 200 : 150, c.currentTime)
-  o.frequency.linearRampToValueAtTime(open ? 80 : 300, c.currentTime + dur)
-  g.gain.setValueAtTime(0.06, c.currentTime)
-  g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur)
-  o.connect(g).connect(c.destination)
-  o.start()
-  o.stop(c.currentTime + dur)
-  playNoise(0.15, 0.04)
+  for (let i = 0; i < 3; i++) {
+    const o = c.createOscillator()
+    const g = c.createGain()
+    o.type = 'sawtooth'
+    const t = c.currentTime + i * 0.25
+    const f = open ? 180 - i * 30 : 120 + i * 40
+    o.frequency.setValueAtTime(f, t)
+    o.frequency.linearRampToValueAtTime(f + (open ? -40 : 40), t + 0.3)
+    g.gain.setValueAtTime(0.08 - i * 0.02, t)
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35)
+    o.connect(g).connect(c.destination)
+    o.start(t); o.stop(t + 0.35)
+  }
+  playNoise(dur, 0.06)
 }
 
 export function playGarageToggle(open: boolean) {
