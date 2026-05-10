@@ -20,6 +20,7 @@ const DEMO_ENTITIES: Array<{ entity_id: string; name: string; type: string; attr
   { entity_id: 'binary_sensor.back_door', name: 'Back Door', type: 'binary_sensor', attrs: { device_class: 'door' } },
   { entity_id: 'binary_sensor.garage_door', name: 'Garage Door', type: 'binary_sensor', attrs: { device_class: 'garage_door' } },
   { entity_id: 'binary_sensor.motion', name: 'Motion Sensor', type: 'binary_sensor', attrs: { device_class: 'motion' } },
+  { entity_id: 'binary_sensor.living_room_curtain', name: 'Living Room Curtain', type: 'binary_sensor', attrs: { device_class: 'curtain' } },
   { entity_id: 'sensor.temperature', name: 'Temperature', type: 'sensor', attrs: { unit_of_measurement: '°C', device_class: 'temperature' } },
   { entity_id: 'sensor.humidity', name: 'Humidity', type: 'sensor', attrs: { unit_of_measurement: '%', device_class: 'humidity' } },
   { entity_id: 'media_player.living_room_speaker', name: 'Living Room Speaker', type: 'media_player' },

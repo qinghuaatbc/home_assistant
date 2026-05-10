@@ -74,19 +74,13 @@ export interface SceneContent {
   updateVisuals: () => void
 }
 
-const BEHAVIOR_PREFIX: Record<string, string> = {
-  light: 'light.', door: 'binary_sensor.', window: 'binary_sensor.',
-  curtain: 'binary_sensor.', garage_door: 'binary_sensor.',
-  media_player: 'media_player.', switch: 'switch.',
-}
-
 interface Props {
   getScene: () => THREE.Scene | null
   getCamera: () => THREE.PerspectiveCamera | null
   getControls: () => any | null
   getRenderer: () => THREE.WebGLRenderer | null
   floor: FloorId
-  behaviorFilter: string
+  activeBehaviors: Set<string> | null
   statesRef: React.MutableRefObject<Map<string, HaState>>
   glbLights: Array<{ entityId: string; name: string; floor: FloorId; meshName: string }>
   sphereLights: Array<{ entityId: string; name: string; floor: FloorId; x: number; z: number }>
@@ -303,27 +297,27 @@ export function useSceneContent(p: Props) {
     })
   }, [p.sensorMarkers, p.floor])
 
-  // ── Behavior filter: show/hide 3D objects ──────────────────────────────
+  // ── Behavior filter: hide non-matching devices (except doors/windows) ──
   useEffect(() => {
+    const showAll = !p.activeBehaviors || p.activeBehaviors.size === 0
     const setVis = (eid: string, objs: THREE.Object3D[]) => {
-      let match = p.behaviorFilter === ''
+      let match = showAll
       if (!match) {
         const dc = p.statesRef.current.get(eid)?.attributes?.device_class as string | undefined
-        if (eid.startsWith('light.')) match = p.behaviorFilter === 'light'
-        else if (eid.startsWith('media_player.')) match = p.behaviorFilter === 'media_player'
-        else if (eid.startsWith('switch.')) match = p.behaviorFilter === 'switch'
-        else if (dc === 'garage_door') match = p.behaviorFilter === 'garage_door'
-        else if (dc === 'curtain' || dc === 'blind') match = p.behaviorFilter === 'curtain'
-        else if (dc === 'door') match = p.behaviorFilter === 'door'
-        else if (dc === 'window') match = p.behaviorFilter === 'window'
+        if (eid.startsWith('light.')) match = p.activeBehaviors!.has('light')
+        else if (eid.startsWith('media_player.')) match = p.activeBehaviors!.has('media_player')
+        else if (eid.startsWith('switch.')) match = p.activeBehaviors!.has('switch')
+        else if (dc === 'garage_door') match = p.activeBehaviors!.has('garage_door')
+        else if (dc === 'curtain' || dc === 'blind') match = p.activeBehaviors!.has('curtain')
+        else if (dc === 'door' || dc === 'window') match = true // always visible
       }
       objs.forEach(o => { o.visible = match })
     }
-    glbRefs.current.forEach(({ mesh, ptLight }, eid) => setVis(eid, [mesh, ptLight]))
+    glbRefs.current.forEach(({ mesh, ptLight }, eid) => { const m = glbRefs.current.get(eid); if (m) setVis(eid, [m.mesh, m.ptLight]) })
     sphRefs.current.forEach(({ bulb, glow, ptLight }, eid) => setVis(eid, [bulb, glow, ptLight]))
     senRefs.current.forEach(({ marker, glow, ptLight }, eid) => setVis(eid, [marker, glow, ptLight]))
     senGlbRefs.current.forEach(({ meshes, ptLight }, eid) => setVis(eid, [...meshes, ptLight]))
-  }, [p.behaviorFilter])
+  }, [p.activeBehaviors])
 
   // ── Per-frame: smooth door/curtain animation ──────────────────────────
   const onAnimate = useCallback((t: number) => {

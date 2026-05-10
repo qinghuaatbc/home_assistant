@@ -44,7 +44,8 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const [camLocked, setCamLocked] = useState(false)
   const [langIdx, setLangIdx] = useState(0)
   const LANG_LIST: Lang[] = ['en', 'zh', 'fa']
-  const [behaviorFilter, setBehaviorFilter] = useState('')
+  const filterParam = new URLSearchParams(window.location.search).get('filter') || ''
+  const activeBehaviors = filterParam ? new Set(filterParam.split(',')) : null
   const getState = (eid: string) => statesRef.current.get(eid) || states.get(eid)
 
   // Load floor names (also refresh on visibility change, e.g. returning from Integrations page)
@@ -146,7 +147,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     getCamera: () => cameraRef.current,
     getControls: () => controlsRef.current,
     getRenderer: () => rendererRef.current,
-    floor, statesRef, behaviorFilter,
+    floor, statesRef, activeBehaviors,
     glbLights, sphereLights, sensorMarkers, sensorGlbMeshes,
     glbLoading, glbLoaded, glbError,
     onGlbStart: () => { setGlbLoaded(false); setGlbLoading(true) },
@@ -165,7 +166,19 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     () => cameraRef.current,
     () => clickables.current, // from useSceneContent
     (result) => {
-      // Look up mesh name from entityId (for mapped meshes) or from hit
+      // Behavior filter: if activeBehaviors set, only allow matching entities
+      if (result.entityId && activeBehaviors) {
+        const dc = states.get(result.entityId)?.attributes?.device_class as string | undefined
+        let beh = ''
+        if (result.entityId.startsWith('light.')) beh = 'light'
+        else if (result.entityId.startsWith('media_player.')) beh = 'media_player'
+        else if (result.entityId.startsWith('switch.')) beh = 'switch'
+        else if (dc === 'garage_door') beh = 'garage_door'
+        else if (dc === 'curtain' || dc === 'blind') beh = 'curtain'
+        else if (dc === 'door') beh = 'door'
+        else if (dc === 'window') beh = 'window'
+        if (!activeBehaviors.has(beh)) return // not in filter → ignore click
+      }
       let meshName = result.meshName
       if (!meshName && result.entityId) {
         for (const [m, v] of Object.entries(mappings)) {
@@ -399,17 +412,6 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
 
       <div className="fp-canvas" ref={containerRef}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
-        <div style={{ position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', gap: 4 }}>
-          <button className="fp-floor-btn" style={{ fontSize: 11, padding: '3px 8px', opacity: behaviorFilter === '' ? 1 : 0.4 }}
-            onClick={() => setBehaviorFilter('')}>All</button>
-          {BEHAVIORS.map(b => (
-            <button key={b.id} className={`fp-floor-btn${behaviorFilter === b.id ? ' active' : ''}`}
-              style={{ fontSize: 11, padding: '3px 8px' }}
-              onClick={() => setBehaviorFilter(behaviorFilter === b.id ? '' : b.id)}>
-              {b.label.split(' ')[0]}
-            </button>
-          ))}
-        </div>
         <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', gap: 6 }}>
           {['1', '2', '3', '4', '5'].map(id => (
             <button key={id} className={`fp-floor-btn${String(floor) === id ? ' active' : ''}`}
