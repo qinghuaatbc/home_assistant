@@ -251,13 +251,17 @@ export default function IntegrationsPage() {
           )
         })}
 
-        <div style={{ marginTop: 20, marginBottom: 80 }}>
-          <button className="btn btn-accent" onClick={save} disabled={saving}
-            style={{ width: '100%', fontSize: 13, padding: 12 }}>
-            {saving ? 'Saving & Restarting…' : '💾 Save & Restart'}
-          </button>
-          {msg && <div style={{ marginTop: 12, fontSize: 12, color: msg.startsWith('✅') ? '#30d158' : '#ff453a', whiteSpace: 'pre-line', textAlign: 'center' }}>{msg}</div>}
-        </div>
+      </div>
+
+      <div style={{ position: 'sticky', bottom: 0, zIndex: 20, background: 'var(--bg)', padding: '12px 16px calc(12px + var(--tab-h, 0px))', borderTop: '1px solid var(--sep)' }}>
+        <button className="btn btn-accent" onClick={save} disabled={saving}
+          style={{ width: '100%', fontSize: 13, padding: 12 }}>
+          {saving ? 'Saving & Restarting…' : '💾 Save & Restart'}
+        </button>
+        {msg && <div style={{ marginTop: 8, fontSize: 12, color: msg.startsWith('✅') ? '#30d158' : '#ff453a', whiteSpace: 'pre-line', textAlign: 'center' }}>{msg}</div>}
+      </div>
+
+      <div className="page-inner" style={{ paddingBottom: '100px' }}>
 
         <div className="section" style={{ marginTop: 24 }}>
           <div className="section-title">🏗️ 3D Floors</div>

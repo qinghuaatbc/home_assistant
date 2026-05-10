@@ -5,7 +5,7 @@ import { useToast } from '../context/ToastContext'
 import { HaState, Mappings, MappingEntry, BehaviorMap, FloorId } from '../types'
 import { guessBehavior, BEHAVIORS, BrightnessSlider, DevicePicker } from '../components/DevicePicker'
 import EditPanel from '../components/EditPanel'
-import { playLightToggle, playDoorToggle, playGarageToggle, playCurtainToggle, playMediaToggle, playSwitchToggle, playDing, speakState, Lang, setLang } from '../utils/sounds'
+import { playLightToggle, playDoorToggle, playGarageToggle, playCurtainToggle, playMediaToggle, playSwitchToggle, playDing, speakState, Lang, setLang, startMusic, stopMusic } from '../utils/sounds'
 import { useThreeScene } from '../hooks/useThreeScene'
 import { useSceneClick } from '../hooks/useSceneClick'
 import { useSceneContent } from '../hooks/useSceneContent'
@@ -188,6 +188,8 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
           beh = (meshName ? behaviors[meshName] : undefined) || guessBehavior(result.entityId)
         }
         else if (dc === 'window') beh = 'window'
+        // Normalize door_r/door_s → 'door' for filter matching
+        if (beh.startsWith('door_')) beh = 'door'
         if (!activeBehaviors.has(beh)) return
       }
       setClickedMesh(null)
@@ -230,6 +232,10 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   }
 
   const playBehaviorSound = (eid: string, on: boolean) => {
+    // Music always plays regardless of sound mode
+    if (eid.startsWith('media_player.')) {
+      if (on) startMusic(); else stopMusic()
+    }
     if (soundMode === 0) return
     const name = states.get(eid)?.attributes?.friendly_name as string || eid
     const stateLabel = eid.startsWith('binary_sensor.') ? (on ? 'open' : 'closed') : (on ? 'on' : 'off')
@@ -279,11 +285,12 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     ...sphereLights.filter(l => l.floor === floor).map(l => ({ ...l, isGlb: false, isSensor: false })),
     ...sensorGlbMeshes.filter(s => s.floor === floor).map(s => ({ ...s, isGlb: true,  isSensor: true })),
     ...sensorMarkers.filter(s => s.floor === floor).map(s => ({ ...s, isGlb: false, isSensor: true })),
-  ], [glbLights, sphereLights, sensorGlbMeshes, sensorMarkers, floor])
+    ...mediaGlbMeshes.filter(l => l.floor === floor).map(l => ({ ...l, isGlb: true,  isSensor: false })),
+  ], [glbLights, sphereLights, sensorGlbMeshes, sensorMarkers, mediaGlbMeshes, floor])
 
   // Load saved mappings (once). Only migrate from YAML if no saved file yet.
   useEffect(() => {
-    if (!token || states.size === 0 || migratedRef.current) return
+    if (!token || migratedRef.current) return
     migratedRef.current = true
     fetch('/api/config/3d-mappings', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then((d: any) => {

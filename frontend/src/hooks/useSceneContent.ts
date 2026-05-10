@@ -217,14 +217,17 @@ export function useSceneContent(p: Props) {
           const origScale = m.scale.clone()
           // Create frequency bars
           const bars: THREE.Mesh[] = []
-          const barMat = new THREE.MeshStandardMaterial({ color: 0x4d8fff, emissive: 0x4d8fff, emissiveIntensity: 0.3, transparent: true, opacity: 0.8 })
           const bb = new THREE.Box3().setFromObject(m)
-          const cx = (bb.min.x + bb.max.x) / 2, cz = bb.max.z + 0.3, cy = bb.min.y
-          for (let i = 0; i < 5; i++) {
-            const bw = 0.04, bh = 0.05 + i * 0.03
-            const bar = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.04), barMat)
-            bar.position.set(cx + (i - 2) * 0.08, cy + bh / 2, cz)
+          const cx = (bb.min.x + bb.max.x) / 2, cz = bb.max.z + 0.6, cy = bb.min.y
+          for (let i = 0; i < 9; i++) {
+            const bw = 0.1, bh = 0.15 + i * 0.06
+            const barMat = new THREE.MeshStandardMaterial({ color: 0x4d8fff, emissive: 0x4d8fff, emissiveIntensity: 0, transparent: true, opacity: 0 })
+            const bar = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.06), barMat)
+            bar.position.set(cx + (i - 4) * 0.14, cy + bh / 2, cz)
             bar.userData.baseH = bh
+            bar.userData.phase = Math.random() * 10
+            bar.userData.speed = 3 + Math.random() * 3
+            bar.visible = false
             scene.add(bar); bars.push(bar)
           }
           mediaGlbRefs.current.set(mcfg.entityId, { mesh: m, origScale, bars })
@@ -324,6 +327,45 @@ export function useSceneContent(p: Props) {
     })
   }, [p.sensorMarkers, p.floor])
 
+  // ── Late-arriving media GLB entities ────────────────────────────────────
+  useEffect(() => {
+    const model = glbModelRef.current
+    if (!model) { // retry when GLB loads
+      const t = setTimeout(() => {
+        const m2 = glbModelRef.current
+        if (!m2) return
+        processMedia(m2)
+      }, 500)
+      return () => clearTimeout(t)
+    }
+    processMedia(model)
+    function processMedia(mdl: THREE.Group) {
+      const floorMedia = p.mediaGlbMeshes.filter(l => l.floor === p.floor)
+      mdl.traverse(child => {
+        const m = child as THREE.Mesh; if (!m.isMesh) return
+        const mcfg = floorMedia.find(l => l.meshName === child.name)
+        if (!mcfg) return
+        if (mediaGlbRefs.current.has(mcfg.entityId)) return
+        m.userData.entityId = mcfg.entityId
+        const origScale = m.scale.clone()
+        const bars: THREE.Mesh[] = []
+        const bb = new THREE.Box3().setFromObject(m)
+        const cx = (bb.min.x + bb.max.x) / 2, cz = bb.max.z + 0.6, cy = bb.min.y
+        for (let i = 0; i < 9; i++) {
+          const bw = 0.1, bh = 0.15 + i * 0.06
+          const barMat = new THREE.MeshStandardMaterial({ color: 0x4d8fff, emissive: 0x4d8fff, emissiveIntensity: 0, transparent: true, opacity: 0 })
+          const bar = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.06), barMat)
+          bar.position.set(cx + (i - 4) * 0.14, cy + bh / 2, cz)
+          bar.userData.baseH = bh; bar.userData.phase = Math.random() * 10; bar.userData.speed = 3 + Math.random() * 3
+          bar.visible = false
+          p.getScene()?.add(bar); bars.push(bar)
+        }
+        mediaGlbRefs.current.set(mcfg.entityId, { mesh: m, origScale, bars })
+        if (!clickables.current.includes(m)) clickables.current.push(m)
+      })
+    }
+  }, [p.mediaGlbMeshes, p.floor, p.glbLoaded])
+
   // ── Behavior filter: hide non-matching devices (except doors/windows) ──
   useEffect(() => {
     const showAll = !p.activeBehaviors || p.activeBehaviors.size === 0
@@ -389,13 +431,16 @@ export function useSceneContent(p: Props) {
         const pulse = 1 + 0.06 * Math.sin(t * 4)
         mesh.scale.set(origScale.x * pulse, origScale.y * pulse, origScale.z * 0.95 + 0.05 * Math.sin(t * 3))
         mesh.position.x += Math.sin(t * 5) * 0.003
-        bars.forEach((bar, i) => {
-          const freq = 3 + i * 2
-          const phase = i * 0.7
-          const h = bar.userData.baseH as number * (0.3 + 0.7 * (0.5 + 0.5 * Math.sin(t * freq + phase)))
-          bar.scale.y = h / (bar.userData.baseH as number)
+        bars.forEach((bar) => {
+          const baseH = bar.userData.baseH as number
+          const phase = bar.userData.phase as number
+          const speed = bar.userData.speed as number
+          const val = 0.2 + 0.8 * (0.5 + 0.5 * Math.sin(t * speed + phase))
+          bar.scale.y = val
+          bar.visible = true
           const mat = bar.material as THREE.MeshStandardMaterial
-          mat.emissiveIntensity = 0.2 + 0.6 * (0.5 + 0.5 * Math.sin(t * freq))
+          mat.opacity = 0.5 + 0.5 * val
+          mat.emissiveIntensity = 0.2 + 0.8 * val
         })
       } else {
         mesh.scale.copy(origScale)
@@ -434,6 +479,13 @@ export function useSceneContent(p: Props) {
         mM.color.set(0.15, 0.9, 0.35); mM.emissive.set(0.05, 0.5, 0.1); mM.emissiveIntensity = 0.4; mM.opacity = 0.85
         gM.color.set(0.1, 1, 0.3); gM.opacity = 0.06; ptLight.color.set(0.2, 1, 0.4); ptLight.intensity = 0
       }
+    })
+    mediaGlbRefs.current.forEach(({ mesh, origScale }, eid) => {
+      const st = p.statesRef.current.get(eid); if (!st) return
+      const on = st.state === 'on'
+      const mat = mesh.material as THREE.MeshStandardMaterial
+      if (on) { mat.color.set(1, 1, 1); mat.emissive.set(0.3, 0.5, 1); mat.emissiveIntensity = 0.5 }
+      else { mat.color.set(0.5, 0.5, 0.55); mat.emissive.setScalar(0); mat.emissiveIntensity = 0 }
     })
   }, [])
 
