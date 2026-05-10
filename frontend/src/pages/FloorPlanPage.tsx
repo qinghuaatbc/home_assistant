@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import * as THREE from 'three'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { useHa } from '../context/HaContext'
-import { HaState, Mappings, MappingEntry, BehaviorMap, FloorId, GlbLightCfg, SphereLightCfg, SensorCfg, SensorGlbCfg } from '../types'
+import { HaState, Mappings, MappingEntry, BehaviorMap, FloorId } from '../types'
 import { guessBehavior, BEHAVIORS, BehaviorSelect, BrightnessSlider, DevicePicker } from '../components/DevicePicker'
+import { useThreeScene } from '../hooks/useThreeScene'
+import { useSceneClick } from '../hooks/useSceneClick'
 
 const FW = 19, FD = 14, WH = 2.8, WT = 0.15, BR = 0.35
 const SR = 0.28  // sensor indicator radius
@@ -107,16 +109,11 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const HARDCODED = '4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce'
   const token = standaloneToken || ctxToken || HARDCODED
   const containerRef = useRef<HTMLDivElement>(null)
-
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null)
   const sceneRef     = useRef<THREE.Scene | null>(null)
   const cameraRef    = useRef<THREE.PerspectiveCamera | null>(null)
   const controlsRef  = useRef<OrbitControls | null>(null)
-  const animFrame    = useRef(0)
   const statesRef    = useRef(states)
-  const clock        = useRef(new THREE.Clock())
-  const isDragging   = useRef(false)
-  const ptrDown      = useRef({ x: 0, y: 0 })
 
   const fallbackRef = useRef<THREE.Group | null>(null)
   const glbModelRef = useRef<THREE.Group | null>(null)   // loaded GLB root, kept for late-arriving entities
@@ -206,161 +203,96 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   useEffect(() => { glbLightsRef.current = glbLights      }, [glbLights])
   useEffect(() => { senGlbRef.current    = sensorGlbMeshes }, [sensorGlbMeshes])
 
-  // ── Init Three.js once ────────────────────────────────────────────────────
-  useEffect(() => {
-    const el = containerRef.current; if (!el) return
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    const w = Math.max(el.clientWidth, 100)
-    const h = Math.max(el.clientHeight, 100)
-    renderer.setSize(w, h)
-    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap
-    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1
-    renderer.localClippingEnabled = true
-    el.appendChild(renderer.domElement); rendererRef.current = renderer
-
-    const scene = new THREE.Scene()
-    scene.background = new THREE.Color('#334466')
-    scene.fog = new THREE.FogExp2('#111113', 0.008)
-    sceneRef.current = scene
-
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6))
-    scene.add(new THREE.HemisphereLight(0xddeeff, 0x111122, 0.4))
-    const dir = new THREE.DirectionalLight(0xffffff, 1.2)
-    dir.position.set(8, 18, 10); dir.castShadow = true; dir.shadow.mapSize.setScalar(1024); scene.add(dir)
-
-    const camera = new THREE.PerspectiveCamera(48, el.clientWidth / el.clientHeight, 0.1, 200)
-    camera.position.set(0, 14, 13); cameraRef.current = camera
-
-    const controls = new OrbitControls(camera, renderer.domElement)
-    controls.enableDamping = true; controls.dampingFactor = 0.07
-    controls.target.set(0, 1, 0); controls.minDistance = 2
-    controls.maxDistance = 60; controls.maxPolarAngle = Math.PI / 2.05
-    controls.update(); controlsRef.current = controls
-
-    const animate = () => {
-      animFrame.current = requestAnimationFrame(animate)
-      const t = clock.current.getElapsedTime()
-
-      glbRefs.current.forEach(({ mesh, ptLight, origColor }, eid) => {
-        const st  = statesRef.current.get(eid)
-        const on  = st?.state === 'on'
-        const b   = ((st?.attributes?.brightness as number) ?? 255) / 255
-        const mat = mesh.material as THREE.MeshStandardMaterial
-        if (on) {
-          const p = 0.8 + 0.2 * Math.sin(t * 2.5)
-          mat.emissive.set(1, 0.92, 0.6); mat.emissiveIntensity = p * b * 3
-          mat.color.set(1, 0.98, 0.9);    ptLight.intensity = b * 5 * p
-        } else {
-          mat.emissive.setScalar(0); mat.emissiveIntensity = 0
-          mat.color.copy(origColor);  ptLight.intensity = 0
-        }
-      })
-
-      sphRefs.current.forEach(({ bulb, glow, ptLight }, eid) => {
-        const st  = statesRef.current.get(eid)
-        const on  = st?.state === 'on'
-        const b   = ((st?.attributes?.brightness as number) ?? 255) / 255
-        const bM  = bulb.material as THREE.MeshStandardMaterial
-        const gM  = glow.material as THREE.MeshStandardMaterial
-        if (on) {
-          const p = 0.78 + 0.22 * Math.sin(t * 2.8)
-          bM.emissiveIntensity = p * b * 2.5; bM.opacity = 1
-          gM.opacity = 0.10 + 0.06 * Math.sin(t * 2.8); gM.emissiveIntensity = p * b * 0.8
-          ptLight.intensity = b * 3 * p
-        } else {
-          bM.emissiveIntensity = 0.15; bM.opacity = 0.55
-          gM.opacity = 0.08; gM.emissiveIntensity = 0.05; ptLight.intensity = 0
-        }
-      })
-
-      // Door/window sensor GLB meshes: animate on open/close
-      senGlbRefs.current.forEach(({ doorObj, deviceClass }, eid) => {
-        const open = statesRef.current.get(eid)?.state === 'on'
-        if (deviceClass === 'garage_door' || deviceClass === 'curtain' || deviceClass === 'blind') {
-          // Clip-plane roll-up: bottom edge sweeps up, top stays fixed
-          const clipPlane = doorObj.userData.clipPlane as THREE.Plane | undefined
-          if (clipPlane) {
-            const wBot: number = doorObj.userData.worldBottomY
-            const wTop: number = doorObj.userData.worldTopY
-            const height = wTop - wBot
-            const openTarget = wBot + height * 0.9  // 10% left
-            const target = open ? -openTarget : -(wBot - height)
-            const step = height * 0.018  // fixed units/frame — no startup jump
-            const diff = target - clipPlane.constant
-            clipPlane.constant = Math.abs(diff) < step ? target : clipPlane.constant + Math.sign(diff) * step
-          }
-        } else {
-          // Hinged door rotates along Z
-          const targetRotZ = open ? doorObj.userData.origRotZ + (75 * Math.PI / 180) : doorObj.userData.origRotZ
-          doorObj.rotation.z = THREE.MathUtils.lerp(doorObj.rotation.z, targetRotZ, 0.03)
-        }
-      })
-
-      // Door/window sensors: green=closed, red=open with pulse
-      // Curtain/blind sensors: clip-plane roll-up (same as garage door)
-      senRefs.current.forEach(({ marker, glow, ptLight, deviceClass, clipPlane }, eid) => {
-        const st   = statesRef.current.get(eid)
-        const open = st?.state === 'on'
-        const mM   = marker.material as THREE.MeshStandardMaterial
-        const gM   = glow.material as THREE.MeshStandardMaterial
-
-        if ((deviceClass === 'curtain' || deviceClass === 'blind') && clipPlane) {
-          const wBot: number = marker.userData.worldBottomY
-          const wTop: number = marker.userData.worldTopY
+  // ── Init Three.js via hook ───────────────────────────────────────────────
+  const sceneHandle = useThreeScene(containerRef, (t) => {
+    glbRefs.current.forEach(({ mesh, ptLight, origColor }, eid) => {
+      const st  = statesRef.current.get(eid)
+      const on  = st?.state === 'on'
+      const b   = ((st?.attributes?.brightness as number) ?? 255) / 255
+      const mat = mesh.material as THREE.MeshStandardMaterial
+      if (on) {
+        const p = 0.8 + 0.2 * Math.sin(t * 2.5)
+        mat.emissive.set(1, 0.92, 0.6); mat.emissiveIntensity = p * b * 3
+        mat.color.set(1, 0.98, 0.9);    ptLight.intensity = b * 5 * p
+      } else {
+        mat.emissive.setScalar(0); mat.emissiveIntensity = 0
+        mat.color.copy(origColor);  ptLight.intensity = 0
+      }
+    })
+    sphRefs.current.forEach(({ bulb, glow, ptLight }, eid) => {
+      const st  = statesRef.current.get(eid)
+      const on  = st?.state === 'on'
+      const b   = ((st?.attributes?.brightness as number) ?? 255) / 255
+      const bM  = bulb.material as THREE.MeshStandardMaterial
+      const gM  = glow.material as THREE.MeshStandardMaterial
+      if (on) {
+        const p = 0.78 + 0.22 * Math.sin(t * 2.8)
+        bM.emissiveIntensity = p * b * 2.5; bM.opacity = 1
+        gM.opacity = 0.10 + 0.06 * Math.sin(t * 2.8); gM.emissiveIntensity = p * b * 0.8
+        ptLight.intensity = b * 3 * p
+      } else {
+        bM.emissiveIntensity = 0.15; bM.opacity = 0.55
+        gM.opacity = 0.08; gM.emissiveIntensity = 0.05; ptLight.intensity = 0
+      }
+    })
+    senGlbRefs.current.forEach(({ doorObj, deviceClass }, eid) => {
+      const open = statesRef.current.get(eid)?.state === 'on'
+      if (deviceClass === 'garage_door' || deviceClass === 'curtain' || deviceClass === 'blind') {
+        const clipPlane = doorObj.userData.clipPlane as THREE.Plane | undefined
+        if (clipPlane) {
+          const wBot: number = doorObj.userData.worldBottomY
+          const wTop: number = doorObj.userData.worldTopY
           const height = wTop - wBot
           const openTarget = wBot + height * 0.9
           const target = open ? -openTarget : -(wBot - height)
           const step = height * 0.018
           const diff = target - clipPlane.constant
           clipPlane.constant = Math.abs(diff) < step ? target : clipPlane.constant + Math.sign(diff) * step
-          mM.color.set(0.5, 0.75, 1); mM.emissive.set(0.1, 0.3, 0.8)
-          mM.emissiveIntensity = 0.3; mM.opacity = 0.7
-        } else if (open) {
-          const p = 0.7 + 0.3 * Math.sin(t * 4)
-          mM.color.set(1, 0.2, 0.1); mM.emissive.set(1, 0.1, 0.05)
-          mM.emissiveIntensity = p * 1.5; mM.opacity = 1
-          gM.color.set(1, 0.2, 0.1); gM.opacity = 0.18 + 0.1 * Math.sin(t * 4)
-          ptLight.color.set(1, 0.15, 0.05); ptLight.intensity = p * 2
-        } else {
-          mM.color.set(0.15, 0.9, 0.35); mM.emissive.set(0.05, 0.5, 0.1)
-          mM.emissiveIntensity = 0.4; mM.opacity = 0.85
-          gM.color.set(0.1, 1, 0.3); gM.opacity = 0.06
-          ptLight.color.set(0.2, 1, 0.4); ptLight.intensity = 0
         }
-      })
+      } else {
+        const targetRotZ = open ? doorObj.userData.origRotZ + (75 * Math.PI / 180) : doorObj.userData.origRotZ
+        doorObj.rotation.z = THREE.MathUtils.lerp(doorObj.rotation.z, targetRotZ, 0.03)
+      }
+    })
+    senRefs.current.forEach(({ marker, glow, ptLight, deviceClass, clipPlane }, eid) => {
+      const st   = statesRef.current.get(eid)
+      const open = st?.state === 'on'
+      const mM   = marker.material as THREE.MeshStandardMaterial
+      const gM   = glow.material as THREE.MeshStandardMaterial
+      if ((deviceClass === 'curtain' || deviceClass === 'blind') && clipPlane) {
+        const wBot: number = marker.userData.worldBottomY
+        const wTop: number = marker.userData.worldTopY
+        const height = wTop - wBot
+        const openTarget = wBot + height * 0.9
+        const target = open ? -openTarget : -(wBot - height)
+        const step = height * 0.018
+        const diff = target - clipPlane.constant
+        clipPlane.constant = Math.abs(diff) < step ? target : clipPlane.constant + Math.sign(diff) * step
+        mM.color.set(0.5, 0.75, 1); mM.emissive.set(0.1, 0.3, 0.8)
+        mM.emissiveIntensity = 0.3; mM.opacity = 0.7
+      } else if (open) {
+        const p = 0.7 + 0.3 * Math.sin(t * 4)
+        mM.color.set(1, 0.2, 0.1); mM.emissive.set(1, 0.1, 0.05)
+        mM.emissiveIntensity = p * 1.5; mM.opacity = 1
+        gM.color.set(1, 0.2, 0.1); gM.opacity = 0.18 + 0.1 * Math.sin(t * 4)
+        ptLight.color.set(1, 0.15, 0.05); ptLight.intensity = p * 2
+      } else {
+        mM.color.set(0.15, 0.9, 0.35); mM.emissive.set(0.05, 0.5, 0.1)
+        mM.emissiveIntensity = 0.4; mM.opacity = 0.85
+        gM.color.set(0.1, 1, 0.3); gM.opacity = 0.06
+        ptLight.color.set(0.2, 1, 0.4); ptLight.intensity = 0
+      }
+    })
+  })
 
-      controls.update(); renderer.render(scene, camera)
-    }
-    animate()
-
-    const doResize = () => {
-      const w = el.clientWidth, h = el.clientHeight
-      if (w === 0 || h === 0) return
-      camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h)
-    }
-
-    const ro = new ResizeObserver(doResize)
-    ro.observe(el)
-
-    let orientTimer: ReturnType<typeof setTimeout>
-    const onOrientationChange = () => {
-      clearTimeout(orientTimer)
-      orientTimer = setTimeout(doResize, 150)
-    }
-    window.addEventListener('orientationchange', onOrientationChange)
-    screen.orientation?.addEventListener('change', onOrientationChange)
-
-    return () => {
-      cancelAnimationFrame(animFrame.current); ro.disconnect()
-      window.removeEventListener('orientationchange', onOrientationChange)
-      screen.orientation?.removeEventListener('change', onOrientationChange)
-      clearTimeout(orientTimer)
-      renderer.dispose(); el.removeChild(renderer.domElement)
-      rendererRef.current = null; sceneRef.current = null; cameraRef.current = null; controlsRef.current = null
-    }
-  }, [])
+  useEffect(() => {
+    const h = sceneHandle.current
+    if (!h) return
+    sceneRef.current = h.scene
+    cameraRef.current = h.camera
+    rendererRef.current = h.renderer
+    controlsRef.current = h.controls
+  }, [sceneHandle])
 
   // ── Full scene rebuild — runs ONLY when floor changes ─────────────────────
   useEffect(() => {
@@ -587,47 +519,32 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     })
   }, [sensorMarkers, floor])
 
-  // ── Click detection ───────────────────────────────────────────────────────
-  const onPointerDown = (e: React.PointerEvent) => {
-    isDragging.current = false; ptrDown.current = { x: e.clientX, y: e.clientY }
-  }
-  const onPointerMove = (e: React.PointerEvent) => {
-    const dx = e.clientX - ptrDown.current.x, dy = e.clientY - ptrDown.current.y
-    if (Math.sqrt(dx * dx + dy * dy) > 5) isDragging.current = true
-  }
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (isDragging.current) return
-    const el = containerRef.current, cam = cameraRef.current; if (!el || !cam) return
-    setClickedMesh(null)
-    const rect = el.getBoundingClientRect()
-    const mouse = new THREE.Vector2(
-      ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1,
-    )
-    const ray = new THREE.Raycaster(); ray.setFromCamera(mouse, cam)
-    const hits = ray.intersectObjects(clickables.current, false)
-    if (hits.length > 0) {
-      const eid = hits[0].object.userData.entityId as string
-      const hitName = (hits[0].object.name as string) || (hits[0].object.userData.meshName as string) || ''
+  // ── Click detection via hook ─────────────────────────────────────────────
+  const { onPointerDown, onPointerMove, onPointerUp } = useSceneClick(
+    containerRef,
+    () => cameraRef.current,
+    () => clickables.current,
+    (result) => {
+      setClickedMesh(null)
       if (editMode) {
-        setSelectedId(eid || null)
-        if (hitName) setClickedMesh(hitName)
+        setSelectedId(result.entityId || null)
+        if (result.meshName) setClickedMesh(result.meshName)
         return
       }
-      if (eid) {
-        setSelectedId(eid)
-        const st = statesRef.current.get(eid)
+      if (result.entityId) {
+        setSelectedId(result.entityId)
+        const st = statesRef.current.get(result.entityId)
         const newState = st?.state === 'on' ? 'off' : 'on'
         const updated = { ...st!, state: newState }
-        statesRef.current = new Map(statesRef.current).set(eid, updated)
-        const cur = states.get(eid)
-        fetch(`/api/states/${eid}`, {
+        statesRef.current = new Map(statesRef.current).set(result.entityId, updated)
+        const cur = states.get(result.entityId)
+        fetch(`/api/states/${result.entityId}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer 4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce` },
           body: JSON.stringify({ state: newState, attributes: { ...cur?.attributes } }),
         })
-      }
-    } else setSelectedId(null)
-  }
+      } else setSelectedId(null)
+    },
+  )
 
   // ── Controls ──────────────────────────────────────────────────────────────
   const selState     = selectedId ? states.get(selectedId) : null
