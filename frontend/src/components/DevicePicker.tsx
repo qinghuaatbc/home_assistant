@@ -4,7 +4,7 @@ import { HaState, DeviceItem } from '../types'
 export function guessBehavior(entityId: string): string {
   if (entityId.startsWith('light.')) return 'light'
   if (entityId.startsWith('media_player.')) return 'media_player'
-  if (entityId.startsWith('binary_sensor.')) return 'door'
+  if (entityId.startsWith('binary_sensor.')) return 'door_r'
   if (entityId.startsWith('switch.')) return 'switch'
   return 'light'
 }
@@ -17,7 +17,8 @@ export interface BehaviorOption {
 
 export const BEHAVIORS: BehaviorOption[] = [
   { id: 'light', label: '💡 Light', desc: 'On/off with brightness' },
-  { id: 'door', label: '🚪 Door', desc: 'Hinged open/close' },
+  { id: 'door_r', label: '🚪 Door (Rotate)', desc: 'Hinged open/close' },
+  { id: 'door_s', label: '🚪 Door (Slide)', desc: 'Sliding open/close' },
   { id: 'window', label: '🪟 Window', desc: 'Open/close window' },
   { id: 'curtain', label: '🪟 Curtain', desc: 'Roll-up/down' },
   { id: 'garage_door', label: '🚗 Garage', desc: 'Roll-up/down' },

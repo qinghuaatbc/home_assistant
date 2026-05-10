@@ -18,6 +18,7 @@ const DEMO_ENTITIES: Array<{ entity_id: string; name: string; type: string; attr
   { entity_id: 'switch.alarm_siren', name: 'Alarm Siren', type: 'switch' },
   { entity_id: 'binary_sensor.front_door', name: 'Front Door', type: 'binary_sensor', attrs: { device_class: 'door' } },
   { entity_id: 'binary_sensor.back_door', name: 'Back Door', type: 'binary_sensor', attrs: { device_class: 'door' } },
+  { entity_id: 'binary_sensor.patio_door', name: 'Patio Door', type: 'binary_sensor', attrs: { device_class: 'door' } },
   { entity_id: 'binary_sensor.garage_door', name: 'Garage Door', type: 'binary_sensor', attrs: { device_class: 'garage_door' } },
   { entity_id: 'binary_sensor.motion', name: 'Motion Sensor', type: 'binary_sensor', attrs: { device_class: 'motion' } },
   { entity_id: 'binary_sensor.living_room_curtain', name: 'Living Room Curtain', type: 'binary_sensor', attrs: { device_class: 'curtain' } },

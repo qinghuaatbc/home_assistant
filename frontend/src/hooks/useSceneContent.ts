@@ -81,6 +81,7 @@ interface Props {
   getRenderer: () => THREE.WebGLRenderer | null
   floor: FloorId
   activeBehaviors: Set<string> | null
+  getBehavior: (eid: string) => string
   statesRef: React.MutableRefObject<Map<string, HaState>>
   glbLights: Array<{ entityId: string; name: string; floor: FloorId; meshName: string }>
   sphereLights: Array<{ entityId: string; name: string; floor: FloorId; x: number; z: number }>
@@ -101,7 +102,7 @@ export function useSceneContent(p: Props) {
   const glbRefs = useRef(new Map<string, { mesh: THREE.Mesh; ptLight: THREE.PointLight; origColor: THREE.Color }>())
   const sphRefs = useRef(new Map<string, { bulb: THREE.Mesh; glow: THREE.Mesh; ptLight: THREE.PointLight }>())
   const senRefs = useRef(new Map<string, { marker: THREE.Mesh; glow: THREE.Mesh; ptLight: THREE.PointLight; deviceClass: string; clipPlane?: THREE.Plane }>())
-  const senGlbRefs = useRef(new Map<string, { meshes: THREE.Mesh[]; ptLight: THREE.PointLight; origColors: THREE.Color[]; doorObj: THREE.Object3D; origRotY: number; deviceClass: string; origPosY: number }>())
+  const senGlbRefs = useRef(new Map<string, { meshes: THREE.Mesh[]; ptLight: THREE.PointLight; origColors: THREE.Color[]; doorObj: THREE.Object3D; origRotY: number; deviceClass: string; origPosY: number; behavior?: string }>())
   const clickables = useRef<THREE.Mesh[]>([])
   const addedSphIds = useRef(new Set<string>())
   const addedSenIds = useRef(new Set<string>())
@@ -201,7 +202,7 @@ export function useSceneContent(p: Props) {
             doorObj.userData.clipPlane = clipPlane; doorObj.userData.worldBottomY = b.min.y; doorObj.userData.worldTopY = b.max.y
             meshes.forEach(m => { (m.material as THREE.MeshStandardMaterial).clippingPlanes = [clipPlane] })
           }
-          senGlbRefs.current.set(cfg.entityId, { meshes, ptLight: pl, origColors, doorObj, origRotY: doorObj.rotation.y, deviceClass: cfg.deviceClass, origPosY })
+          senGlbRefs.current.set(cfg.entityId, { meshes, ptLight: pl, origColors, doorObj, origRotY: doorObj.rotation.y, deviceClass: cfg.deviceClass, origPosY, behavior: p.getBehavior(cfg.entityId) })
         })
         p.onMeshNames(names.filter((v, i, a) => a.indexOf(v) === i))
         glbModelRef.current = model
@@ -252,7 +253,7 @@ export function useSceneContent(p: Props) {
         doorObj.userData.clipPlane = clipPlane; doorObj.userData.worldBottomY = b.min.y; doorObj.userData.worldTopY = b.max.y
         meshes.forEach(m => { (m.material as THREE.MeshStandardMaterial).clippingPlanes = [clipPlane] })
       }
-      senGlbRefs.current.set(cfg.entityId, { meshes, ptLight: pl, origColors, doorObj, origRotY: doorObj.rotation.y, deviceClass: cfg.deviceClass, origPosY })
+      senGlbRefs.current.set(cfg.entityId, { meshes, ptLight: pl, origColors, doorObj, origRotY: doorObj.rotation.y, deviceClass: cfg.deviceClass, origPosY, behavior: p.getBehavior(cfg.entityId) })
     })
   }, [p.sensorGlbMeshes, p.floor])
 
@@ -310,6 +311,7 @@ export function useSceneContent(p: Props) {
         else if (dc === 'garage_door') match = p.activeBehaviors!.has('garage_door')
         else if (dc === 'curtain' || dc === 'blind') match = p.activeBehaviors!.has('curtain')
         else if (dc === 'door' || dc === 'window') match = true // always visible
+        else if (eid.startsWith('binary_sensor.') && dc === 'door') match = true // door_r/door_s always visible
       }
       objs.forEach(o => { o.visible = match })
     }
@@ -321,7 +323,7 @@ export function useSceneContent(p: Props) {
 
   // ── Per-frame: smooth door/curtain animation ──────────────────────────
   const onAnimate = useCallback((t: number) => {
-    senGlbRefs.current.forEach(({ doorObj, deviceClass }, eid) => {
+    senGlbRefs.current.forEach(({ doorObj, deviceClass, behavior }, eid) => {
       const open = p.statesRef.current.get(eid)?.state === 'on'
       if (deviceClass === 'garage_door' || deviceClass === 'curtain' || deviceClass === 'blind') {
         const cp = doorObj.userData.clipPlane as THREE.Plane | undefined
@@ -331,7 +333,14 @@ export function useSceneContent(p: Props) {
           const target = open ? -openTarget : -(wBot - height); const step = height * 0.018
           const diff = target - cp.constant; cp.constant = Math.abs(diff) < step ? target : cp.constant + Math.sign(diff) * step
         }
+      } else if (behavior === 'door_s') {
+        // Sliding door: translate along Z
+        const origZ = (doorObj.userData.origSlideZ as number) ?? doorObj.position.z
+        if (!doorObj.userData.origSlideZ) doorObj.userData.origSlideZ = doorObj.position.z
+        const targetZ = open ? origZ - 0.6 : origZ
+        doorObj.position.z = THREE.MathUtils.lerp(doorObj.position.z, targetZ, 0.03)
       } else {
+        // Rotation door (door_r): rotate along Z
         const targetRotZ = open ? doorObj.userData.origRotZ + (75 * Math.PI / 180) : doorObj.userData.origRotZ
         doorObj.rotation.z = THREE.MathUtils.lerp(doorObj.rotation.z, targetRotZ, 0.03)
       }

@@ -147,7 +147,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     getCamera: () => cameraRef.current,
     getControls: () => controlsRef.current,
     getRenderer: () => rendererRef.current,
-    floor, statesRef, activeBehaviors,
+    floor, statesRef, activeBehaviors, getBehavior: (eid) => guessBehavior(eid),
     glbLights, sphereLights, sensorMarkers, sensorGlbMeshes,
     glbLoading, glbLoaded, glbError,
     onGlbStart: () => { setGlbLoaded(false); setGlbLoading(true) },
@@ -166,7 +166,13 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     () => cameraRef.current,
     () => clickables.current, // from useSceneContent
     (result) => {
-      // Behavior filter: if activeBehaviors set, only allow matching entities
+      let meshName = result.meshName
+      if (!meshName && result.entityId) {
+        for (const [m, v] of Object.entries(mappings)) {
+          const e = typeof v === 'string' ? v : v.entity
+          if (e === result.entityId) { meshName = m; break }
+        }
+      }
       if (result.entityId && activeBehaviors) {
         const dc = states.get(result.entityId)?.attributes?.device_class as string | undefined
         let beh = ''
@@ -175,16 +181,11 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         else if (result.entityId.startsWith('switch.')) beh = 'switch'
         else if (dc === 'garage_door') beh = 'garage_door'
         else if (dc === 'curtain' || dc === 'blind') beh = 'curtain'
-        else if (dc === 'door') beh = 'door'
-        else if (dc === 'window') beh = 'window'
-        if (!activeBehaviors.has(beh)) return // not in filter → ignore click
-      }
-      let meshName = result.meshName
-      if (!meshName && result.entityId) {
-        for (const [m, v] of Object.entries(mappings)) {
-          const e = typeof v === 'string' ? v : v.entity
-          if (e === result.entityId) { meshName = m; break }
+        else if (dc === 'door') {
+          beh = (meshName ? behaviors[meshName] : undefined) || guessBehavior(result.entityId)
         }
+        else if (dc === 'window') beh = 'window'
+        if (!activeBehaviors.has(beh)) return
       }
       setClickedMesh(null)
       setTimeout(() => {
