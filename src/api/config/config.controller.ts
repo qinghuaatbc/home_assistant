@@ -1,10 +1,11 @@
-import { Controller, Get, Put, Post, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Post, Delete, Param, Body, UseGuards, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { StateMachineService } from '../../core/state-machine/state-machine.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 
 const MAPPINGS_FILE = '3d-mappings.json';
 const FLOORS_FILE = 'floors.json';
@@ -86,6 +87,43 @@ export class ConfigController {
     else floors.push(entry);
     fs.writeFileSync(fp, JSON.stringify(floors, null, 2), 'utf-8');
     return { ok: true, floors };
+  }
+
+  @Post('apply')
+  @ApiOperation({ summary: 'Save integration config and restart server' })
+  async applyConfig(@Body() body: { integrations: any[] }) {
+    const logger = new Logger('ConfigApply');
+    const yamlPath = path.resolve(process.cwd(), 'config', 'configuration.yaml');
+    const existing = fs.readFileSync(yamlPath, 'utf-8');
+    // Preserve top-level config (http, auth, database, etc.), only replace integrations block
+    const lines = existing.split('\n');
+    const intStart = lines.findIndex(l => l.trim() === 'integrations:');
+    const newLines = [
+      ...(intStart >= 0 ? lines.slice(0, intStart) : lines),
+      'integrations:',
+      ...body.integrations.map((int: any) => {
+        const out = [`  - domain: ${int.domain}`]
+        for (const [k, v] of Object.entries(int)) {
+          if (k === 'domain') continue
+          if (Array.isArray(v)) {
+            out.push(`    ${k}:`)
+            for (const item of v) {
+              if (typeof item === 'object') {
+                out.push(`      - ${Object.entries(item).map(([ik, iv]) => `${ik}: ${iv}`).join('\n        ')}`)
+              }
+            }
+          } else if (typeof v === 'string') {
+            out.push(`    ${k}: "${v}"`)
+          }
+        }
+        return out.join('\n')
+      }),
+    ]
+    fs.writeFileSync(yamlPath, newLines.join('\n') + '\n', 'utf-8');
+    logger.log('Configuration saved, restarting...');
+    // Restart via PM2
+    try { execSync('pm2 restart home-assistant', { timeout: 5000 }) } catch {}
+    return { ok: true, message: 'Configuration saved. Server restarting…' };
   }
 
   @Delete('floors/:id')

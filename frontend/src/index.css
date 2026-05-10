@@ -863,3 +863,9 @@ input[type=range].ios-range::-webkit-slider-thumb {
   background: var(--blue);
   color: #fff;
 }
+
+@media (max-width: 600px) {
+  .fp-edit-panel { width: calc(100vw - 48px) !important; left: 12px !important; }
+  .fp-floor-btns { gap: 4px; }
+  .fp-floor-btn { padding: 4px 10px; font-size: 12px; }
+}
