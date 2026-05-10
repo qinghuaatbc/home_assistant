@@ -231,9 +231,9 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       const b   = ((st?.attributes?.brightness as number) ?? 255) / 255
       const mat = mesh.material as THREE.MeshStandardMaterial
       if (on) {
-          const p = 0.9 + 0.1 * Math.sin(t * 2.5)
-          mat.emissive.set(1, 0.95, 0.7); mat.emissiveIntensity = (p * b * 8)
-          mat.color.set(1, 1, 0.95);      ptLight.intensity = b * 12 * p
+          const p = 0.95 + 0.05 * Math.sin(t * 2.5)
+          mat.emissive.set(1, 0.98, 0.8); mat.emissiveIntensity = p * b * 20
+          mat.color.set(1, 1, 1);         ptLight.intensity = b * 25 * p
         } else {
           mat.emissive.setScalar(0); mat.emissiveIntensity = 0
           mat.color.copy(origColor);  ptLight.intensity = 0
@@ -246,10 +246,10 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       const bM  = bulb.material as THREE.MeshStandardMaterial
       const gM  = glow.material as THREE.MeshStandardMaterial
       if (on) {
-          const p = 0.85 + 0.15 * Math.sin(t * 2.8)
-          bM.emissiveIntensity = p * b * 6; bM.opacity = 1
-          gM.opacity = 0.15 + 0.08 * Math.sin(t * 2.8); gM.emissiveIntensity = p * b * 2
-          ptLight.intensity = b * 8 * p
+          const p = 0.9 + 0.1 * Math.sin(t * 2.8)
+          bM.emissiveIntensity = p * b * 15; bM.opacity = 1
+          gM.opacity = 0.2 + 0.1 * Math.sin(t * 2.8); gM.emissiveIntensity = p * b * 5
+          ptLight.intensity = b * 20 * p
         } else {
           bM.emissiveIntensity = 0.15; bM.opacity = 0.55
           gM.opacity = 0.08; gM.emissiveIntensity = 0.05; ptLight.intensity = 0
