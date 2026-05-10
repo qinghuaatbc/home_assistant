@@ -1,12 +1,18 @@
 let ctx: AudioContext | null = null
+let muted = false
+
+export function setSoundMuted(v: boolean) { muted = v }
+export function isSoundMuted() { return muted }
 
 function getCtx(): AudioContext {
+  if (muted) return null!
   if (!ctx) ctx = new AudioContext()
   return ctx
 }
 
 function playTone(freq: number, duration: number, type: OscillatorType = 'sine', volume = 0.15) {
   const c = getCtx()
+  if (!c) return
   const o = c.createOscillator()
   const g = c.createGain()
   o.type = type
@@ -20,6 +26,7 @@ function playTone(freq: number, duration: number, type: OscillatorType = 'sine',
 
 function playNoise(duration: number, volume = 0.08) {
   const c = getCtx()
+  if (!c) return
   const buf = c.createBuffer(1, c.sampleRate * duration, c.sampleRate)
   const data = buf.getChannelData(0)
   for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2)
@@ -43,22 +50,40 @@ export function playLightToggle(on: boolean) {
 }
 
 export function playDoorToggle(open: boolean) {
-  const dur = 0.8
   const c = getCtx()
-  for (let i = 0; i < 3; i++) {
+  if (!c) return
+  if (open) {
+    // Creak open: low groan rising into a squeak
+    const dur = 0.5
+    const o1 = c.createOscillator()
+    const g1 = c.createGain()
+    o1.type = 'sawtooth'
+    o1.frequency.setValueAtTime(90, c.currentTime)
+    o1.frequency.linearRampToValueAtTime(160, c.currentTime + dur * 0.6)
+    o1.frequency.linearRampToValueAtTime(200, c.currentTime + dur)
+    g1.gain.setValueAtTime(0.08, c.currentTime)
+    g1.gain.linearRampToValueAtTime(0.04, c.currentTime + dur * 0.5)
+    g1.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur)
+    o1.connect(g1).connect(c.destination)
+    o1.start(); o1.stop(c.currentTime + dur)
+    playNoise(dur * 0.8, 0.05)
+    // Latch release click at the end
+    setTimeout(() => playTone(800, 0.04, 'square', 0.05), dur * 1000)
+  } else {
+    // Close: thud + latch click
+    const dur = 0.3
+    playNoise(0.1, 0.1)  // thud
+    setTimeout(() => playTone(1200, 0.03, 'square', 0.06), 150) // latch click
     const o = c.createOscillator()
     const g = c.createGain()
-    o.type = 'sawtooth'
-    const t = c.currentTime + i * 0.25
-    const f = open ? 180 - i * 30 : 120 + i * 40
-    o.frequency.setValueAtTime(f, t)
-    o.frequency.linearRampToValueAtTime(f + (open ? -40 : 40), t + 0.3)
-    g.gain.setValueAtTime(0.08 - i * 0.02, t)
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35)
+    o.type = 'sine'
+    o.frequency.setValueAtTime(60, c.currentTime)
+    o.frequency.exponentialRampToValueAtTime(20, c.currentTime + 0.15)
+    g.gain.setValueAtTime(0.12, c.currentTime)
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.15)
     o.connect(g).connect(c.destination)
-    o.start(t); o.stop(t + 0.35)
+    o.start(); o.stop(c.currentTime + 0.15)
   }
-  playNoise(dur, 0.06)
 }
 
 export function playGarageToggle(open: boolean) {

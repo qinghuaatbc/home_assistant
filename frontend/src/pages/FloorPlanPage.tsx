@@ -6,7 +6,7 @@ import { useHa } from '../context/HaContext'
 import { useToast } from '../context/ToastContext'
 import { HaState, Mappings, MappingEntry, BehaviorMap, FloorId } from '../types'
 import { guessBehavior, BEHAVIORS, BrightnessSlider, DevicePicker } from '../components/DevicePicker'
-import { playLightToggle, playDoorToggle, playGarageToggle, playCurtainToggle, playMediaToggle, playSwitchToggle } from '../utils/sounds'
+import { playLightToggle, playDoorToggle, playGarageToggle, playCurtainToggle, playMediaToggle, playSwitchToggle, setSoundMuted, isSoundMuted } from '../utils/sounds'
 import EditPanel from '../components/EditPanel'
 import { useThreeScene } from '../hooks/useThreeScene'
 import { useSceneClick } from '../hooks/useSceneClick'
@@ -146,6 +146,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const [clickedMesh, setClickedMesh] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null)
   const [localRev, setLocalRev] = useState(0) // increment to trigger re-render after local toggle
+  const [soundOn, setSoundOn] = useState(!isSoundMuted())
   const getState = (eid: string) => statesRef.current.get(eid) || states.get(eid)
 
   // Load floor names
@@ -702,6 +703,10 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         <div className="fp-header">
           <span className="fp-title">3D Floor Plan</span>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button className="btn" style={{ fontSize: 10, padding: '3px 8px', opacity: soundOn ? 1 : 0.4 }}
+              onClick={() => { setSoundMuted(soundOn); setSoundOn(!soundOn) }}>
+              {soundOn ? '🔊' : '🔇'}
+            </button>
             <button className="btn" style={{ fontSize: 10, padding: '3px 8px' }}
               onClick={() => onFullscreenChange?.(true)}>⛶</button>
             <button className={`btn${editMode ? ' active' : ''}`} style={{ fontSize: 10, padding: '3px 8px' }}
