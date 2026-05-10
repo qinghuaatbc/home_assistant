@@ -80,13 +80,14 @@ interface Props {
   getControls: () => any | null
   getRenderer: () => THREE.WebGLRenderer | null
   floor: FloorId
+  statesRef: React.MutableRefObject<Map<string, HaState>>
   activeBehaviors: Set<string> | null
   getBehavior: (eid: string) => string
-  statesRef: React.MutableRefObject<Map<string, HaState>>
-  glbLights: Array<{ entityId: string; name: string; floor: FloorId; meshName: string }>
-  sphereLights: Array<{ entityId: string; name: string; floor: FloorId; x: number; z: number }>
-  sensorMarkers: Array<{ entityId: string; name: string; floor: FloorId; x: number; z: number; deviceClass: string }>
-  sensorGlbMeshes: Array<{ entityId: string; name: string; floor: FloorId; meshName: string; deviceClass: string; pos?: [number, number] }>
+  glbLights: Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string }>
+  sphereLights: Array<{ entityId: string; name: string; floor: 1|2|3; x: number; z: number }>
+  sensorMarkers: Array<{ entityId: string; name: string; floor: 1|2|3; x: number; z: number; deviceClass: string }>
+  sensorGlbMeshes: Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string; deviceClass: string; pos?: [number, number] }>
+  mediaGlbMeshes: Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string }>
   glbLoading: boolean
   glbLoaded: boolean
   glbError: boolean
@@ -108,6 +109,7 @@ export function useSceneContent(p: Props) {
   const addedSenIds = useRef(new Set<string>())
   const glbLightsRef = useRef(p.glbLights)
   const senGlbRef = useRef(p.sensorGlbMeshes)
+  const mediaGlbRefs = useRef(new Map<string, { mesh: THREE.Mesh; origScale: THREE.Vector3; bars: THREE.Mesh[] }>())
 
   useEffect(() => { glbLightsRef.current = p.glbLights }, [p.glbLights])
   useEffect(() => { senGlbRef.current = p.sensorGlbMeshes }, [p.sensorGlbMeshes])
@@ -203,6 +205,30 @@ export function useSceneContent(p: Props) {
             meshes.forEach(m => { (m.material as THREE.MeshStandardMaterial).clippingPlanes = [clipPlane] })
           }
           senGlbRefs.current.set(cfg.entityId, { meshes, ptLight: pl, origColors, doorObj, origRotY: doorObj.rotation.y, deviceClass: cfg.deviceClass, origPosY, behavior: p.getBehavior(cfg.entityId) })
+        })
+        // Process media player meshes
+        const floorMedia = p.mediaGlbMeshes.filter(l => l.floor === p.floor)
+        model.traverse(child => {
+          const m = child as THREE.Mesh; if (!m.isMesh) return
+          const mcfg = floorMedia.find(l => l.meshName === child.name)
+          if (!mcfg) return
+          if (mediaGlbRefs.current.has(mcfg.entityId)) return
+          m.userData.entityId = mcfg.entityId
+          const origScale = m.scale.clone()
+          // Create frequency bars
+          const bars: THREE.Mesh[] = []
+          const barMat = new THREE.MeshStandardMaterial({ color: 0x4d8fff, emissive: 0x4d8fff, emissiveIntensity: 0.3, transparent: true, opacity: 0.8 })
+          const bb = new THREE.Box3().setFromObject(m)
+          const cx = (bb.min.x + bb.max.x) / 2, cz = bb.max.z + 0.3, cy = bb.min.y
+          for (let i = 0; i < 5; i++) {
+            const bw = 0.04, bh = 0.05 + i * 0.03
+            const bar = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.04), barMat)
+            bar.position.set(cx + (i - 2) * 0.08, cy + bh / 2, cz)
+            bar.userData.baseH = bh
+            scene.add(bar); bars.push(bar)
+          }
+          mediaGlbRefs.current.set(mcfg.entityId, { mesh: m, origScale, bars })
+          clickables.current.push(m)
         })
         p.onMeshNames(names.filter((v, i, a) => a.indexOf(v) === i))
         glbModelRef.current = model
@@ -355,9 +381,32 @@ export function useSceneContent(p: Props) {
         const diff = target - clipPlane.constant; clipPlane.constant = Math.abs(diff) < step ? target : clipPlane.constant + Math.sign(diff) * step
       }
     })
+    // Media player: pulsing scale + shake + frequency bars
+    mediaGlbRefs.current.forEach(({ mesh, origScale, bars }, eid) => {
+      const st = p.statesRef.current.get(eid)
+      const on = st?.state === 'on'
+      if (on) {
+        const pulse = 1 + 0.06 * Math.sin(t * 4)
+        mesh.scale.set(origScale.x * pulse, origScale.y * pulse, origScale.z * 0.95 + 0.05 * Math.sin(t * 3))
+        mesh.position.x += Math.sin(t * 5) * 0.003
+        bars.forEach((bar, i) => {
+          const freq = 3 + i * 2
+          const phase = i * 0.7
+          const h = bar.userData.baseH as number * (0.3 + 0.7 * (0.5 + 0.5 * Math.sin(t * freq + phase)))
+          bar.scale.y = h / (bar.userData.baseH as number)
+          const mat = bar.material as THREE.MeshStandardMaterial
+          mat.emissiveIntensity = 0.2 + 0.6 * (0.5 + 0.5 * Math.sin(t * freq))
+        })
+      } else {
+        mesh.scale.copy(origScale)
+        bars.forEach(bar => {
+          bar.scale.y = 1
+          const mat = bar.material as THREE.MeshStandardMaterial
+          mat.emissiveIntensity = 0.3
+        })
+      }
+    })
   }, [])
-
-  // ── Instant visual update on state change ──────────────────────────
   const updateVisuals = useCallback(() => {
     glbRefs.current.forEach(({ mesh, ptLight, origColor }, eid) => {
       const st = p.statesRef.current.get(eid); if (!st) return

@@ -92,11 +92,12 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   }
 
   // ── Derive layout from state attributes + saved mappings ─────────────────
-  const { glbLights, sphereLights, sensorMarkers, sensorGlbMeshes } = useMemo(() => {
+    const { glbLights, sphereLights, sensorMarkers, sensorGlbMeshes, mediaGlbMeshes } = useMemo(() => {
     const glb:    Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string }> = []
     const sph:    Array<{ entityId: string; name: string; floor: 1|2|3; x: number; z: number }> = []
     const sen:    Array<{ entityId: string; name: string; floor: 1|2|3; x: number; z: number; deviceClass: string }> = []
     const senGlb: Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string; deviceClass: string; pos?: [number, number] }> = []
+    const med:    Array<{ entityId: string; name: string; floor: 1|2|3; meshName: string }> = []
 
     const entityToMesh = new Map<string, string>()
     for (const [mesh, val] of Object.entries(mappings)) {
@@ -120,9 +121,11 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
           const pos = Array.isArray(a.glb_pos) ? [(a.glb_pos as number[])[0], (a.glb_pos as number[])[1]] as [number, number] : undefined
           senGlb.push({ entityId, name, floor: f as 1|2|3, meshName, deviceClass: dc, pos })
         } else if (Array.isArray(a.glb_pos)) sen.push({ entityId, name, floor: f as 1|2|3, x: (a.glb_pos as number[])[0], z: (a.glb_pos as number[])[1], deviceClass: dc })
+      } else if (entityId.startsWith('media_player.')) {
+        if (meshName) med.push({ entityId, name, floor: f as 1|2|3, meshName })
       }
     })
-    return { glbLights: glb, sphereLights: sph, sensorMarkers: sen, sensorGlbMeshes: senGlb }
+    return { glbLights: glb, sphereLights: sph, sensorMarkers: sen, sensorGlbMeshes: senGlb, mediaGlbMeshes: med }
   }, [states, mappings])
 
   useEffect(() => { statesRef.current = states }, [states])
@@ -148,7 +151,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     getControls: () => controlsRef.current,
     getRenderer: () => rendererRef.current,
     floor, statesRef, activeBehaviors, getBehavior: (eid) => guessBehavior(eid),
-    glbLights, sphereLights, sensorMarkers, sensorGlbMeshes,
+    glbLights, sphereLights, sensorMarkers, sensorGlbMeshes, mediaGlbMeshes,
     glbLoading, glbLoaded, glbError,
     onGlbStart: () => { setGlbLoaded(false); setGlbLoading(true) },
     onGlbSuccess: () => { setGlbLoading(false); setGlbLoaded(true) },
