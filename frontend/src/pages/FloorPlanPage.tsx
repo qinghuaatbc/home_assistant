@@ -6,6 +6,7 @@ import { useHa } from '../context/HaContext'
 import { useToast } from '../context/ToastContext'
 import { HaState, Mappings, MappingEntry, BehaviorMap, FloorId } from '../types'
 import { guessBehavior, BEHAVIORS, BrightnessSlider, DevicePicker } from '../components/DevicePicker'
+import { playLightToggle, playDoorToggle, playGarageToggle, playCurtainToggle, playMediaToggle, playSwitchToggle } from '../utils/sounds'
 import EditPanel from '../components/EditPanel'
 import { useThreeScene } from '../hooks/useThreeScene'
 import { useSceneClick } from '../hooks/useSceneClick'
@@ -566,6 +567,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
           const newState = st?.state === 'on' ? 'off' : 'on'
           statesRef.current = new Map(statesRef.current).set(result.entityId, { ...st!, state: newState })
           setLocalRev(n => n + 1)
+          playBehaviorSound(result.entityId, newState === 'on')
           haSetState(result.entityId, newState)
         } else setSelectedId(null)
       }, 0)
@@ -591,6 +593,18 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     } catch { toast('Network error', 'error') }
   }
 
+  const playBehaviorSound = (eid: string, on: boolean) => {
+    if (eid.startsWith('light.')) playLightToggle(on)
+    else if (eid.startsWith('media_player.')) playMediaToggle(on)
+    else if (eid.startsWith('switch.')) playSwitchToggle(on)
+    else if (eid.startsWith('binary_sensor.')) {
+      const dc = states.get(eid)?.attributes?.device_class as string
+      if (dc === 'garage_door') playGarageToggle(on)
+      else if (dc === 'curtain' || dc === 'blind') playCurtainToggle(on)
+      else playDoorToggle(on)
+    } else playSwitchToggle(on)
+  }
+
   const selBrightPct = selState?.attributes?.brightness != null
     ? Math.round(((selState.attributes.brightness as number) / 255) * 100) : 100
   const toggle = () => {
@@ -598,6 +612,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     const newState = selOn ? 'off' : 'on'
     statesRef.current = new Map(statesRef.current).set(selectedId, { ...selState!, state: newState })
     setLocalRev(n => n + 1)
+    playBehaviorSound(selectedId, newState === 'on')
     haSetState(selectedId, newState)
   }
   const setBright = (pct: number) => {
