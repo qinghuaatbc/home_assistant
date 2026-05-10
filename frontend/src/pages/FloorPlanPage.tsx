@@ -3,8 +3,10 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { useHa } from '../context/HaContext'
+import { useToast } from '../context/ToastContext'
 import { HaState, Mappings, MappingEntry, BehaviorMap, FloorId } from '../types'
-import { guessBehavior, BEHAVIORS, BehaviorSelect, BrightnessSlider, DevicePicker } from '../components/DevicePicker'
+import { guessBehavior, BEHAVIORS, BrightnessSlider, DevicePicker } from '../components/DevicePicker'
+import EditPanel from '../components/EditPanel'
 import { useThreeScene } from '../hooks/useThreeScene'
 import { useSceneClick } from '../hooks/useSceneClick'
 
@@ -106,6 +108,7 @@ function makeSensorMarker(x: number, z: number, entityId: string, deviceClass: s
 
 export default function FloorPlanPage({ fullscreen, onFullscreenChange, standaloneToken }: { fullscreen?: boolean; onFullscreenChange?: (v: boolean) => void; standaloneToken?: string | null }) {
   const { token: ctxToken, states, callService } = useHa()
+  const { toast } = useToast()
   const HARDCODED = '4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce'
   const token = standaloneToken || ctxToken || HARDCODED
   const containerRef = useRef<HTMLDivElement>(null)
@@ -141,6 +144,8 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const [mappingDirty, setMappingDirty] = useState(false)
   const [clickedMesh, setClickedMesh] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null)
+  const [localRev, setLocalRev] = useState(0) // increment to trigger re-render after local toggle
+  const getState = (eid: string) => statesRef.current.get(eid) || states.get(eid)
 
   // Load floor names
   useEffect(() => {
@@ -155,14 +160,29 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
 
   const saveAll = async (m: Mappings, b: BehaviorMap) => {
     if (!token) return
-    const extended: Record<string, MappingEntry> = {}
+    const body = buildMappingsPayload(m, b)
+    try {
+      const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: body }) })
+      if (!r.ok) toast('Save failed', 'error')
+    } catch { toast('Network error saving mappings', 'error') }
+  }
+
+  const saveMappings = async (m: Mappings, b: BehaviorMap) => {
+    if (!token) return
+    const body = buildMappingsPayload(m, b)
+    try {
+      const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: body }) })
+      if (!r.ok) toast('Save failed', 'error')
+    } catch { toast('Network error saving mappings', 'error') }
+  }
+
+  function buildMappingsPayload(m: Mappings, b: BehaviorMap): Record<string, MappingEntry> {
+    const out: Record<string, MappingEntry> = {}
     for (const [mesh, val] of Object.entries(m)) {
       const eid = typeof val === 'string' ? val : val.entity
-      extended[mesh] = { entity: eid, behavior: b[mesh] || guessBehavior(eid) }
+      out[mesh] = { entity: eid, behavior: b[mesh] || guessBehavior(eid) }
     }
-    try {
-      await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: extended }) })
-    } catch {}
+    return out
   }
 
   // ── Derive layout from state attributes + saved mappings ─────────────────
@@ -211,13 +231,13 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       const b   = ((st?.attributes?.brightness as number) ?? 255) / 255
       const mat = mesh.material as THREE.MeshStandardMaterial
       if (on) {
-        const p = 0.8 + 0.2 * Math.sin(t * 2.5)
-        mat.emissive.set(1, 0.92, 0.6); mat.emissiveIntensity = p * b * 3
-        mat.color.set(1, 0.98, 0.9);    ptLight.intensity = b * 5 * p
-      } else {
-        mat.emissive.setScalar(0); mat.emissiveIntensity = 0
-        mat.color.copy(origColor);  ptLight.intensity = 0
-      }
+          const p = 0.9 + 0.1 * Math.sin(t * 2.5)
+          mat.emissive.set(1, 0.95, 0.7); mat.emissiveIntensity = (p * b * 8)
+          mat.color.set(1, 1, 0.95);      ptLight.intensity = b * 12 * p
+        } else {
+          mat.emissive.setScalar(0); mat.emissiveIntensity = 0
+          mat.color.copy(origColor);  ptLight.intensity = 0
+        }
     })
     sphRefs.current.forEach(({ bulb, glow, ptLight }, eid) => {
       const st  = statesRef.current.get(eid)
@@ -226,14 +246,14 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       const bM  = bulb.material as THREE.MeshStandardMaterial
       const gM  = glow.material as THREE.MeshStandardMaterial
       if (on) {
-        const p = 0.78 + 0.22 * Math.sin(t * 2.8)
-        bM.emissiveIntensity = p * b * 2.5; bM.opacity = 1
-        gM.opacity = 0.10 + 0.06 * Math.sin(t * 2.8); gM.emissiveIntensity = p * b * 0.8
-        ptLight.intensity = b * 3 * p
-      } else {
-        bM.emissiveIntensity = 0.15; bM.opacity = 0.55
-        gM.opacity = 0.08; gM.emissiveIntensity = 0.05; ptLight.intensity = 0
-      }
+          const p = 0.85 + 0.15 * Math.sin(t * 2.8)
+          bM.emissiveIntensity = p * b * 6; bM.opacity = 1
+          gM.opacity = 0.15 + 0.08 * Math.sin(t * 2.8); gM.emissiveIntensity = p * b * 2
+          ptLight.intensity = b * 8 * p
+        } else {
+          bM.emissiveIntensity = 0.15; bM.opacity = 0.55
+          gM.opacity = 0.08; gM.emissiveIntensity = 0.05; ptLight.intensity = 0
+        }
     })
     senGlbRefs.current.forEach(({ doorObj, deviceClass }, eid) => {
       const open = statesRef.current.get(eid)?.state === 'on'
@@ -535,36 +555,41 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         setSelectedId(result.entityId)
         const st = statesRef.current.get(result.entityId)
         const newState = st?.state === 'on' ? 'off' : 'on'
-        const updated = { ...st!, state: newState }
-        statesRef.current = new Map(statesRef.current).set(result.entityId, updated)
-        const cur = states.get(result.entityId)
-        fetch(`/api/states/${result.entityId}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer 4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce` },
-          body: JSON.stringify({ state: newState, attributes: { ...cur?.attributes } }),
-        })
+        statesRef.current = new Map(statesRef.current).set(result.entityId, { ...st!, state: newState })
+        setLocalRev(n => n + 1)
+        haSetState(result.entityId, newState)
       } else setSelectedId(null)
     },
   )
 
   // ── Controls ──────────────────────────────────────────────────────────────
-  const selState     = selectedId ? states.get(selectedId) : null
+  const selState     = selectedId ? getState(selectedId) : null
   const selOn        = selState?.state === 'on'
   const selName      = selState ? (selState.attributes.friendly_name as string) ?? selectedId : ''
   const selDomain    = selectedId?.split('.')[0] ?? ''
   const selDevClass  = selState?.attributes?.device_class as string | undefined
   const isSensor     = selDomain === 'binary_sensor'
   const SET_TOKEN = '4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce'
-  const haSetState = (eid: string, state: string, attrs?: Record<string, unknown>) => {
-    const cur = states.get(eid)
-    fetch(`/api/states/${eid}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SET_TOKEN}` },
-      body: JSON.stringify({ state, attributes: { ...cur?.attributes, ...attrs } }),
-    })
+  const haSetState = async (eid: string, state: string, attrs?: Record<string, unknown>) => {
+    const cur = getState(eid)
+    try {
+      const r = await fetch(`/api/states/${eid}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SET_TOKEN}` },
+        body: JSON.stringify({ state, attributes: { ...cur?.attributes, ...attrs } }),
+      })
+      if (!r.ok) toast('Failed to set state', 'error')
+    } catch { toast('Network error', 'error') }
   }
 
   const selBrightPct = selState?.attributes?.brightness != null
     ? Math.round(((selState.attributes.brightness as number) / 255) * 100) : 100
-  const toggle    = () => selectedId && haSetState(selectedId, selOn ? 'off' : 'on')
+  const toggle = () => {
+    if (!selectedId) return
+    const newState = selOn ? 'off' : 'on'
+    statesRef.current = new Map(statesRef.current).set(selectedId, { ...selState!, state: newState })
+    setLocalRev(n => n + 1)
+    haSetState(selectedId, newState)
+  }
   const setBright = (pct: number) => {
     if (!selectedId) return
     haSetState(selectedId, 'on', { brightness: Math.round(pct / 100 * 255) })
@@ -665,67 +690,20 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
 
 
       {editMode && glbLoaded && !fullscreen && (
-        <div className="fp-edit-panel" style={{
-          position: 'absolute', left: 12, top: 60, zIndex: 20, width: 220,
-          background: 'var(--card)', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-          padding: 10, maxHeight: '60vh', overflowY: 'auto', fontSize: 11,
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontWeight: 600, fontSize: 12 }}>📋 Meshes</span>
-            <button className="btn" style={{ fontSize: 10, padding: '2px 8px' }}
-              onClick={async () => {
-                if (!token) return alert('Not logged in')
-                const ext: Record<string, MappingEntry> = {}
-                for (const [mesh, val] of Object.entries(mappings)) {
-                  const eid = typeof val === 'string' ? val : val.entity
-                  ext[mesh] = { entity: eid, behavior: behaviors[mesh] || guessBehavior(eid) }
-                }
-                const r = await fetch('/api/config/3d-mappings', {
-                  method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ mappings: ext })
-                })
-                alert(r.ok ? '✅ Saved' : '❌ ' + await r.text())
-              }}>
-              💾 Save
-            </button>
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--text2)', marginBottom: 6 }}>Tap a mesh to bind/unbind</div>
-          {meshNames.map(meshName => {
-            const mapped = !!mappings[meshName]
-            return (
-              <div key={meshName} data-mesh={meshName} ref={el => { if (clickedMesh === meshName && el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }) }} style={{ marginBottom: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', borderRadius: 4, background: clickedMesh === meshName ? 'rgba(77,143,255,0.2)' : mapped ? 'rgba(48,209,88,0.08)' : 'transparent', outline: clickedMesh === meshName ? '1px solid #4d8fff' : 'none' }}>
-                  <span style={{ width: 14, fontSize: 10, color: mapped ? '#30d158' : 'var(--text3)', cursor: 'pointer' }}
-                    onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>{mapped ? '✓' : '○'}</span>
-                  <span style={{ fontFamily: 'monospace', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', flex: 1 }}
-                    onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>{meshName}</span>
-                    {mapped ? (
-                    <span style={{ fontSize: 9, color: 'var(--text2)' }}>{BEHAVIORS.find(b => b.id === (behaviors[meshName] || guessBehavior(typeof mappings[meshName] === 'string' ? mappings[meshName] as string : (mappings[meshName] as any)?.entity)))?.label || ''} {(() => { const mv = mappings[meshName]; const eid = typeof mv === 'string' ? mv : (mv as any)?.entity; return eid ? (states.get(eid)?.attributes?.friendly_name as string) || eid : '' })()}</span>
-                  ) : (
-                    <DevicePicker meshName={meshName} states={states} onPick={async (mesh, eid) => {
-                      const next = { ...mappings, [mesh]: eid }; setMappings(next)
-                      setBehaviors(prev => ({ ...prev, [mesh]: guessBehavior(eid) }))
-                      const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: next }) })
-                      if (!r.ok) alert('Save failed: ' + await r.text())
-                    }} />
-                  )}
-                  {mapped && <button className="btn" style={{ fontSize: 9, padding: '1px 5px', color: '#ff453a' }}
-                    onClick={async () => {
-                      const next = { ...mappings }; delete next[meshName]; setMappings(next)
-                      const beh = { ...behaviors }; delete beh[meshName]; setBehaviors(beh)
-                      const ext: Record<string, MappingEntry> = {}
-                      for (const [m, val] of Object.entries(next)) {
-                        const eid = typeof val === 'string' ? val : val.entity
-                        ext[m] = { entity: eid, behavior: beh[m] || guessBehavior(eid) }
-                      }
-                      await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: ext }) })
-                    }}>✕</button>}
-                </div>
-                {!mapped && <div style={{ padding: '2px 6px' }}><BehaviorSelect behavior={behaviors[meshName] || 'light'} onChange={b => setBehaviors(prev => ({ ...prev, [meshName]: b }))} /></div>}
-              </div>
-            )
-          })}
-        </div>
+        <EditPanel
+          token={token}
+          meshNames={meshNames}
+          mappings={mappings}
+          behaviors={behaviors}
+          states={states}
+          clickedMesh={clickedMesh}
+          onSetMappings={setMappings}
+          onSetBehaviors={setBehaviors}
+          onSetClickedMesh={(n) => { setClickedMesh(n); setSelectedId(null) }}
+          onPick={(mesh, eid, next, beh) => { setMappings(next); setBehaviors(beh); saveMappings(next, beh) }}
+          onDelete={(next, beh) => { setMappings(next); setBehaviors(beh); saveMappings(next, beh) }}
+          onSaveMappings={() => { if (token) { saveMappings(mappings, behaviors); toast('Saved', 'success') } }}
+        />
       )}
 
       <div className="fp-canvas" ref={containerRef}
