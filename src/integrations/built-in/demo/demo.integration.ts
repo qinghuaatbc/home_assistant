@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { StateMachineService } from '../../../core/state-machine/state-machine.service';
 import { ServiceRegistryService } from '../../../core/service-registry/service-registry.service';
+import { ServiceCall } from '../../../core/service-registry/interfaces/ha-service.interface';
 import { EntityRegistryService } from '../../../registry/entity-registry/entity-registry.service';
 import { ContextService } from '../../../core/context/context.service';
 import { HaIntegration, IntegrationConfig, IntegrationManifest } from '../../interfaces/integration.interface';
@@ -62,8 +63,43 @@ export class DemoIntegration implements HaIntegration {
       );
     }
 
+    this.registerServices();
     this.logger.log(`Demo: ${entities.length} entities loaded`);
     return true;
+  }
+
+  private registerServices() {
+    const handler = async (call: ServiceCall) => {
+      const ids = call.target?.entity_id
+        ? (Array.isArray(call.target.entity_id) ? call.target.entity_id : [call.target.entity_id])
+        : []
+      const state = call.service === 'turn_on' ? 'on' : call.service === 'turn_off' ? 'off' : undefined
+      for (const eid of ids) {
+        const cur = this.stateMachine.getState(eid)
+        if (!cur) continue
+        if (state) {
+          const attrs: Record<string, unknown> = { ...cur.attributes }
+          if (call.service_data?.brightness != null) attrs.brightness = call.service_data.brightness
+          if (call.service_data?.volume_level != null) attrs.volume_level = call.service_data.volume_level
+          this.stateMachine.setState(eid, state, attrs, call.context)
+        }
+      }
+    }
+    for (const domain of ['light', 'switch', 'media_player']) {
+      this.serviceRegistry.register({
+        domain, service: 'turn_on', name: 'Turn on', description: 'Turn on',
+        fields: {}, handler, target: { entity: true },
+      })
+      this.serviceRegistry.register({
+        domain, service: 'turn_off', name: 'Turn off', description: 'Turn off',
+        fields: {}, handler, target: { entity: true },
+      })
+    }
+    this.serviceRegistry.register({
+      domain: 'light', service: 'toggle', name: 'Toggle', description: 'Toggle',
+      fields: {}, handler, target: { entity: true },
+    })
+    this.logger.log('Demo: registered service handlers (light/switch/media_player)')
   }
 
   async teardown(): Promise<void> {}
