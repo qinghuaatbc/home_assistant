@@ -147,6 +147,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null)
   const [localRev, setLocalRev] = useState(0) // increment to trigger re-render after local toggle
   const [soundOn, setSoundOn] = useState(!isSoundMuted())
+  const [camLocked, setCamLocked] = useState(false)
   const getState = (eid: string) => statesRef.current.get(eid) || states.get(eid)
 
   // Load floor names
@@ -315,6 +316,12 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     rendererRef.current = h.renderer
     controlsRef.current = h.controls
   }, [sceneHandle])
+
+  useEffect(() => {
+    const c = controlsRef.current
+    if (!c) return
+    c.enabled = !camLocked
+  }, [camLocked])
 
   // ── Full scene rebuild — runs ONLY when floor changes ─────────────────────
   useEffect(() => {
@@ -703,10 +710,6 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         <div className="fp-header">
           <span className="fp-title">3D Floor Plan</span>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button className="btn" style={{ fontSize: 10, padding: '3px 8px', opacity: soundOn ? 1 : 0.4 }}
-              onClick={() => { setSoundMuted(soundOn); setSoundOn(!soundOn) }}>
-              {soundOn ? '🔊' : '🔇'}
-            </button>
             <button className="btn" style={{ fontSize: 10, padding: '3px 8px' }}
               onClick={() => onFullscreenChange?.(true)}>⛶</button>
             <button className={`btn${editMode ? ' active' : ''}`} style={{ fontSize: 10, padding: '3px 8px' }}
@@ -746,6 +749,16 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
               {floorNames[id] || id}
             </button>
           ))}
+        </div>
+        <div style={{ position: 'absolute', bottom: 16, right: 16, zIndex: 10, display: 'flex', gap: 6 }}>
+          <button className="fp-floor-btn" style={{ fontSize: 14, padding: '4px 10px', opacity: camLocked ? 1 : 0.5 }}
+            onClick={() => setCamLocked(!camLocked)}>
+            {camLocked ? '🔒' : '🔓'}
+          </button>
+          <button className="fp-floor-btn" style={{ fontSize: 16, padding: '4px 10px', opacity: soundOn ? 1 : 0.4 }}
+            onClick={() => { setSoundMuted(soundOn); setSoundOn(!soundOn) }}>
+            {soundOn ? '🔊' : '🔇'}
+          </button>
         </div>
       </div>
 

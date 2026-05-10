@@ -70,19 +70,35 @@ export function playDoorToggle(open: boolean) {
     // Latch release click at the end
     setTimeout(() => playTone(800, 0.04, 'square', 0.05), dur * 1000)
   } else {
-    // Close: thud + latch click
-    const dur = 0.3
-    playNoise(0.1, 0.1)  // thud
-    setTimeout(() => playTone(1200, 0.03, 'square', 0.06), 150) // latch click
-    const o = c.createOscillator()
-    const g = c.createGain()
-    o.type = 'sine'
-    o.frequency.setValueAtTime(60, c.currentTime)
-    o.frequency.exponentialRampToValueAtTime(20, c.currentTime + 0.15)
-    g.gain.setValueAtTime(0.12, c.currentTime)
-    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.15)
-    o.connect(g).connect(c.destination)
-    o.start(); o.stop(c.currentTime + 0.15)
+    // Close: swoosh → wooden thud → latch click
+    const t = c.currentTime
+    // Air swoosh as door swings
+    const swoosh = c.createOscillator()
+    const sg = c.createGain()
+    swoosh.type = 'sine'
+    swoosh.frequency.setValueAtTime(200, t)
+    swoosh.frequency.exponentialRampToValueAtTime(80, t + 0.2)
+    sg.gain.setValueAtTime(0.04, t); sg.gain.exponentialRampToValueAtTime(0.001, t + 0.25)
+    swoosh.connect(sg).connect(c.destination)
+    swoosh.start(t); swoosh.stop(t + 0.25)
+    playNoise(0.2, 0.03)
+    // Wood thud when door hits frame
+    setTimeout(() => {
+      for (let i = 0; i < 2; i++) {
+        const o = c.createOscillator()
+        const g = c.createGain()
+        o.type = 'sine'
+        const tt = c.currentTime + i * 0.06
+        o.frequency.setValueAtTime(80 - i * 20, tt)
+        o.frequency.exponentialRampToValueAtTime(30, tt + 0.08)
+        g.gain.setValueAtTime(0.12 - i * 0.04, tt)
+        g.gain.exponentialRampToValueAtTime(0.001, tt + 0.1)
+        o.connect(g).connect(c.destination)
+        o.start(tt); o.stop(tt + 0.1)
+      }
+      // Latch click
+      playTone(1400, 0.03, 'square', 0.07)
+    }, 200)
   }
 }
 
