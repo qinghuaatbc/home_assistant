@@ -29,7 +29,7 @@ interface HaCtx {
   wsConnected: boolean
   health: HaHealth | null
   states: Map<string, HaState>
-  callService: (domain: string, service: string, data?: Record<string, unknown>, entityId?: string | string[]) => Promise<void>
+  callService: (domain: string, service: string, data?: Record<string, unknown>, entityId?: string | string[]) => Promise<{ success: boolean; error?: string }>
   setEntityState: (entityId: string, state: string, attributes?: Record<string, unknown>) => Promise<void>
 }
 
@@ -89,16 +89,26 @@ export function HaProvider({ children }: { children: ReactNode }) {
     service: string,
     data: Record<string, unknown> = {},
     entityId?: string | string[],
-  ) => {
-    if (!wsRef.current || !token) return
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!wsRef.current || !token) return { success: false, error: 'Not connected' }
     const id = cmdId.current++
-    wsRef.current.emit('message', {
-      id,
-      type: 'call_service',
-      domain,
-      service,
-      service_data: data,
-      target: entityId ? { entity_id: entityId } : undefined,
+    return new Promise(resolve => {
+      const handler = (msg: any) => {
+        if (msg.id === id && msg.type === 'result') {
+          wsRef.current?.off('message', handler)
+          resolve({ success: msg.success !== false, error: msg.error?.message })
+        }
+      }
+      wsRef.current?.on('message', handler)
+      wsRef.current?.emit('message', {
+        id,
+        type: 'call_service',
+        domain,
+        service,
+        service_data: data,
+        target: entityId ? { entity_id: entityId } : undefined,
+      })
+      setTimeout(() => { wsRef.current?.off('message', handler); resolve({ success: false, error: 'Timeout' }) }, 10000)
     })
   }, [token])
 

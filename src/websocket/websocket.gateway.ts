@@ -177,7 +177,18 @@ export class WebSocketGateway_
       return;
     }
 
-    await handler.handle(session, message);
+    try {
+      await handler.handle(session, message);
+    } catch (err: unknown) {
+      const error = err as Error;
+      this.logger.error(`Handler error for ${message.type}: ${error.message}`);
+      socket.emit('message', {
+        id: message.id,
+        type: 'result',
+        success: false,
+        error: { code: 'handler_error', message: error.message },
+      });
+    }
   }
 
   /**
