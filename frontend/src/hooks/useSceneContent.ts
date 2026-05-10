@@ -1,0 +1,360 @@
+import { useRef, useEffect, useCallback, useMemo } from 'react'
+import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { HaState, Mappings, FloorId } from '../types'
+
+const FW = 19, FD = 14, WH = 2.8, WT = 0.15, BR = 0.35, SR = 0.28
+
+function buildFallback(floor: FloorId): THREE.Group {
+  const g = new THREE.Group()
+  const fM = new THREE.MeshStandardMaterial({ color: 0x888899, roughness: 0.7 })
+  const wM = new THREE.MeshStandardMaterial({ color: 0x9999aa, roughness: 0.7 })
+  const box = (mat: THREE.Material, x: number, y: number, z: number, w: number, h: number, d: number) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat)
+    m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; g.add(m)
+  }
+  box(fM, 0, -0.06, 0, FW, 0.12, FD)
+  const hy = WH / 2
+  box(wM, 0, hy, -FD / 2, FW, WH, WT); box(wM, 0, hy, FD / 2, FW, WH, WT)
+  box(wM, -FW / 2, hy, 0, WT, WH, FD); box(wM, FW / 2, hy, 0, WT, WH, FD)
+  if (floor === 1) box(new THREE.MeshStandardMaterial({ color: 0x48484e }), 0, hy, 0, WT, WH, FD)
+  const grid = new THREE.GridHelper(FW, 19, 0x666688, 0x555566)
+  grid.position.y = 0.01; g.add(grid)
+  return g
+}
+
+function makeSphere(x: number, z: number, entityId: string, scene: THREE.Scene) {
+  const by = WH + 0.35
+  const bulb = new THREE.Mesh(
+    new THREE.SphereGeometry(BR, 20, 20),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(1, 0.88, 0.35), emissive: new THREE.Color(1, 0.72, 0.15), emissiveIntensity: 0.05, transparent: true, opacity: 0.3, roughness: 0.05 }),
+  )
+  bulb.position.set(x, by, z); bulb.userData.entityId = entityId; scene.add(bulb)
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(BR * 1.9, 20, 20),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(1, 0.88, 0.35), emissive: new THREE.Color(1, 0.72, 0.15), transparent: true, opacity: 0.04, depthWrite: false, side: THREE.BackSide }),
+  )
+  glow.position.set(x, by, z); scene.add(glow)
+  const pl = new THREE.PointLight(new THREE.Color(1, 0.88, 0.35), 0, 9, 1.6)
+  pl.position.set(x, by, z); scene.add(pl)
+  return { bulb, glow, ptLight: pl }
+}
+
+function makeSensorMarker(x: number, z: number, entityId: string, deviceClass: string, scene: THREE.Scene) {
+  const isCurtain = deviceClass === 'curtain' || deviceClass === 'blind'
+  const isDoor = deviceClass === 'door' || deviceClass === 'garage_door'
+  const by = isCurtain ? WH / 2 : WH * 0.55
+  const geo = isCurtain
+    ? new THREE.BoxGeometry(SR * 4, WH, SR * 0.15)
+    : isDoor ? new THREE.BoxGeometry(SR * 1.6, SR * 2.2, SR * 0.4) : new THREE.BoxGeometry(SR * 2.2, SR * 0.8, SR * 0.4)
+  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.15, 0.9, 0.35), emissive: new THREE.Color(0.05, 0.5, 0.1), emissiveIntensity: 0.4, transparent: true, opacity: 0.85, roughness: 0.2 })
+  const marker = new THREE.Mesh(geo, mat)
+  marker.position.set(x, by, z); marker.userData.entityId = entityId; scene.add(marker)
+  let clipPlane: THREE.Plane | undefined
+  if (isCurtain) {
+    const worldBottomY = by - WH / 2, worldTopY = by + WH / 2
+    clipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(worldBottomY - 0.01))
+    mat.clippingPlanes = [clipPlane]
+    marker.userData.worldBottomY = worldBottomY; marker.userData.worldTopY = worldTopY
+  }
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(SR * 1.4, 16, 16),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(0.1, 1, 0.3), transparent: true, opacity: 0.06, depthWrite: false, side: THREE.BackSide }),
+  )
+  glow.position.set(x, by, z); scene.add(glow)
+  const pl = new THREE.PointLight(new THREE.Color(0.2, 1, 0.4), 0, 5, 2)
+  pl.position.set(x, by, z); scene.add(pl)
+  return { marker, glow, ptLight: pl, deviceClass, clipPlane }
+}
+
+export interface SceneContent {
+  clickables: React.MutableRefObject<THREE.Mesh[]>
+  meshNames: string[]
+  onAnimate: (t: number) => void
+  updateVisuals: () => void
+}
+
+interface Props {
+  scene: THREE.Scene | null
+  camera: THREE.PerspectiveCamera | null
+  controls: any | null // OrbitControls
+  renderer: THREE.WebGLRenderer | null
+  floor: FloorId
+  statesRef: React.MutableRefObject<Map<string, HaState>>
+  glbLights: Array<{ entityId: string; name: string; floor: FloorId; meshName: string }>
+  sphereLights: Array<{ entityId: string; name: string; floor: FloorId; x: number; z: number }>
+  sensorMarkers: Array<{ entityId: string; name: string; floor: FloorId; x: number; z: number; deviceClass: string }>
+  sensorGlbMeshes: Array<{ entityId: string; name: string; floor: FloorId; meshName: string; deviceClass: string; pos?: [number, number] }>
+  glbLoading: boolean
+  glbLoaded: boolean
+  glbError: boolean
+  onGlbStart: () => void
+  onGlbSuccess: () => void
+  onGlbError: () => void
+  onMeshNames: (names: string[]) => void
+}
+
+export function useSceneContent(p: Props) {
+  const fallbackRef = useRef<THREE.Group | null>(null)
+  const glbModelRef = useRef<THREE.Group | null>(null)
+  const glbRefs = useRef(new Map<string, { mesh: THREE.Mesh; ptLight: THREE.PointLight; origColor: THREE.Color }>())
+  const sphRefs = useRef(new Map<string, { bulb: THREE.Mesh; glow: THREE.Mesh; ptLight: THREE.PointLight }>())
+  const senRefs = useRef(new Map<string, { marker: THREE.Mesh; glow: THREE.Mesh; ptLight: THREE.PointLight; deviceClass: string; clipPlane?: THREE.Plane }>())
+  const senGlbRefs = useRef(new Map<string, { meshes: THREE.Mesh[]; ptLight: THREE.PointLight; origColors: THREE.Color[]; doorObj: THREE.Object3D; origRotY: number; deviceClass: string; origPosY: number }>())
+  const clickables = useRef<THREE.Mesh[]>([])
+  const addedSphIds = useRef(new Set<string>())
+  const addedSenIds = useRef(new Set<string>())
+  const glbLightsRef = useRef(p.glbLights)
+  const senGlbRef = useRef(p.sensorGlbMeshes)
+
+  useEffect(() => { glbLightsRef.current = p.glbLights }, [p.glbLights])
+  useEffect(() => { senGlbRef.current = p.sensorGlbMeshes }, [p.sensorGlbMeshes])
+
+  // ── Full scene rebuild on floor change ─────────────────────────────────
+  useEffect(() => {
+    const scene = p.scene; if (!scene) return
+    if (fallbackRef.current) { scene.remove(fallbackRef.current); fallbackRef.current = null }
+    glbRefs.current.forEach(({ mesh, ptLight }) => { scene.remove(mesh); scene.remove(ptLight) })
+    glbRefs.current.clear()
+    sphRefs.current.forEach(({ bulb, glow, ptLight }) => { scene.remove(bulb); scene.remove(glow); scene.remove(ptLight) })
+    sphRefs.current.clear()
+    senRefs.current.forEach(({ marker, glow, ptLight }) => { scene.remove(marker); scene.remove(glow); scene.remove(ptLight) })
+    senRefs.current.clear()
+    senGlbRefs.current.forEach(({ ptLight, doorObj, origRotY, origPosY }) => {
+      scene.remove(ptLight)
+      doorObj.rotation.y = origRotY; doorObj.rotation.z = doorObj.userData.origRotZ ?? 0; doorObj.position.y = origPosY
+      const cp = doorObj.userData.clipPlane as THREE.Plane | undefined
+      if (cp) cp.constant = -(doorObj.userData.worldBottomY as number - 0.01)
+    })
+    senGlbRefs.current.clear()
+    if (glbModelRef.current) scene.remove(glbModelRef.current)
+    glbModelRef.current = null
+    clickables.current = []
+    addedSphIds.current.clear()
+    addedSenIds.current.clear()
+    p.onGlbStart()
+
+    const fb = buildFallback(p.floor); scene.add(fb); fallbackRef.current = fb
+    if (p.camera) { p.camera.position.set(0, 14, 13); p.camera.lookAt(0, 0, 0) }
+    if (p.controls) { p.controls.target.set(0, 1, 0); p.controls.update() }
+
+    const targetFloor = p.floor
+    new GLTFLoader().load(
+      `/data/floors/floor${p.floor}.glb`,
+      (gltf) => {
+        if (targetFloor !== p.floor) return
+        p.onGlbSuccess()
+        const model = gltf.scene
+        model.updateWorldMatrix(true, true)
+        const box = new THREE.Box3().setFromObject(model)
+        model.position.sub(box.getCenter(new THREE.Vector3())); model.position.y = 0
+        const sz = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3())
+        model.scale.setScalar(Math.min(FW / sz.x, FD / sz.z) * 0.92)
+        scene.add(model)
+        model.updateWorldMatrix(true, true)
+
+        const floorGlbLights = glbLightsRef.current.filter(l => l.floor === p.floor)
+        const floorSenGlb = senGlbRef.current.filter(s => s.floor === p.floor)
+        const names: string[] = []
+        model.traverse(child => {
+          const m = child as THREE.Mesh; if (!m.isMesh) return
+          m.castShadow = true; m.receiveShadow = true
+          if (child.name) names.push(child.name)
+          const lcfg = floorGlbLights.find(l => l.meshName === child.name)
+          if (!lcfg) return
+          const mat = (m.material as THREE.MeshStandardMaterial).clone()
+          m.material = mat; m.updateWorldMatrix(true, false)
+          const wp = new THREE.Vector3(); m.getWorldPosition(wp)
+          const pl = new THREE.PointLight(new THREE.Color(1, 0.92, 0.7), 0, 12, 1.4)
+          pl.position.copy(wp); scene.add(pl)
+          m.userData.entityId = lcfg.entityId
+          glbRefs.current.set(lcfg.entityId, { mesh: m, ptLight: pl, origColor: mat.color.clone() })
+          clickables.current.push(m)
+        })
+        floorSenGlb.forEach(cfg => {
+          const doorObj = model.getObjectByName(cfg.meshName)
+          if (!doorObj) {
+            if (cfg.pos && !addedSenIds.current.has(cfg.entityId)) {
+              addedSenIds.current.add(cfg.entityId)
+              const refs = makeSensorMarker(cfg.pos[0], cfg.pos[1], cfg.entityId, cfg.deviceClass, scene)
+              senRefs.current.set(cfg.entityId, refs)
+              clickables.current.push(refs.marker)
+            }
+            return
+          }
+          const meshes: THREE.Mesh[] = []; const origColors: THREE.Color[] = []
+          doorObj.traverse(child => {
+            const m = child as THREE.Mesh; if (!m.isMesh) return
+            const mat = (m.material as THREE.MeshStandardMaterial).clone()
+            m.material = mat; m.userData.entityId = cfg.entityId
+            meshes.push(m); origColors.push(mat.color.clone())
+            clickables.current.push(m)
+          })
+          if (meshes.length === 0) return
+          const pl = new THREE.PointLight(0xffffff, 0, 1, 1)
+          doorObj.userData.origRotZ = doorObj.rotation.z
+          const origPosY = doorObj.position.y
+          if (cfg.deviceClass === 'garage_door' || cfg.deviceClass === 'curtain' || cfg.deviceClass === 'blind') {
+            const b = new THREE.Box3().setFromObject(doorObj)
+            const clipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(b.min.y - 0.01))
+            doorObj.userData.clipPlane = clipPlane; doorObj.userData.worldBottomY = b.min.y; doorObj.userData.worldTopY = b.max.y
+            meshes.forEach(m => { (m.material as THREE.MeshStandardMaterial).clippingPlanes = [clipPlane] })
+          }
+          senGlbRefs.current.set(cfg.entityId, { meshes, ptLight: pl, origColors, doorObj, origRotY: doorObj.rotation.y, deviceClass: cfg.deviceClass, origPosY })
+        })
+        p.onMeshNames(names.filter((v, i, a) => a.indexOf(v) === i))
+        glbModelRef.current = model
+        model.traverse(child => {
+          const m = child as THREE.Mesh; if (!m.isMesh) return
+          const meshName = m.name || (m.parent?.name || '')
+          if (!meshName) return
+          if (!clickables.current.includes(m)) { m.userData.meshName = meshName; clickables.current.push(m) }
+        })
+        if (fallbackRef.current) fallbackRef.current.visible = false
+        const sz2 = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3())
+        const d = Math.max(sz2.x, sz2.z)
+        if (p.camera) { p.camera.position.set(0, d * 0.9, d * 0.75); p.camera.lookAt(0, 0, 0) }
+        if (p.controls) { p.controls.target.set(0, 0, 0); p.controls.update() }
+      },
+      undefined,
+      () => p.onGlbError(),
+    )
+  }, [p.floor])
+
+  // ── Late-arriving entities ────────────────────────────────────────────────
+  useEffect(() => {
+    const scene = p.scene; const model = glbModelRef.current; if (!scene || !model) return
+    p.sensorGlbMeshes.filter(s => s.floor === p.floor && !senGlbRefs.current.has(s.entityId) && !senRefs.current.has(s.entityId)).forEach(cfg => {
+      const doorObj = model.getObjectByName(cfg.meshName)
+      if (!doorObj) {
+        if (cfg.pos && !addedSenIds.current.has(cfg.entityId)) {
+          addedSenIds.current.add(cfg.entityId)
+          const refs = makeSensorMarker(cfg.pos[0], cfg.pos[1], cfg.entityId, cfg.deviceClass, scene!)
+          senRefs.current.set(cfg.entityId, refs); clickables.current.push(refs.marker)
+        }
+        return
+      }
+      const meshes: THREE.Mesh[] = []; const origColors: THREE.Color[] = []
+      doorObj.traverse(child => {
+        const m = child as THREE.Mesh; if (!m.isMesh) return
+        const mat = (m.material as THREE.MeshStandardMaterial).clone(); m.material = mat
+        m.userData.entityId = cfg.entityId; meshes.push(m); origColors.push(mat.color.clone())
+        clickables.current.push(m)
+      })
+      if (meshes.length === 0) return
+      const pl = new THREE.PointLight(0xffffff, 0, 1, 1)
+      doorObj.userData.origRotZ = doorObj.userData.origRotZ ?? doorObj.rotation.z
+      const origPosY = doorObj.position.y
+      if (cfg.deviceClass === 'garage_door' || cfg.deviceClass === 'curtain' || cfg.deviceClass === 'blind') {
+        const b = new THREE.Box3().setFromObject(doorObj)
+        const clipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(b.min.y - 0.01))
+        doorObj.userData.clipPlane = clipPlane; doorObj.userData.worldBottomY = b.min.y; doorObj.userData.worldTopY = b.max.y
+        meshes.forEach(m => { (m.material as THREE.MeshStandardMaterial).clippingPlanes = [clipPlane] })
+      }
+      senGlbRefs.current.set(cfg.entityId, { meshes, ptLight: pl, origColors, doorObj, origRotY: doorObj.rotation.y, deviceClass: cfg.deviceClass, origPosY })
+    })
+  }, [p.sensorGlbMeshes, p.floor])
+
+  useEffect(() => {
+    const model = glbModelRef.current; if (!model) return
+    const floorGlbLights = p.glbLights.filter(l => l.floor === p.floor)
+    model.traverse(child => {
+      const m = child as THREE.Mesh; if (!m.isMesh) return
+      const lcfg = floorGlbLights.find(l => l.meshName === (m.name || m.userData.meshName || ''))
+      if (!lcfg || m.userData.entityId) return
+      if (glbRefs.current.has(lcfg.entityId)) return
+      const mat = (m.material as THREE.MeshStandardMaterial).clone(); m.material = mat
+      m.updateWorldMatrix(true, false)
+      const wp = new THREE.Vector3(); m.getWorldPosition(wp)
+      const pl = new THREE.PointLight(new THREE.Color(1, 0.92, 0.7), 0, 12, 1.4)
+      pl.position.copy(wp); p.scene?.add(pl)
+      m.userData.entityId = lcfg.entityId
+      glbRefs.current.set(lcfg.entityId, { mesh: m, ptLight: pl, origColor: mat.color.clone() })
+      if (!clickables.current.includes(m)) clickables.current.push(m)
+    })
+  }, [p.glbLights, p.floor])
+
+  useEffect(() => {
+    const scene = p.scene; if (!scene) return
+    p.sphereLights.filter(l => l.floor === p.floor).forEach(cfg => {
+      if (addedSphIds.current.has(cfg.entityId)) return
+      addedSphIds.current.add(cfg.entityId)
+      const refs = makeSphere(cfg.x, cfg.z, cfg.entityId, scene)
+      sphRefs.current.set(cfg.entityId, refs)
+      clickables.current.push(refs.bulb)
+    })
+  }, [p.sphereLights, p.floor])
+
+  useEffect(() => {
+    const scene = p.scene; if (!scene) return
+    p.sensorMarkers.filter(s => s.floor === p.floor).forEach(cfg => {
+      if (addedSenIds.current.has(cfg.entityId)) return
+      addedSenIds.current.add(cfg.entityId)
+      const refs = makeSensorMarker(cfg.x, cfg.z, cfg.entityId, cfg.deviceClass, scene)
+      senRefs.current.set(cfg.entityId, refs)
+      clickables.current.push(refs.marker)
+    })
+  }, [p.sensorMarkers, p.floor])
+
+  // ── Per-frame: smooth door/curtain animation ──────────────────────────
+  const onAnimate = useCallback((t: number) => {
+    senGlbRefs.current.forEach(({ doorObj, deviceClass }, eid) => {
+      const open = p.statesRef.current.get(eid)?.state === 'on'
+      if (deviceClass === 'garage_door' || deviceClass === 'curtain' || deviceClass === 'blind') {
+        const cp = doorObj.userData.clipPlane as THREE.Plane | undefined
+        if (cp) {
+          const wBot: number = doorObj.userData.worldBottomY; const wTop: number = doorObj.userData.worldTopY
+          const height = wTop - wBot; const openTarget = wBot + height * 0.9
+          const target = open ? -openTarget : -(wBot - height); const step = height * 0.018
+          const diff = target - cp.constant; cp.constant = Math.abs(diff) < step ? target : cp.constant + Math.sign(diff) * step
+        }
+      } else {
+        const targetRotZ = open ? doorObj.userData.origRotZ + (75 * Math.PI / 180) : doorObj.userData.origRotZ
+        doorObj.rotation.z = THREE.MathUtils.lerp(doorObj.rotation.z, targetRotZ, 0.03)
+      }
+    })
+    senRefs.current.forEach(({ marker, glow, ptLight, deviceClass, clipPlane }, eid) => {
+      const st = p.statesRef.current.get(eid); const open = st?.state === 'on'
+      const mM = marker.material as THREE.MeshStandardMaterial; const gM = glow.material as THREE.MeshStandardMaterial
+      if ((deviceClass === 'curtain' || deviceClass === 'blind') && clipPlane) {
+        const wBot: number = marker.userData.worldBottomY; const wTop: number = marker.userData.worldTopY
+        const height = wTop - wBot; const openTarget = wBot + height * 0.9
+        const target = open ? -openTarget : -(wBot - height); const step = height * 0.018
+        const diff = target - clipPlane.constant; clipPlane.constant = Math.abs(diff) < step ? target : clipPlane.constant + Math.sign(diff) * step
+      }
+    })
+  }, [])
+
+  // ── Instant visual update on state change ──────────────────────────
+  const updateVisuals = useCallback(() => {
+    glbRefs.current.forEach(({ mesh, ptLight, origColor }, eid) => {
+      const st = p.statesRef.current.get(eid); if (!st) return
+      const on = st.state === 'on'; const b = ((st.attributes?.brightness as number) ?? 255) / 255
+      const mat = mesh.material as THREE.MeshStandardMaterial
+      if (on) { mat.emissive.set(1, 0.98, 0.8); mat.emissiveIntensity = b * 20; mat.color.set(1, 1, 1); ptLight.intensity = b * 25 }
+      else { mat.emissive.setScalar(0); mat.emissiveIntensity = 0; mat.color.copy(origColor); ptLight.intensity = 0 }
+    })
+    sphRefs.current.forEach(({ bulb, glow, ptLight }, eid) => {
+      const st = p.statesRef.current.get(eid); if (!st) return
+      const on = st.state === 'on'; const b = ((st.attributes?.brightness as number) ?? 255) / 255
+      const bM = bulb.material as THREE.MeshStandardMaterial; const gM = glow.material as THREE.MeshStandardMaterial
+      if (on) { bM.emissiveIntensity = b * 15; bM.opacity = 1; gM.opacity = 0.3; gM.emissiveIntensity = b * 5; ptLight.intensity = b * 20 }
+      else { bM.emissiveIntensity = 0.15; bM.opacity = 0.55; gM.opacity = 0.08; gM.emissiveIntensity = 0.05; ptLight.intensity = 0 }
+    })
+    senRefs.current.forEach(({ marker, glow, ptLight, deviceClass, clipPlane }, eid) => {
+      const st = p.statesRef.current.get(eid); if (!st) return
+      const open = st.state === 'on'; const mM = marker.material as THREE.MeshStandardMaterial; const gM = glow.material as THREE.MeshStandardMaterial
+      if ((deviceClass === 'curtain' || deviceClass === 'blind') && clipPlane) {
+        mM.color.set(0.5, 0.75, 1); mM.emissive.set(0.1, 0.3, 0.8); mM.emissiveIntensity = 0.3; mM.opacity = 0.7
+      } else if (open) {
+        mM.color.set(1, 0.2, 0.1); mM.emissive.set(1, 0.1, 0.05); mM.emissiveIntensity = 1.5; mM.opacity = 1
+        gM.color.set(1, 0.2, 0.1); gM.opacity = 0.2; ptLight.color.set(1, 0.15, 0.05); ptLight.intensity = 2
+      } else {
+        mM.color.set(0.15, 0.9, 0.35); mM.emissive.set(0.05, 0.5, 0.1); mM.emissiveIntensity = 0.4; mM.opacity = 0.85
+        gM.color.set(0.1, 1, 0.3); gM.opacity = 0.06; ptLight.color.set(0.2, 1, 0.4); ptLight.intensity = 0
+      }
+    })
+  }, [])
+
+  return { clickables, onAnimate, updateVisuals }
+}
