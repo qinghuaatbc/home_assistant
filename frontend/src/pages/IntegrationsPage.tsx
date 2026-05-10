@@ -79,6 +79,33 @@ export default function IntegrationsPage() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set(INTEGRATIONS.map(i => i.domain)))
+  const [search, setSearch] = useState('')
+  const [loadedStatuses, setLoadedStatuses] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (!token) return
+    fetch('/api/config/integrations-status', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(d => {
+        const m: Record<string, string> = {}
+        for (const s of (d.statuses || [])) m[s.domain] = s.status
+        setLoadedStatuses(m)
+      }).catch(() => {})
+  }, [token])
+
+  const enabledDomains = new Set(Object.keys(configs).filter(d => {
+    const cfg = configs[d]
+    if (!cfg) return false
+    return Object.entries(cfg).some(([k, v]) => {
+      if (k === 'devices') return Array.isArray(v) && v.length > 0
+      return !!v
+    })
+  }))
+
+  const filtered = INTEGRATIONS.filter(int =>
+    !search || int.name.toLowerCase().includes(search.toLowerCase()) ||
+    int.desc.toLowerCase().includes(search.toLowerCase()) ||
+    int.domain.toLowerCase().includes(search.toLowerCase())
+  )
 
   const updateField = (domain: string, key: string, value: string) => {
     setConfigs(prev => ({
@@ -149,22 +176,44 @@ export default function IntegrationsPage() {
   return (
     <div className="page">
       <div className="page-inner">
-          <div className="nav-header">
-            <div className="nav-title">🔌 Integrations</div>
-            <button className="btn" style={{ fontSize: 14, padding: '2px 8px', position: 'absolute', right: 12, top: 12 }}
-              onClick={toggleTheme}>
-              {document.documentElement.classList.contains('light') ? '🌙' : '☀️'}
-            </button>
-          </div>
+        <div className="nav-header">
+          <div className="nav-title">🔌 Integrations</div>
+          <button className="btn" style={{ fontSize: 14, padding: '2px 8px', position: 'absolute', right: 12, top: 12 }}
+            onClick={toggleTheme}>
+            {document.documentElement.classList.contains('light') ? '🌙' : '☀️'}
+          </button>
+        </div>
 
-        {INTEGRATIONS.map(int => {
+        <div style={{ position: 'sticky', top: 60, zIndex: 10, background: 'var(--bg)', padding: '8px 0' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search integrations…"
+            style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
+        </div>
+
+        <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4, marginBottom: 8 }}>
+          Showing {filtered.length} of {INTEGRATIONS.length} integrations
+          {enabledDomains.size > 0 && ` · ${enabledDomains.size} enabled`}
+        </div>
+
+        {filtered.map(int => {
           const cfg = configs[int.domain] || {}
           const isCollapsed = collapsed.has(int.domain)
+          const configured = enabledDomains.has(int.domain)
+          const status = loadedStatuses[int.domain]
+          const isLoaded = status === 'loaded'
+          const isFailed = status === 'failed'
           return (
-            <div className="section" key={int.domain} style={{ marginTop: 20 }}>
+            <div className="section" key={int.domain} style={{ marginTop: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
                 onClick={() => setCollapsed(prev => { const n = new Set(prev); if (n.has(int.domain)) n.delete(int.domain); else n.add(int.domain); return n })}>
-                <span className="section-title">{int.icon} {int.name}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className="section-title">{int.icon} {int.name}</span>
+                  <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4,
+                    background: isLoaded ? 'rgba(48,209,88,0.2)' : isFailed ? 'rgba(255,69,58,0.2)' : configured ? 'rgba(255,159,10,0.2)' : 'rgba(255,255,255,0.08)',
+                    color: isLoaded ? '#30d158' : isFailed ? '#ff453a' : configured ? '#ff9f0a' : 'var(--text3)' }}>
+                    {isLoaded ? '✓ Loaded' : isFailed ? '✕ Failed' : configured ? '⏎ Pending' : '⚪'}
+                  </span>
+                </div>
                 <span style={{ fontSize: 12, color: 'var(--text2)' }}>{isCollapsed ? '▶' : '▼'}</span>
               </div>
               {!isCollapsed && <>
@@ -210,7 +259,6 @@ export default function IntegrationsPage() {
           {msg && <div style={{ marginTop: 12, fontSize: 12, color: msg.startsWith('✅') ? '#30d158' : '#ff453a', whiteSpace: 'pre-line', textAlign: 'center' }}>{msg}</div>}
         </div>
 
-        {/* 3D Floors */}
         <div className="section" style={{ marginTop: 24 }}>
           <div className="section-title">🏗️ 3D Floors</div>
           <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 12px', paddingLeft: 4 }}>
@@ -235,7 +283,6 @@ function FloorsManager({ token }: { token: string | null }) {
     if (!token) return
     fetch('/api/config/floors', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then((list: any[]) => {
-        // enrich with GLB file info
         setFloors(list.map(f => ({ ...f, glb: f.glb || `floor_${f.id}.glb` })))
       }).catch(() => {})
   }, [token])

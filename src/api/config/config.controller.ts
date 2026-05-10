@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { StateMachineService } from '../../core/state-machine/state-machine.service';
+import { IntegrationLoaderService } from '../../integrations/integration-loader.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
@@ -26,13 +27,21 @@ export class ConfigController {
   constructor(
     private readonly configService: ConfigService,
     private readonly stateMachine: StateMachineService,
+    private readonly integrationLoader: IntegrationLoaderService,
   ) {}
 
   @Get()
   @ApiOperation({ summary: 'Get Home Assistant configuration' })
   getConfig() {
     const haConfig = this.configService.get('homeassistant');
-    return { ...haConfig, version: '2026.3.0', state: 'RUNNING' };
+    const integrations = this.configService.get('integrations') ?? [];
+    return { ...haConfig, version: '2026.3.0', state: 'RUNNING', integrations };
+  }
+
+  @Get('integrations-status')
+  @ApiOperation({ summary: 'Get loaded integration statuses' })
+  getIntegrationStatuses() {
+    return { statuses: this.integrationLoader.getStatuses() };
   }
 
   @Get('automations')
