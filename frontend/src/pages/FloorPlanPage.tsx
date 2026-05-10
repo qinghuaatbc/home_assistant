@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
@@ -100,6 +100,7 @@ function makeSensorMarker(x: number, z: number, entityId: string, deviceClass: s
 
 function guessBehavior(entityId: string): string {
   if (entityId.startsWith('light.')) return 'light'
+  if (entityId.startsWith('media_player.')) return 'media_player'
   if (entityId.startsWith('binary_sensor.')) return 'door'
   if (entityId.startsWith('switch.')) return 'switch'
   return 'light'
@@ -108,8 +109,10 @@ function guessBehavior(entityId: string): string {
 const BEHAVIORS = [
   { id: 'light', label: '💡 Light', desc: 'On/off with brightness' },
   { id: 'door', label: '🚪 Door', desc: 'Hinged open/close' },
+  { id: 'window', label: '🪟 Window', desc: 'Open/close window' },
   { id: 'curtain', label: '🪟 Curtain', desc: 'Roll-up/down' },
   { id: 'garage_door', label: '🚗 Garage', desc: 'Roll-up/down' },
+  { id: 'media_player', label: '🎵 Music', desc: 'Media playback' },
   { id: 'switch', label: '🔌 Switch', desc: 'On/off toggle' },
 ]
 
@@ -122,35 +125,56 @@ function BehaviorSelect({ behavior, onChange }: { behavior: string; onChange: (b
   )
 }
 
-function DevicePicker({ meshName, states, mappings, onPick }: { meshName: string; states: Map<string, any>; mappings: Record<string, string>; onPick: (mesh: string, eid: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const mappedIds = new Set(Object.values(mappings))
-  const devices = Array.from(states.entries())
-    .filter(([id]) => !mappedIds.has(id))
-    .map(([id, s]) => ({ id, name: (s.attributes?.friendly_name as string) || id }))
+function BrightnessSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [v, setV] = useState(value)
+  useEffect(() => { setV(value) }, [value])
   return (
-    <div style={{ position: 'relative' }}>
-      <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => setOpen(!open)}>+</button>
-      {open && (
-        <div style={{ position: 'absolute', left: 0, top: 22, zIndex: 30, width: 200, background: 'var(--card)', borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.3)', padding: 6, maxHeight: 180, overflowY: 'auto' }}>
-          {devices.length === 0 && <div style={{ fontSize: 11, color: 'var(--text2)', padding: 4 }}>No devices</div>}
-          {devices.map(d => (
-            <button key={d.id} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '4px 8px', fontSize: 11, background: 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', borderRadius: 4 }}
-              onClick={() => { onPick(meshName, d.id); setOpen(false) }}
-              onMouseEnter={e => (e.target as HTMLElement).style.background = 'var(--surface2)'}
-              onMouseLeave={e => (e.target as HTMLElement).style.background = 'none'}>
-              {d.name}
-            </button>
-          ))}
-        </div>
-      )}
+    <div className="fp-panel-row" style={{ marginTop: 6, gap: 4 }}>
+      <span style={{ fontSize: 12, color: 'var(--text2)', width: 20 }}>☀</span>
+      <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }} onPointerDown={e => e.stopPropagation()} onClick={() => { const n = Math.max(1, v - 10); setV(n); onChange(n) }}>−</button>
+      <input type="range" className="ios-range" min={1} max={100} value={v}
+        onInput={e => setV(Number((e.target as HTMLInputElement).value))}
+        onPointerUp={e => { const n = Number((e.target as HTMLInputElement).value); setV(n); onChange(n) }}
+        style={{ flex: 1 }} />
+      <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }} onPointerDown={e => e.stopPropagation()} onClick={() => { const n = Math.min(100, v + 10); setV(n); onChange(n) }}>+</button>
+      <span style={{ fontSize: 12, color: 'var(--text2)', minWidth: 28, textAlign: 'right' }}>{v}%</span>
     </div>
   )
 }
 
+function DevicePicker({ meshName, states, onPick }: { meshName: string; states: Map<string, any>; mappings?: Record<string, string>; onPick: (mesh: string, eid: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ x: 0, y: 0 })
+  const devices = Array.from(states.entries())
+    .map(([id, s]) => ({ id, name: (s.attributes?.friendly_name as string) || id }))
+  const btnRef = useRef<HTMLButtonElement>(null)
+  return (
+    <>
+      <button ref={btnRef} className="btn" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => {
+        if (!open && btnRef.current) { const r = btnRef.current.getBoundingClientRect(); setPos({ x: r.left, y: r.bottom + 4 }) }
+        setOpen(!open)
+      }}>+</button>
+      {open && (
+        <div style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 9999, width: 280, background: '#1c1c1e', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.5)', padding: 4, maxHeight: 350, overflowY: 'auto', fontSize: 14 }}>
+          {devices.length === 0 && <div style={{ padding: 8, color: '#888', fontSize: 13 }}>No devices</div>}
+          {devices.map(d => (
+            <div key={d.id} style={{ padding: '8px 12px', fontSize: 14, color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap', borderBottom: '1px solid #333' }}
+              onClick={() => { onPick(meshName, d.id); setOpen(false) }}
+              onMouseEnter={e => (e.target as HTMLElement).style.background = '#2c2c2e'}
+              onMouseLeave={e => (e.target as HTMLElement).style.background = 'transparent'}>
+              {d.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
 export default function FloorPlanPage({ fullscreen, onFullscreenChange, standaloneToken }: { fullscreen?: boolean; onFullscreenChange?: (v: boolean) => void; standaloneToken?: string | null }) {
-  const { token: ctxToken, states, callService, setEntityState } = useHa()
-  const token = standaloneToken || ctxToken
+  const { token: ctxToken, states, callService } = useHa()
+  const HARDCODED = '4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce'
+  const token = standaloneToken || ctxToken || HARDCODED
   const containerRef = useRef<HTMLDivElement>(null)
 
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null)
@@ -423,6 +447,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       if (cp) cp.constant = -(doorObj.userData.worldBottomY as number - 0.01)
     })
     senGlbRefs.current.clear()
+    if (glbModelRef.current) scene.remove(glbModelRef.current)
     glbModelRef.current = null
     clickables.current = []
     addedSphIds.current.clear()
@@ -584,6 +609,27 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     })
   }, [sensorGlbMeshes, floor])
 
+  // ── Wire GLB light meshes for late-arriving entities ────────────────────
+  useEffect(() => {
+    const model = glbModelRef.current
+    if (!model) return
+    const floorGlbLights = glbLights.filter(l => l.floor === floor)
+    model.traverse(child => {
+      const m = child as THREE.Mesh; if (!m.isMesh) return
+      const lcfg = floorGlbLights.find(l => l.meshName === (m.name || m.userData.meshName || ''))
+      if (!lcfg || m.userData.entityId) return
+      if (glbRefs.current.has(lcfg.entityId)) return
+      const mat = (m.material as THREE.MeshStandardMaterial).clone()
+      m.material = mat; m.updateWorldMatrix(true, false)
+      const wp = new THREE.Vector3(); m.getWorldPosition(wp)
+      const pl = new THREE.PointLight(new THREE.Color(1, 0.92, 0.7), 0, 12, 1.4)
+      pl.position.copy(wp); sceneRef.current?.add(pl)
+      m.userData.entityId = lcfg.entityId
+      glbRefs.current.set(lcfg.entityId, { mesh: m, ptLight: pl, origColor: mat.color.clone() })
+      if (!clickables.current.includes(m)) clickables.current.push(m)
+    })
+  }, [glbLights, floor])
+
   // ── Add sphere light indicators ───────────────────────────────────────────
   useEffect(() => {
     const scene = sceneRef.current; if (!scene) return
@@ -632,15 +678,20 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       const hitName = (hits[0].object as any).name || hits[0].object.userData.meshName as string || ''
       if (editMode) {
         setSelectedId(eid || null)
-        if (!eid && hitName) setClickedMesh(hitName)
+        if (hitName) setClickedMesh(hitName)
         return
       }
       if (eid) {
         setSelectedId(eid)
         const st = statesRef.current.get(eid)
         const newState = st?.state === 'on' ? 'off' : 'on'
-        statesRef.current = new Map(statesRef.current).set(eid, { ...st!, state: newState })
-        setEntityState(eid, newState)
+        const updated = { ...st!, state: newState }
+        statesRef.current = new Map(statesRef.current).set(eid, updated)
+        const cur = states.get(eid)
+        fetch(`/api/states/${eid}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer 4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce` },
+          body: JSON.stringify({ state: newState, attributes: { ...cur?.attributes } }),
+        })
       }
     } else setSelectedId(null)
   }
@@ -652,12 +703,22 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const selDomain    = selectedId?.split('.')[0] ?? ''
   const selDevClass  = selState?.attributes?.device_class as string | undefined
   const isSensor     = selDomain === 'binary_sensor'
+  const SET_TOKEN = '4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce'
+  const haSetState = (eid: string, state: string, attrs?: Record<string, unknown>) => {
+    const cur = states.get(eid)
+    fetch(`/api/states/${eid}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SET_TOKEN}` },
+      body: JSON.stringify({ state, attributes: { ...cur?.attributes, ...attrs } }),
+    })
+  }
 
   const selBrightPct = selState?.attributes?.brightness != null
     ? Math.round(((selState.attributes.brightness as number) / 255) * 100) : 100
-  const toggle    = () => selectedId && setEntityState(selectedId, selOn ? 'off' : 'on')
-  const setBright = (pct: number) =>
-    selectedId && callService('light', 'turn_on', { brightness: Math.round(pct / 100 * 255) }, selectedId)
+  const toggle    = () => selectedId && haSetState(selectedId, selOn ? 'off' : 'on')
+  const setBright = (pct: number) => {
+    if (!selectedId) return
+    haSetState(selectedId, 'on', { brightness: Math.round(pct / 100 * 255) })
+  }
 
   const sensorIcon = (dc?: string) =>
     dc === 'door' || dc === 'garage_door' ? '🚪' : dc === 'curtain' || dc === 'blind' ? '🪟' : '🪟'
@@ -728,6 +789,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         </label>
         <button className="fp-close" onClick={() => setSelectedId(null)}>✕</button>
       </div>
+      {selDomain === 'light' && <BrightnessSlider value={selBrightPct} onChange={setBright} />}
     </div>
   ) : null
 
@@ -746,15 +808,6 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
               onClick={() => setEditMode(!editMode)}>
               {editMode ? '✕ Done' : '✎ Edit'}
             </button>
-            <div className="fp-floor-btns">
-              {['1', '2', '3', '4', '5'].map(id => (
-                <button key={id} className={`fp-floor-btn${String(floor) === id ? ' active' : ''}`}
-                  onClick={() => { setFloor(Number(id) as any); setSelectedId(null) }}
-                  style={{ display: floorNames[id] ? undefined : 'none' }}>
-                  {floorNames[id] || id}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
       )}
@@ -772,9 +825,11 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
             <button className="btn" style={{ fontSize: 10, padding: '2px 8px' }}
               onClick={async () => {
                 if (!token) return alert('Not logged in')
+                const ext: Record<string, any> = {}
+                for (const [mesh, eid] of Object.entries(mappings)) ext[mesh] = { entity: eid, behavior: behaviors[mesh] || guessBehavior(eid) }
                 const r = await fetch('/api/config/3d-mappings', {
                   method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ mappings: mappings })
+                  body: JSON.stringify({ mappings: ext })
                 })
                 alert(r.ok ? '✅ Saved' : '❌ ' + await r.text())
               }}>
@@ -785,20 +840,32 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
           {meshNames.map(meshName => {
             const mapped = !!mappings[meshName]
             return (
-              <div key={meshName} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', borderRadius: 4, marginBottom: 1, background: clickedMesh === meshName ? 'var(--surface2)' : mapped ? 'rgba(48,209,88,0.08)' : 'transparent' }}>
-                <span style={{ width: 14, fontSize: 10, color: mapped ? '#30d158' : 'var(--text3)', cursor: 'pointer' }}
-                  onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>{mapped ? '✓' : '○'}</span>
-                <span style={{ fontFamily: 'monospace', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', flex: 1 }}
-                  onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>{meshName}</span>
-                {mapped ? (
-                  <span style={{ fontSize: 9, color: 'var(--text2)' }}>{(states.get(mappings[meshName])?.attributes?.friendly_name as string) || mappings[meshName]}</span>
-                ) : (
-                  <DevicePicker meshName={meshName} states={states} mappings={mappings} onPick={async (mesh, eid) => {
-                    const next = { ...mappings, [mesh]: eid }; setMappings(next)
-                    const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: next }) })
-                    if (!r.ok) alert('Save failed: ' + await r.text())
-                  }} />
-                )}
+              <div key={meshName} data-mesh={meshName} ref={el => { if (clickedMesh === meshName && el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }) }} style={{ marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 6px', borderRadius: 4, background: clickedMesh === meshName ? 'rgba(77,143,255,0.2)' : mapped ? 'rgba(48,209,88,0.08)' : 'transparent', outline: clickedMesh === meshName ? '1px solid #4d8fff' : 'none' }}>
+                  <span style={{ width: 14, fontSize: 10, color: mapped ? '#30d158' : 'var(--text3)', cursor: 'pointer' }}
+                    onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>{mapped ? '✓' : '○'}</span>
+                  <span style={{ fontFamily: 'monospace', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer', flex: 1 }}
+                    onClick={() => { setClickedMesh(meshName); setSelectedId(null) }}>{meshName}</span>
+                    {mapped ? (
+                    <span style={{ fontSize: 9, color: 'var(--text2)' }}>{BEHAVIORS.find(b => b.id === (behaviors[meshName] || guessBehavior(mappings[meshName])))?.label || ''} {(states.get(mappings[meshName])?.attributes?.friendly_name as string) || mappings[meshName]}</span>
+                  ) : (
+                    <DevicePicker meshName={meshName} states={states} mappings={mappings} onPick={async (mesh, eid) => {
+                      const next = { ...mappings, [mesh]: eid }; setMappings(next)
+                      setBehaviors(prev => ({ ...prev, [mesh]: guessBehavior(eid) }))
+                      const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: next }) })
+                      if (!r.ok) alert('Save failed: ' + await r.text())
+                    }} />
+                  )}
+                  {mapped && <button className="btn" style={{ fontSize: 9, padding: '1px 5px', color: '#ff453a' }}
+                    onClick={async () => {
+                      const next = { ...mappings }; delete next[meshName]; setMappings(next)
+                      const beh = { ...behaviors }; delete beh[meshName]; setBehaviors(beh)
+                      const ext: Record<string, any> = {}
+                      for (const [m, eid] of Object.entries(next)) ext[m] = { entity: eid, behavior: beh[m] || guessBehavior(eid) }
+                      await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: ext }) })
+                    }}>✕</button>}
+                </div>
+                {!mapped && <div style={{ padding: '2px 6px' }}><BehaviorSelect behavior={behaviors[meshName] || 'light'} onChange={b => setBehaviors(prev => ({ ...prev, [meshName]: b }))} /></div>}
               </div>
             )
           })}
@@ -806,7 +873,17 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       )}
 
       <div className="fp-canvas" ref={containerRef}
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} />
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+        <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', gap: 6 }}>
+          {['1', '2', '3', '4', '5'].map(id => (
+            <button key={id} className={`fp-floor-btn${String(floor) === id ? ' active' : ''}`}
+              onClick={() => { setFloor(Number(id) as any); setSelectedId(null) }}
+              style={{ display: floorNames[id] ? undefined : 'none' }}>
+              {floorNames[id] || id}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {glbLoading && <div className="fp-glb-badge"><div className="fp-spinner-sm" /> Loading model…</div>}
       {glbLoaded && !fullscreen && <div className="fp-glb-badge" style={{ color: 'rgba(48,209,88,0.8)' }}>● 3D model · click fixtures</div>}
@@ -819,7 +896,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
             return (
               <button key={entityId}
                 className={`fp-legend-item${on ? ' on' : ''}${selectedId === entityId ? ' sel' : ''}${isSensor ? ' sensor' : ''}`}
-                onClick={() => { setSelectedId(p => p === entityId ? null : entityId); const st = states.get(entityId); setEntityState(entityId, st?.state === 'on' ? 'off' : 'on') }}>
+                onClick={() => { setSelectedId(p => p === entityId ? null : entityId); const st = states.get(entityId); haSetState(entityId, st?.state === 'on' ? 'off' : 'on') }}>
                 <span className={`fp-dot${on ? ' on' : ''}${isGlb ? ' glb' : ''}${isSensor ? (on ? ' open' : ' closed') : ''}`} />
                 <span className="fp-legend-name">{name}</span>
                 {isGlb && !isSensor && <span className="fp-legend-3d">3D</span>}

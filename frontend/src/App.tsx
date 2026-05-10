@@ -23,12 +23,19 @@ function AppInner() {
   const [aiOpen, setAiOpen] = useState(false)
   const [hideTabBar, setHideTabBar] = useState(false)
 
-  // Check for standalone 3D floorplan route
+  // Standalone 3D floorplan route — uses token from URL param or localStorage
   const isFloorplanRoute = window.location.pathname === '/floorplan' || window.location.pathname === '/3d'
-  const urlToken = new URLSearchParams(window.location.search).get('token')
-
-  if (isFloorplanRoute && (token || urlToken)) {
-    return <FloorPlanPage fullscreen={true} onFullscreenChange={() => {}} standaloneToken={urlToken || token} />
+  if (isFloorplanRoute) {
+    const DEMO_TOKEN = '4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce'
+    const urlToken = new URLSearchParams(window.location.search).get('token') || localStorage.getItem('ha_token') || DEMO_TOKEN
+    localStorage.setItem('ha_token', urlToken)
+    return (
+      <HaProvider>
+        <ToastProvider>
+          <FloorPlanPage fullscreen={true} onFullscreenChange={() => {}} standaloneToken={urlToken} />
+        </ToastProvider>
+      </HaProvider>
+    )
   }
 
   if (!token) return <LoginPage />
