@@ -73,14 +73,34 @@ const INTEGRATIONS: IntegrationDef[] = [
     ]},
 ]
 
+interface EntityRegItem {
+  entity_id: string
+  name: string | null
+  platform: string | null
+  area_id: string | null
+  disabled: boolean
+  device_class: string | null
+  original_name: string | null
+}
+
+const DOMAIN_ICONS: Record<string, string> = {
+  light: '💡', switch: '🔌', binary_sensor: '🔍', sensor: '📊',
+  media_player: '🎵', camera: '📷', weather: '🌤', alarm_control_panel: '🔒',
+  automation: '⚡', scene: '🎬', script: '📜',
+}
+
 export default function IntegrationsPage() {
-  const { token } = useHa()
+  const { token, states } = useHa()
   const [configs, setConfigs] = useState<Record<string, any>>({})
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set(INTEGRATIONS.map(i => i.domain)))
   const [search, setSearch] = useState('')
   const [loadedStatuses, setLoadedStatuses] = useState<Record<string, string>>({})
+  const [reg, setReg] = useState<Map<string, EntityRegItem>>(new Map())
+  const [editingName, setEditingName] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [activeTab, setActiveTab] = useState<'integrations' | 'devices'>('devices')
 
   useEffect(() => {
     if (!token) return
@@ -91,6 +111,88 @@ export default function IntegrationsPage() {
         setLoadedStatuses(m)
       }).catch(() => {})
   }, [token])
+
+  // Load current config from server to pre-populate forms
+  useEffect(() => {
+    if (!token) return
+    fetch('/api/config', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then((cfg: any) => {
+        const ints = (cfg.integrations || []) as any[]
+        const m: Record<string, any> = {}
+        for (const int of ints) {
+          const domain = int.domain
+          const existing = m[domain] || {}
+          for (const [k, v] of Object.entries(int)) {
+            if (k === 'domain') continue
+            existing[k] = v
+          }
+          m[domain] = existing
+        }
+        setConfigs(prev => {
+          const merged = { ...m }
+          // Keep any user edits that aren't in server config
+          for (const [k, v] of Object.entries(prev)) {
+            if (!merged[k]) merged[k] = v
+          }
+          return merged
+        })
+      }).catch(() => {})
+  }, [token])
+
+  useEffect(() => {
+    if (!token) return
+    const load = () => fetch('/api/entity_registry', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then((list: EntityRegItem[]) => {
+        setReg(new Map(list.map(e => [e.entity_id, e])))
+      }).catch(() => {})
+    load()
+    const iv = setInterval(load, 5000)
+    return () => clearInterval(iv)
+  }, [token])
+
+  const updateReg = async (entityId: string, changes: Partial<EntityRegItem>) => {
+    const r = await fetch(`/api/entity_registry/${entityId}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(changes),
+    })
+    if (r.ok) {
+      setReg(prev => {
+        const next = new Map(prev)
+        const existing = next.get(entityId) || { entity_id: entityId, name: null, platform: null, area_id: null, disabled: false, device_class: null, original_name: null }
+        next.set(entityId, { ...existing, ...changes })
+        return next
+      })
+    }
+  }
+
+  const addEntity = async (domain: string) => {
+    const baseId = prompt(`Enter entity ID (e.g. ${domain}.my_device):`)
+    if (!baseId) return
+    const name = prompt('Enter friendly name:') || baseId
+    // Create the entity by setting its state via API
+    try {
+      const r = await fetch(`/api/states/${baseId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ state: 'off', attributes: { friendly_name: name } }),
+      })
+      if (!r.ok) throw new Error(await r.text())
+      // It should appear in registry on next poll
+    } catch (e: any) { alert(`Failed: ${e.message}`) }
+  }
+
+  const removeEntity = async (entityId: string) => {
+    if (!confirm(`Remove ${entityId}?`)) return
+    try {
+      const r = await fetch(`/api/states/${entityId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!r.ok) throw new Error(await r.text())
+      setReg(prev => { const n = new Map(prev); n.delete(entityId); return n })
+    } catch (e: any) { alert(`Failed: ${e.message}`) }
+  }
 
   const enabledDomains = new Set(Object.keys(configs).filter(d => {
     const cfg = configs[d]
@@ -139,6 +241,36 @@ export default function IntegrationsPage() {
     })
   }
 
+  const waitForServer = async (): Promise<void> => {
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 2000))
+      try {
+        const r = await fetch('/api/health')
+        if (r.ok) return
+      } catch {}
+    }
+    throw new Error('Server did not come back')
+  }
+
+  const reloadConfig = async () => {
+    try {
+      const r = await fetch('/api/config', { headers: { Authorization: `Bearer ${token}` } })
+      const cfg = await r.json()
+      const ints = (cfg.integrations || []) as any[]
+      const m: Record<string, any> = {}
+      for (const int of ints) {
+        const domain = int.domain
+        const existing = m[domain] || {}
+        for (const [k, v] of Object.entries(int)) {
+          if (k === 'domain') continue
+          existing[k] = v
+        }
+        m[domain] = existing
+      }
+      setConfigs(m)
+    } catch {}
+  }
+
   const save = async () => {
     setSaving(true)
     setMsg('')
@@ -153,123 +285,261 @@ export default function IntegrationsPage() {
         if (!hasVal) return null
         const out: any = { domain: int.domain }
         for (const [k, v] of Object.entries(cfg)) {
-          if (k === 'devices') {
-            if (Array.isArray(v) && v.length > 0) out.devices = v
-          } else if (v) {
-            out[k] = v
-          }
+          if (k === 'devices') { if (Array.isArray(v) && v.length > 0) out.devices = v }
+          else if (v) { out[k] = v }
         }
         return out
       }).filter(Boolean)
-
       const r = await fetch('/api/config/apply', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ integrations }),
       })
-      if (r.ok) setMsg('✅ Configuration saved. Server is restarting… Refresh in a few seconds.')
-      else setMsg('❌ Save failed: ' + await r.text())
-    } catch { setMsg('❌ Network error') }
+      if (!r.ok) { setMsg('❌ Save failed: ' + await r.text()); setSaving(false); return }
+      setMsg('✅ Saving… restarting server')
+      await waitForServer()
+      await reloadConfig()
+      setMsg('✅ Configuration applied and server restarted')
+      setTimeout(() => setMsg(''), 3000)
+    } catch { setMsg('❌ Network error - server may be restarting') }
     setSaving(false)
   }
+
+  // ── Group registry by platform ──────────────────────────────────────────
+  const byPlatform = new Map<string, EntityRegItem[]>()
+  for (const [, item] of reg) {
+    const plat = item.platform || 'unknown'
+    if (!byPlatform.has(plat)) byPlatform.set(plat, [])
+    byPlatform.get(plat)!.push(item)
+  }
+  const platformOrder = [...INTEGRATIONS.map(i => i.domain), 'demo', 'mqtt', 'isy994', 'lutron_caseta', 'yamaha_avr', 'envisalink', 'weather']
+  const sortedPlatforms = [...platformOrder.filter(p => byPlatform.has(p)), ...[...byPlatform.keys()].filter(p => !platformOrder.includes(p))]
 
   return (
     <div className="page">
       <div className="page-inner">
         <div className="nav-header">
-          <div className="nav-title">🔌 Integrations</div>
-          <button className="btn" style={{ fontSize: 14, padding: '2px 8px', position: 'absolute', right: 12, top: 12 }}
-            onClick={toggleTheme}>
-            {document.documentElement.classList.contains('light') ? '🌙' : '☀️'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="nav-title">🔌 Integrations</div>
+            <button className="btn" style={{ fontSize: 14, padding: '2px 8px', marginBottom: 10 }}
+              onClick={toggleTheme}>
+              {document.documentElement.classList.contains('light') ? '🌙' : '☀️'}
+            </button>
+          </div>
+          <div className="seg-ctrl" style={{ marginBottom: 10 }}>
+            <button className={`seg-btn ${activeTab === 'devices' ? 'active' : ''}`}
+              onClick={() => setActiveTab('devices')}>📋 Devices</button>
+            <button className={`seg-btn ${activeTab === 'integrations' ? 'active' : ''}`}
+              onClick={() => setActiveTab('integrations')}>⚙️ Config</button>
+          </div>
         </div>
 
-        <div style={{ position: 'sticky', top: 60, zIndex: 10, background: 'var(--bg)', padding: '8px 0' }}>
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search integrations…"
-            style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
-        </div>
+        {activeTab === 'devices' && (
+          <>
+            <div style={{
+              position: 'sticky', top: 108, zIndex: 10, background: 'var(--bg)', padding: '8px 0',
+            }}>
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search devices…"
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4, marginBottom: 8 }}>
+              {reg.size} devices · {byPlatform.size} integrations
+            </div>
 
-        <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4, marginBottom: 8 }}>
-          Showing {filtered.length} of {INTEGRATIONS.length} integrations
-          {enabledDomains.size > 0 && ` · ${enabledDomains.size} enabled`}
-        </div>
-
-        {filtered.map(int => {
-          const cfg = configs[int.domain] || {}
-          const isCollapsed = collapsed.has(int.domain)
-          const configured = enabledDomains.has(int.domain)
-          const status = loadedStatuses[int.domain]
-          const isLoaded = status === 'loaded'
-          const isFailed = status === 'failed'
-          return (
-            <div className="section" key={int.domain} style={{ marginTop: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                onClick={() => setCollapsed(prev => { const n = new Set(prev); if (n.has(int.domain)) n.delete(int.domain); else n.add(int.domain); return n })}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span className="section-title">{int.icon} {int.name}</span>
-                  <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4,
-                    background: isLoaded ? 'rgba(48,209,88,0.2)' : isFailed ? 'rgba(255,69,58,0.2)' : configured ? 'rgba(255,159,10,0.2)' : 'rgba(255,255,255,0.08)',
-                    color: isLoaded ? '#30d158' : isFailed ? '#ff453a' : configured ? '#ff9f0a' : 'var(--text3)' }}>
-                    {isLoaded ? '✓ Loaded' : isFailed ? '✕ Failed' : configured ? '⏎ Pending' : '⚪'}
-                  </span>
-                </div>
-                <span style={{ fontSize: 12, color: 'var(--text2)' }}>{isCollapsed ? '▶' : '▼'}</span>
-              </div>
-              {!isCollapsed && <>
-                <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 8px', paddingLeft: 4 }}>{int.desc}</div>
-                {int.fields.map(field => (
-                  <div key={field.key} style={{ marginBottom: 8 }}>
-                    <label style={{ fontSize: 11, color: 'var(--text2)', display: 'block', marginBottom: 2 }}>{field.label}</label>
-                    <input type={field.type || 'text'} value={cfg[field.key] || ''}
-                      onChange={e => updateField(int.domain, field.key, e.target.value)}
-                      placeholder={field.placeholder || ''}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
+            {sortedPlatforms.map(platform => {
+              const items = byPlatform.get(platform)!.filter(item => {
+                if (!search) return true
+                const q = search.toLowerCase()
+                return item.entity_id.includes(q) || (item.name || '').toLowerCase().includes(q)
+              })
+              if (items.length === 0) return null
+              const meta = INTEGRATIONS.find(i => i.domain === platform)
+              const icon = meta?.icon ?? DOMAIN_ICONS[items[0]?.entity_id?.split('.')[0]] ?? '🔧'
+              return (
+                <div className="section" key={platform} style={{ marginTop: 12 }}>
+                  <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span>{icon} {meta?.name ?? platform}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 400 }}>({items.length})</span>
                   </div>
-                ))}
-                {int.dynamicFields && (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>Devices</div>
-                    {(cfg.devices || []).map((dev: any, idx: number) => (
-                      <div key={idx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
-                        {int.dynamicFields!.map(f => (
-                          <input key={f.key} type={f.type || 'text'} value={dev[f.key] || ''}
-                            placeholder={f.placeholder || f.key}
-                            onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
-                            style={{ flex: 1, minWidth: 0, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 11 }} />
-                        ))}
-                        <button className="btn" style={{ fontSize: 10, padding: '2px 6px', color: '#ff453a' }}
-                          onClick={() => removeDevice(int.domain, idx)}>✕</button>
+                  <div className="ios-list">
+                    {items.sort((a, b) => a.entity_id.localeCompare(b.entity_id)).map(item => {
+                      const st = states.get(item.entity_id)
+                      const on = st?.state === 'on'
+                      const domain = item.entity_id.split('.')[0]
+                      const domainIcon = DOMAIN_ICONS[domain] ?? '🔧'
+                      const isEditing = editingName === item.entity_id
+                      const name = item.name || (st?.attributes?.friendly_name as string) || item.entity_id
+                      return (
+                        <div className="ios-list-row" key={item.entity_id}>
+                          <div className="ios-list-icon" style={{
+                            background: on ? 'rgba(48,209,88,0.15)' : 'rgba(255,255,255,0.06)',
+                          }}>{domainIcon}</div>
+                          <div className="ios-list-content" style={{ flex: 1, minWidth: 0 }}>
+                            {isEditing ? (
+                              <form onSubmit={e => { e.preventDefault(); if (editValue.trim()) { updateReg(item.entity_id, { name: editValue.trim() }); setEditingName(null) } }}
+                                style={{ display: 'flex', gap: 4 }}>
+                                <input value={editValue} onChange={e => setEditValue(e.target.value)}
+                                  style={{ flex: 1, padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13 }}
+                                  onBlur={() => setEditingName(null)} autoFocus />
+                              </form>
+                            ) : (
+                              <div className="ios-list-title" style={{ cursor: 'pointer' }}
+                                onDoubleClick={() => { setEditingName(item.entity_id); setEditValue(name) }}>
+                                {name}
+                              </div>
+                            )}
+                            <div className="ios-list-subtitle">
+                              <span style={{ color: on ? 'var(--green)' : 'var(--text2)', fontWeight: on ? 600 : 400 }}>
+                                {st?.state ?? '—'}
+                              </span>
+                              <span style={{ marginLeft: 6 }}>{item.entity_id}</span>
+                              {item.disabled && <span style={{ marginLeft: 6, color: 'var(--orange)' }}>⏸ Disabled</span>}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }}
+                              onClick={() => { setEditingName(item.entity_id); setEditValue(name) }}>✎</button>
+                            {platform === 'demo' && (
+                              <button className="btn" style={{ fontSize: 10, padding: '2px 6px', color: '#ff453a' }}
+                                onClick={() => removeEntity(item.entity_id)}>✕</button>
+                            )}
+                            <label className="ios-toggle" style={{ transform: 'scale(0.8)' }}>
+                              <input type="checkbox" checked={!item.disabled}
+                                onChange={() => updateReg(item.entity_id, { disabled: !item.disabled })} />
+                              <span className="ios-slider" />
+                            </label>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <button className="btn" style={{ fontSize: 11, padding: '4px 10px', marginTop: 6 }}
+                    onClick={() => addEntity(platform.startsWith('light') ? 'light' : platform.startsWith('switch') ? 'switch' : platform)}>
+                    + Add device
+                  </button>
+                </div>
+              )
+            })}
+          </>
+        )}
+
+        {activeTab === 'integrations' && (
+          <>
+            <div style={{ position: 'sticky', top: 108, zIndex: 10, background: 'var(--bg)', padding: '8px 0' }}>
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search integrations…"
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+
+            <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4, marginBottom: 8 }}>
+              Showing {filtered.length} of {INTEGRATIONS.length} integrations
+              {enabledDomains.size > 0 && ` · ${enabledDomains.size} enabled`}
+            </div>
+
+            {filtered.map(int => {
+              const cfg = configs[int.domain] || {}
+              const isCollapsed = collapsed.has(int.domain)
+              const configured = enabledDomains.has(int.domain)
+              const status = loadedStatuses[int.domain]
+              const isLoaded = status === 'loaded'
+              const isFailed = status === 'failed'
+              return (
+                <div className="section" key={int.domain} style={{ marginTop: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                    onClick={() => setCollapsed(prev => { const n = new Set(prev); if (n.has(int.domain)) n.delete(int.domain); else n.add(int.domain); return n })}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="section-title">{int.icon} {int.name}</span>
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4,
+                        background: isLoaded ? 'rgba(48,209,88,0.2)' : isFailed ? 'rgba(255,69,58,0.2)' : configured ? 'rgba(255,159,10,0.2)' : 'rgba(255,255,255,0.08)',
+                        color: isLoaded ? '#30d158' : isFailed ? '#ff453a' : configured ? '#ff9f0a' : 'var(--text3)' }}>
+                        {isLoaded ? '✓ Loaded' : isFailed ? '✕ Failed' : configured ? '⏎ Pending' : '⚪'}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--text2)' }}>{isCollapsed ? '▶' : '▼'}</span>
+                  </div>
+                  {!isCollapsed && <>
+                    <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 8px', paddingLeft: 4 }}>{int.desc}</div>
+                    {int.fields.map(field => (
+                      <div key={field.key} style={{ marginBottom: 8 }}>
+                        <label style={{ fontSize: 11, color: 'var(--text2)', display: 'block', marginBottom: 2 }}>{field.label}</label>
+                        <input type={field.type || 'text'} value={cfg[field.key] || ''}
+                          onChange={e => updateField(int.domain, field.key, e.target.value)}
+                          placeholder={field.placeholder || ''}
+                          style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
                       </div>
                     ))}
-                    <button className="btn" style={{ fontSize: 10, padding: '4px 10px' }}
-                      onClick={() => addDevice(int.domain)}>+ Add device</button>
-                  </div>
-                )}
-              </>}
-            </div>
-          )
-        })}
-
+                    {int.dynamicFields && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>Devices</div>
+                        {(cfg.devices || []).map((dev: any, idx: number) => (
+                          <div key={idx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+                            {int.dynamicFields!.map(f => (
+                              <input key={f.key} type={f.type || 'text'} value={dev[f.key] || ''}
+                                placeholder={f.placeholder || f.key}
+                                onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
+                                style={{ flex: 1, minWidth: 0, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 11 }} />
+                            ))}
+                            <button className="btn" style={{ fontSize: 10, padding: '2px 6px', color: '#ff453a' }}
+                              onClick={() => removeDevice(int.domain, idx)}>✕</button>
+                          </div>
+                        ))}
+                        <button className="btn" style={{ fontSize: 10, padding: '4px 10px' }}
+                          onClick={() => addDevice(int.domain)}>+ Add device</button>
+                      </div>
+                    )}
+                    {/* Show existing devices from this integration */}
+                    {reg.size > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>
+                          Existing devices ({[...reg.values()].filter(e => e.platform === int.domain).length})
+                        </div>
+                        {[...reg.values()].filter(e => e.platform === int.domain).sort((a, b) => a.entity_id.localeCompare(b.entity_id)).map(item => (
+                          <div key={item.entity_id} style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            padding: '4px 8px', borderRadius: 4, marginBottom: 2,
+                            background: 'var(--surface2)', fontSize: 12,
+                          }}>
+                            <span style={{ fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {item.name || item.entity_id}
+                            </span>
+                            <span style={{ color: 'var(--text2)', fontSize: 10 }}>{item.entity_id}</span>
+                            <button className="btn" style={{ fontSize: 9, padding: '1px 5px', color: '#ff453a' }}
+                              onClick={() => removeEntity(item.entity_id)}>✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>}
+                </div>
+              )
+            })}
+          </>
+        )}
       </div>
 
-      <div style={{ position: 'sticky', bottom: 0, zIndex: 20, background: 'var(--bg)', padding: '12px 16px calc(12px + var(--tab-h, 0px))', borderTop: '1px solid var(--sep)' }}>
-        <button className="btn btn-accent" onClick={save} disabled={saving}
-          style={{ width: '100%', fontSize: 13, padding: 12 }}>
-          {saving ? 'Saving & Restarting…' : '💾 Save & Restart'}
-        </button>
-        {msg && <div style={{ marginTop: 8, fontSize: 12, color: msg.startsWith('✅') ? '#30d158' : '#ff453a', whiteSpace: 'pre-line', textAlign: 'center' }}>{msg}</div>}
-      </div>
+      {activeTab === 'integrations' && (
+        <div style={{ position: 'sticky', bottom: 0, zIndex: 20, background: 'var(--bg)', padding: '12px 16px calc(12px + var(--tab-h, 0px))', borderTop: '1px solid var(--sep)' }}>
+          <button className="btn btn-accent" onClick={save} disabled={saving}
+            style={{ width: '100%', fontSize: 13, padding: 12 }}>
+            {saving ? 'Saving & Restarting…' : '💾 Save & Restart'}
+          </button>
+          {msg && <div style={{ marginTop: 8, fontSize: 12, color: msg.startsWith('✅') ? '#30d158' : '#ff453a', whiteSpace: 'pre-line', textAlign: 'center' }}>{msg}</div>}
+        </div>
+      )}
 
       <div className="page-inner" style={{ paddingBottom: '100px' }}>
-
-        <div className="section" style={{ marginTop: 24 }}>
-          <div className="section-title">🏗️ 3D Floors</div>
-          <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 12px', paddingLeft: 4 }}>
-            Name floors and upload .glb models (SketchUp, Blender exports).
-          </div>
-          <FloorsManager token={token} />
-        </div>
+        {activeTab === 'integrations' && (
+          <>
+            <div className="section" style={{ marginTop: 24 }}>
+              <div className="section-title">🏗️ 3D Floors</div>
+              <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 12px', paddingLeft: 4 }}>
+                Name floors and upload .glb models (SketchUp, Blender exports).
+              </div>
+              <FloorsManager token={token} />
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Param,
   Body,
   UseGuards,
@@ -55,6 +56,18 @@ export class StatesController {
       throw new NotFoundException(`Entity '${entityId}' not found`);
     }
     return state;
+  }
+
+  /** DELETE /api/states/:entity_id - Remove entity state */
+  @Delete(':entity_id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove entity and its state' })
+  @ApiParam({ name: 'entity_id', example: 'light.living_room' })
+  removeState(@Param('entity_id') entityId: string) {
+    const state = this.stateMachine.getState(entityId);
+    if (!state) throw new NotFoundException(`Entity '${entityId}' not found`);
+    this.stateMachine.removeEntity(entityId);
+    return { ok: true, message: `Entity '${entityId}' removed` };
   }
 
   /** POST /api/states/:entity_id - Set entity state */
