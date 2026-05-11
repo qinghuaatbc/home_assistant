@@ -44,14 +44,14 @@ export default function EditPanel({
                 {mapped ? (
                   <span style={{ fontSize: 9, color: 'var(--text2)' }}>{(() => {
                     const mv = mappings[meshName]; const eid = typeof mv === 'string' ? mv : (mv as any)?.entity
-                    const b = behaviors[meshName] || guessBehavior(eid || '')
+                    const b = behaviors[meshName] || guessBehavior(eid || '', eid ? states.get(eid)?.attributes?.device_class as string | undefined : undefined)
                     const bl = BEHAVIORS.find(x => x.id === b)?.label || ''
                     return bl + ' ' + (eid ? (states.get(eid)?.attributes?.friendly_name as string) || eid : '')
                   })()}</span>
                 ) : (
                   <DevicePicker meshName={meshName} states={states} onPick={async (mesh, eid) => {
                     const next = { ...mappings, [mesh]: eid } as Mappings
-                    const beh = { ...behaviors, [mesh]: guessBehavior(eid) }
+                    const beh = { ...behaviors, [mesh]: guessBehavior(eid, states.get(eid)?.attributes?.device_class as string | undefined) }
                     onPick(mesh, eid, next, beh)
                   }} />
                 )}

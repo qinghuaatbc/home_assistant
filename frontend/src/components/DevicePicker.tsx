@@ -1,11 +1,17 @@
 import { useState, useRef, useEffect } from 'react'
 import { HaState, DeviceItem } from '../types'
 
-export function guessBehavior(entityId: string): string {
+export function guessBehavior(entityId: string, deviceClass?: string): string {
   if (entityId.startsWith('light.')) return 'light'
   if (entityId.startsWith('media_player.')) return 'media_player'
-  if (entityId.startsWith('binary_sensor.')) return 'door_r'
   if (entityId.startsWith('switch.')) return 'switch'
+  if (entityId.startsWith('binary_sensor.')) {
+    if (deviceClass === 'garage_door') return 'garage_door'
+    if (deviceClass === 'curtain' || deviceClass === 'blind') return 'curtain'
+    if (deviceClass === 'window') return 'window'
+    if (deviceClass === 'door') return 'door_r'
+    return 'door_r'
+  }
   return 'light'
 }
 

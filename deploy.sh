@@ -31,8 +31,14 @@ rsync -az --delete \
   --exclude 'frontend/src' \
   --exclude 'src' \
   --exclude '.env' \
+  --exclude '*.db' \
+  --exclude '*.db-shm' \
+  --exclude '*.db-wal' \
   --exclude 'config/configuration.yaml' \
+  --exclude 'config/3d-mappings.json' \
+  --exclude 'config/floors.json' \
   --exclude 'public/floors/' \
+  --exclude 'data/floors/' \
   -e "ssh -p $PORT -o StrictHostKeyChecking=accept-new" \
   "$(dirname "$0")/" "$HOST:$REMOTE_DIR/"
 

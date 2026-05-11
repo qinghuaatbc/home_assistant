@@ -86,7 +86,8 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     const out: Record<string, MappingEntry> = {}
     for (const [mesh, val] of Object.entries(m)) {
       const eid = typeof val === 'string' ? val : val.entity
-      out[mesh] = { entity: eid, behavior: b[mesh] || guessBehavior(eid) }
+      const dc = states.get(eid)?.attributes?.device_class as string | undefined
+      out[mesh] = { entity: eid, behavior: b[mesh] || guessBehavior(eid, dc) }
     }
     return out
   }
@@ -150,7 +151,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     getCamera: () => cameraRef.current,
     getControls: () => controlsRef.current,
     getRenderer: () => rendererRef.current,
-    floor, statesRef, activeBehaviors, getBehavior: (eid) => guessBehavior(eid),
+    floor, statesRef, activeBehaviors, getBehavior: (eid) => guessBehavior(eid, statesRef.current.get(eid)?.attributes?.device_class as string | undefined),
     glbLights, sphereLights, sensorMarkers, sensorGlbMeshes, mediaGlbMeshes,
     glbLoading, glbLoaded, glbError,
     onGlbStart: () => { setGlbLoaded(false); setGlbLoading(true) },
@@ -185,7 +186,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         else if (dc === 'garage_door') beh = 'garage_door'
         else if (dc === 'curtain' || dc === 'blind') beh = 'curtain'
         else if (dc === 'door') {
-          beh = (meshName ? behaviors[meshName] : undefined) || guessBehavior(result.entityId)
+          beh = (meshName ? behaviors[meshName] : undefined) || guessBehavior(result.entityId, dc)
         }
         else if (dc === 'window') beh = 'window'
         // Normalize door_r/door_s → 'door' for filter matching
@@ -300,8 +301,8 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
           const m: Record<string, string> = {}
           const b: Record<string, string> = {}
           for (const [mesh, val] of Object.entries(d)) {
-            if (typeof val === 'string') { m[mesh] = val; b[mesh] = guessBehavior(val) }
-            else { const v = val as any; m[mesh] = v.entity; b[mesh] = v.behavior || guessBehavior(v.entity) }
+            if (typeof val === 'string') { m[mesh] = val; b[mesh] = guessBehavior(val, states.get(val)?.attributes?.device_class as string | undefined) }
+            else { const v = val as any; b[mesh] = v.behavior || guessBehavior(v.entity, states.get(v.entity)?.attributes?.device_class as string | undefined); m[mesh] = v.entity }
           }
           setMappings(m); setBehaviors(b)
           return
@@ -311,7 +312,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         let added = false
         states.forEach((st, eid) => {
           const mesh = st.attributes?.glb_mesh as string | undefined
-          if (mesh) { merged[mesh] = eid; beh[mesh] = guessBehavior(eid); added = true }
+          if (mesh) { merged[mesh] = eid; beh[mesh] = guessBehavior(eid, st.attributes?.device_class as string | undefined); added = true }
         })
         setMappings(merged); setBehaviors(beh)
         if (added) saveAll(merged, beh)

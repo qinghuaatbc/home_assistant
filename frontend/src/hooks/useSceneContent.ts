@@ -110,6 +110,19 @@ export function useSceneContent(p: Props) {
   const glbLightsRef = useRef(p.glbLights)
   const senGlbRef = useRef(p.sensorGlbMeshes)
   const mediaGlbRefs = useRef(new Map<string, { mesh: THREE.Mesh; origScale: THREE.Vector3; bars: THREE.Mesh[] }>())
+  const clickRings = useRef(new Map<string, THREE.Mesh>())
+
+  function addClickRing(eid: string, pos: THREE.Vector3, scene: THREE.Scene) {
+    if (clickRings.current.has(eid)) return
+    const geom = new THREE.TorusGeometry(0.25, 0.04, 12, 20)
+    const mat = new THREE.MeshBasicMaterial({ color: 0x4d8fff, transparent: true, opacity: 0 })
+    const ring = new THREE.Mesh(geom, mat)
+    ring.position.copy(pos); ring.position.y += 0.2
+    ring.visible = false
+    scene.add(ring)
+    clickRings.current.set(eid, ring)
+    // Also add to refs for sensor/door entities
+  }
 
   useEffect(() => { glbLightsRef.current = p.glbLights }, [p.glbLights])
   useEffect(() => { senGlbRef.current = p.sensorGlbMeshes }, [p.sensorGlbMeshes])
@@ -174,6 +187,7 @@ export function useSceneContent(p: Props) {
           m.userData.entityId = lcfg.entityId
           glbRefs.current.set(lcfg.entityId, { mesh: m, ptLight: pl, origColor: mat.color.clone() })
           clickables.current.push(m)
+          addClickRing(lcfg.entityId, wp, scene)
         })
         floorSenGlb.forEach(cfg => {
           const doorObj = model.getObjectByName(cfg.meshName)
@@ -232,6 +246,7 @@ export function useSceneContent(p: Props) {
           }
           mediaGlbRefs.current.set(mcfg.entityId, { mesh: m, origScale, bars })
           clickables.current.push(m)
+          addClickRing(mcfg.entityId, new THREE.Vector3().copy(m.position), scene)
         })
         p.onMeshNames(names.filter((v, i, a) => a.indexOf(v) === i))
         glbModelRef.current = model
@@ -302,6 +317,7 @@ export function useSceneContent(p: Props) {
       m.userData.entityId = lcfg.entityId
       glbRefs.current.set(lcfg.entityId, { mesh: m, ptLight: pl, origColor: mat.color.clone() })
       if (!clickables.current.includes(m)) clickables.current.push(m)
+      const scene2 = p.getScene(); if (scene2) addClickRing(lcfg.entityId, wp, scene2)
     })
   }, [p.glbLights, p.floor])
 
@@ -362,6 +378,7 @@ export function useSceneContent(p: Props) {
         }
         mediaGlbRefs.current.set(mcfg.entityId, { mesh: m, origScale, bars })
         if (!clickables.current.includes(m)) clickables.current.push(m)
+        const scene3 = p.getScene(); if (scene3) addClickRing(mcfg.entityId, new THREE.Vector3().copy(m.position), scene3)
       })
     }
   }, [p.mediaGlbMeshes, p.floor, p.glbLoaded])
@@ -387,6 +404,22 @@ export function useSceneContent(p: Props) {
     sphRefs.current.forEach(({ bulb, glow, ptLight }, eid) => setVis(eid, [bulb, glow, ptLight]))
     senRefs.current.forEach(({ marker, glow, ptLight }, eid) => setVis(eid, [marker, glow, ptLight]))
     senGlbRefs.current.forEach(({ meshes, ptLight }, eid) => setVis(eid, [...meshes, ptLight]))
+    mediaGlbRefs.current.forEach(({ mesh, bars }, eid) => setVis(eid, [mesh, ...bars]))
+    // Click indicators: show rings on filterable devices when filter active
+    const allShown = !p.activeBehaviors || p.activeBehaviors.size === 0
+    clickRings.current.forEach((ring, eid) => {
+      if (allShown) { ring.visible = false; return }
+      const st = p.statesRef.current.get(eid); if (!st) { ring.visible = false; return }
+      const dc = st.attributes?.device_class as string | undefined
+      let match = false
+      if (eid.startsWith('light.')) match = p.activeBehaviors!.has('light')
+      else if (eid.startsWith('media_player.')) match = p.activeBehaviors!.has('media_player')
+      else if (eid.startsWith('switch.')) match = p.activeBehaviors!.has('switch')
+      else if (dc === 'garage_door') match = p.activeBehaviors!.has('garage_door')
+      else if (dc === 'curtain' || dc === 'blind') match = p.activeBehaviors!.has('curtain')
+      else if (dc === 'door') match = true // doors always clickable
+      ring.visible = match
+    })
   }, [p.activeBehaviors])
 
   // ── Per-frame: smooth door/curtain animation ──────────────────────────
@@ -425,6 +458,7 @@ export function useSceneContent(p: Props) {
     })
     // Media player: pulsing scale + shake + frequency bars
     mediaGlbRefs.current.forEach(({ mesh, origScale, bars }, eid) => {
+      if (!mesh.visible) return // hidden by behavior filter
       const st = p.statesRef.current.get(eid)
       const on = st?.state === 'on'
       if (on) {
@@ -445,11 +479,21 @@ export function useSceneContent(p: Props) {
       } else {
         mesh.scale.copy(origScale)
         bars.forEach(bar => {
+          bar.visible = false
           bar.scale.y = 1
           const mat = bar.material as THREE.MeshStandardMaterial
-          mat.emissiveIntensity = 0.3
+          mat.emissiveIntensity = 0
         })
       }
+    })
+    // Click indicator rings: pulse on visible items
+    clickRings.current.forEach((ring, eid) => {
+      if (!ring.visible) return
+      const s = 1 + 0.1 * Math.sin(t * 3)
+      ring.scale.set(s, s, 1)
+      ring.rotation.z = t * 0.4
+      const mat = ring.material as THREE.MeshBasicMaterial
+      mat.opacity = 0.35 + 0.15 * Math.sin(t * 3)
     })
   }, [])
   const updateVisuals = useCallback(() => {

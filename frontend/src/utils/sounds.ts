@@ -120,46 +120,11 @@ let musicUrl: string | null = null
 
 export function startMusic() {
   stopMusic()
-  if (!musicUrl) {
-    // Generate music WAV URL on first use
-    const sr = 44100, dur = 4.0
-    const n = Math.floor(sr * dur)
-    const notes = [[262, 330, 392], [349, 440, 523], [294, 370, 440], [262, 330, 392]]
-    const samples: number[] = []
-    for (let b = 0; b < 4; b++) {
-      const chord = notes[b]
-      for (let i = 0; i < n / 4; i++) {
-        const t = (b * n / 4 + i) / sr
-        const env = Math.max(0, 1 - i / (n / 4)) * 0.3
-        let val = 0
-        for (const f of chord) {
-          val += Math.sin(2 * Math.PI * f * t) * env
-          val += Math.sin(2 * Math.PI * f * 2 * t) * env * 0.08
-        }
-        val += Math.sin(2 * Math.PI * chord[0] / 2 * t) * env * 0.15
-        if (i < sr * 0.01) val += (0.5 - i / (sr * 0.01) * 0.5) * 0.15
-        samples.push(Math.max(-0.8, Math.min(0.8, val)))
-      }
-    }
-    // Encode as WAV blob URL
-    const numChannels = 1, bitsPerSample = 16
-    const byteRate = sr * numChannels * bitsPerSample / 8
-    const dataSize = samples.length * numChannels * bitsPerSample / 8
-    const buf = new ArrayBuffer(44 + dataSize)
-    const dv = new DataView(buf)
-    const w = (off: number, str: string) => { for (let i = 0; i < str.length; i++) dv.setUint8(off + i, str.charCodeAt(i)) }
-    w(0, 'RIFF'); dv.setUint32(4, 36 + dataSize, true); w(8, 'WAVE')
-    w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, numChannels, true)
-    dv.setUint32(24, sr, true); dv.setUint32(28, byteRate, true); dv.setUint16(32, numChannels * bitsPerSample / 8, true); dv.setUint16(34, bitsPerSample, true)
-    w(36, 'data'); dv.setUint32(40, dataSize, true)
-    for (let i = 0; i < samples.length; i++) dv.setInt16(44 + i * 2, samples[i] * 32767 * 0.5, true)
-    const blob = new Blob([buf], { type: 'audio/wav' })
-    musicUrl = URL.createObjectURL(blob)
-  }
-  const audio = new Audio(musicUrl)
+  const url = '/music.wav?_=' + Date.now()
+  const audio = new Audio(url)
   audio.loop = true
   audio.volume = 0.3
-  audio.play().catch(() => {})
+  audio.play().catch((e) => console.warn('Music:', e.message))
   musicAudio = audio
 }
 
