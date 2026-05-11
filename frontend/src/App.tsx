@@ -82,7 +82,7 @@ function FloatingAiButton() {
     <>
       <button onClick={() => setOpen(!open)}
         style={{
-          position: 'fixed', bottom: 140, right: 16, zIndex: 9999,
+          position: 'fixed', bottom: 200, right: 16, zIndex: 9999,
           width: 44, height: 44, borderRadius: 22, border: 'none',
           background: open ? '#ff453a' : '#4d8fff', color: '#fff',
           fontSize: 18, cursor: 'pointer', boxShadow: '0 4px 16px rgba(77,143,255,0.4)',

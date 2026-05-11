@@ -154,7 +154,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     floor, statesRef, activeBehaviors, getBehavior: (eid) => guessBehavior(eid, statesRef.current.get(eid)?.attributes?.device_class as string | undefined),
     glbLights, sphereLights, sensorMarkers, sensorGlbMeshes, mediaGlbMeshes,
     glbLoading, glbLoaded, glbError,
-    onGlbStart: () => { setGlbLoaded(false); setGlbLoading(true) },
+    onGlbStart: () => { setGlbLoaded(false); setGlbLoading(true); setGlbError(false) },
     onGlbSuccess: () => { setGlbLoading(false); setGlbLoaded(true) },
     onGlbError: () => { setGlbLoading(false); setGlbError(true) },
     onMeshNames: setMeshNames,
@@ -420,32 +420,31 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       )}
 
       <div className="fp-canvas" ref={containerRef}
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
-        <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', gap: 6 }}>
-          {['1', '2', '3', '4', '5'].map(id => (
-            <button key={id} className={`fp-floor-btn${String(floor) === id ? ' active' : ''}`}
-              onClick={() => { setFloor(Number(id) as any); setSelectedId(null) }}
-              style={{ display: floorNames[id] ? undefined : 'none' }}>
-              {floorNames[id] || id}
-            </button>
-          ))}
-        </div>
-        <div style={{ position: 'absolute', bottom: 16, right: 16, zIndex: 10, display: 'flex', gap: 6 }}>
-          <button className="fp-floor-btn" style={{ fontSize: 14, padding: '4px 10px', opacity: camLocked ? 1 : 0.5 }}
-            onClick={() => setCamLocked(!camLocked)}>
-            {camLocked ? '🔒' : '🔓'}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} />
+      <div style={{ position: 'absolute', bottom: fullscreen ? 80 : 'calc(80px + var(--safe-bottom))', left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', gap: 6 }}>
+        {['1', '2', '3', '4', '5'].map(id => (
+          <button key={id} className={`fp-floor-btn${String(floor) === id ? ' active' : ''}`}
+            onClick={() => { setFloor(Number(id) as any); setSelectedId(null) }}
+            style={{ display: floorNames[id] ? undefined : 'none' }}>
+            {floorNames[id] || id}
           </button>
-          <button className="fp-floor-btn" style={{ fontSize: 14, padding: '4px 10px' }}
-            onClick={() => setSoundMode((soundMode + 1) % 3)}>
-            {soundMode === 0 ? '🔇' : soundMode === 1 ? '🔔' : '🗣'}
+        ))}
+      </div>
+      <div style={{ position: 'absolute', bottom: fullscreen ? 80 : 'calc(80px + var(--safe-bottom))', right: 16, zIndex: 20, display: 'flex', gap: 6 }}>
+        <button className="fp-floor-btn" style={{ fontSize: 14, padding: '4px 10px', opacity: camLocked ? 1 : 0.5 }}
+          onClick={() => setCamLocked(!camLocked)}>
+          {camLocked ? '🔒' : '🔓'}
+        </button>
+        <button className="fp-floor-btn" style={{ fontSize: 14, padding: '4px 10px' }}
+          onClick={() => setSoundMode((soundMode + 1) % 3)}>
+          {soundMode === 0 ? '🔇' : soundMode === 1 ? '🔔' : '🗣'}
+        </button>
+        {soundMode === 2 && (
+          <button className="fp-floor-btn" style={{ fontSize: 11, padding: '4px 6px' }}
+            onClick={() => { const n = (langIdx + 1) % 3; setLangIdx(n); setLang(LANG_LIST[n]) }}>
+            {LANG_LIST[langIdx] === 'en' ? 'EN' : LANG_LIST[langIdx] === 'zh' ? '中文' : 'فارسی'}
           </button>
-          {soundMode === 2 && (
-            <button className="fp-floor-btn" style={{ fontSize: 11, padding: '4px 6px' }}
-              onClick={() => { const n = (langIdx + 1) % 3; setLangIdx(n); setLang(LANG_LIST[n]) }}>
-              {LANG_LIST[langIdx] === 'en' ? 'EN' : LANG_LIST[langIdx] === 'zh' ? '中文' : 'فارسی'}
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
       {glbLoading && <div className="fp-glb-badge"><div className="fp-spinner-sm" /> Loading model…</div>}
