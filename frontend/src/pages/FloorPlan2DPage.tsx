@@ -405,19 +405,21 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
             background: fullscreen ? '#111113' : 'var(--bg)',
             padding: '8px 0', display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center',
           }}>
-            <button className="fp-floor-btn"
+            <button
+              className="fp-floor-btn"
               style={{
-                background: showAllFloors ? 'var(--blue)' : 'rgba(255,255,255,0.08)',
-                color: showAllFloors ? '#fff' : 'rgba(255,255,255,0.55)',
+                background: showAllFloors ? 'var(--blue)' : 'var(--surface)',
+                color: showAllFloors ? '#fff' : 'var(--text)',
               }}
               onClick={() => { setShowAllFloors(true); setFloor(null) }}>
               📋 All
             </button>
             {hasMappedDevices && (
-              <button className="fp-floor-btn"
+              <button
+                className="fp-floor-btn"
                 style={{
-                  background: !showAllFloors && floor === 0 ? 'var(--blue)' : 'rgba(255,255,255,0.08)',
-                  color: !showAllFloors && floor === 0 ? '#fff' : 'rgba(255,255,255,0.55)',
+                  background: !showAllFloors && floor === 0 ? 'var(--blue)' : 'var(--surface)',
+                  color: !showAllFloors && floor === 0 ? '#fff' : 'var(--text)',
                 }}
                 onClick={() => { setShowAllFloors(false); setFloor(0) }}>
                 📦 Bound
@@ -427,8 +429,8 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
               <button key={id}
                 className="fp-floor-btn"
                 style={{
-                  background: !showAllFloors && floor === id ? 'var(--blue)' : 'rgba(255,255,255,0.08)',
-                  color: !showAllFloors && floor === id ? '#fff' : 'rgba(255,255,255,0.55)',
+                  background: !showAllFloors && floor === id ? 'var(--blue)' : 'var(--surface)',
+                  color: !showAllFloors && floor === id ? '#fff' : 'var(--text)',
                 }}
                 onClick={() => { setShowAllFloors(false); setFloor(id) }}>
                 {floorNames[String(id)] ?? `Floor ${id}`}
