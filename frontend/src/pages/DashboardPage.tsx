@@ -156,6 +156,12 @@ export default function DashboardPage() {
               <div className="stat-value" style={{ color: 'var(--orange)' }}>{areas.length}</div>
               <div className="stat-label">Areas</div>
             </div>
+            <div className="stat-card">
+              <div className="stat-value" style={{ color: 'var(--purple)' }}>
+                {[...states.values()].filter(s => s.attributes?.glb_mesh || s.attributes?.glb_pos || s.attributes?.glb_floor).length}
+              </div>
+              <div className="stat-label">3D Bound</div>
+            </div>
           </div>
         </div>
 

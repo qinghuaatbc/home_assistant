@@ -11,21 +11,23 @@ import {
 const HARDCODED = '4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce'
 
 const BEHAVIOR_META: Record<string, { icon: string; label: string; color: string }> = {
-  light:        { icon: '💡', label: 'Lights',        color: '#ffd60a' },
-  switch:       { icon: '🔌', label: 'Switches',       color: '#5ac8fa' },
-  media_player: { icon: '🎵', label: 'Media Players',  color: '#bf5af2' },
-  door:         { icon: '🚪', label: 'Doors',          color: '#30d158' },
-  window:       { icon: '🪟', label: 'Windows',        color: '#5ac8fa' },
-  curtain:      { icon: '🪟', label: 'Curtains / Blinds', color: '#ff9f0a' },
-  garage_door:  { icon: '🚗', label: 'Garage Doors',   color: '#ff9f0a' },
-  sensor:       { icon: '📊', label: 'Sensors',        color: '#ff9f0a' },
-  camera:       { icon: '📷', label: 'Cameras',        color: '#888' },
-  weather:      { icon: '🌤', label: 'Weather',        color: '#5ac8fa' },
-  alarm:        { icon: '🔒', label: 'Alarm',          color: '#ff453a' },
-  other:        { icon: '🔧', label: 'Other',          color: '#888' },
+  light:          { icon: '💡', label: 'Lights',          color: '#ffd60a' },
+  switch:         { icon: '🔌', label: 'Switches',         color: '#5ac8fa' },
+  media_player:   { icon: '🎵', label: 'Media Players',    color: '#bf5af2' },
+  door_hinge:     { icon: '🚪', label: 'Doors (Hinge)',    color: '#30d158' },
+  door_sliding:   { icon: '🚪', label: 'Doors (Slide)',    color: '#30d158' },
+  window_hinge:   { icon: '🪟', label: 'Windows (Hinge)',  color: '#5ac8fa' },
+  window_sliding: { icon: '🪟', label: 'Windows (Slide)',  color: '#5ac8fa' },
+  curtain:        { icon: '🪟', label: 'Curtains / Blinds', color: '#ff9f0a' },
+  garage_door:    { icon: '🚗', label: 'Garage Doors',     color: '#ff9f0a' },
+  sensor:         { icon: '📊', label: 'Sensors',          color: '#ff9f0a' },
+  camera:         { icon: '📷', label: 'Cameras',          color: '#888' },
+  weather:        { icon: '🌤', label: 'Weather',          color: '#5ac8fa' },
+  alarm:          { icon: '🔒', label: 'Alarm',            color: '#ff453a' },
+  other:          { icon: '🔧', label: 'Other',            color: '#888' },
 }
 
-const BEHAVIOR_ORDER = ['light', 'switch', 'media_player', 'door', 'window', 'curtain', 'garage_door', 'sensor', 'camera', 'weather', 'alarm', 'other']
+const BEHAVIOR_ORDER = ['light', 'switch', 'media_player', 'door_hinge', 'door_sliding', 'window_hinge', 'window_sliding', 'curtain', 'garage_door', 'sensor', 'camera', 'weather', 'alarm', 'other']
 
 function getBehavior(eid: string, dc?: string): string {
   if (eid.startsWith('light.')) return 'light'
@@ -38,9 +40,9 @@ function getBehavior(eid: string, dc?: string): string {
   if (eid.startsWith('binary_sensor.')) {
     if (dc === 'garage_door') return 'garage_door'
     if (dc === 'curtain' || dc === 'blind') return 'curtain'
-    if (dc === 'door') return 'door'
-    if (dc === 'window') return 'window'
-    return 'door'
+    if (dc === 'door') return 'door_hinge'
+    if (dc === 'window') return 'window_hinge'
+    return 'door_hinge'
   }
   return 'other'
 }
@@ -49,8 +51,10 @@ const BehaviorIcons: Record<string, string> = {
   light: '💡',
   switch: '🔌',
   media_player: '🎵',
-  door: '🚪',
-  window: '🪟',
+  door_hinge: '🚪',
+  door_sliding: '🚪',
+  window_hinge: '🪟',
+  window_sliding: '🪟',
   curtain: '🪟',
   garage_door: '🚗',
   sensor: '📊',
@@ -279,7 +283,7 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
             ? `${st.state} · ${st.attributes?.temperature ?? ''}${st.attributes?.temperature_unit ?? ''}`
             : d.behavior === 'sensor'
               ? `${st.state}${st.attributes?.unit_of_measurement ?? ''}`
-              : d.behavior === 'door' || d.behavior === 'window' || d.behavior === 'curtain' || d.behavior === 'garage_door'
+              : d.behavior.startsWith('door_') || d.behavior.startsWith('window_') || d.behavior === 'curtain' || d.behavior === 'garage_door'
                 ? sensorStateLabel()
                 : (on ? 'On' : 'Off')
 
@@ -344,7 +348,7 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
               }} />
           </div>
         )}
-        {(d.behavior === 'door' || d.behavior === 'window' || d.behavior === 'curtain' || d.behavior === 'garage_door') && (
+        {(d.behavior.startsWith('door_') || d.behavior.startsWith('window_') || d.behavior === 'curtain' || d.behavior === 'garage_door') && (
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
             marginTop: 6, padding: '2px 8px', borderRadius: 4,

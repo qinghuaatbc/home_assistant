@@ -7,13 +7,13 @@ function toggleTheme() {
 }
 
 interface FieldDef {
-  key: string; label: string; placeholder?: string; default?: string; type?: string
+  key: string; label: string; placeholder?: string; default?: string; type?: string; options?: string[]
 }
 
 interface IntegrationDef {
   domain: string; name: string; icon: string; desc: string
   fields: FieldDef[]
-  dynamicFields?: { label: string; key: string; type?: string; placeholder?: string }[]
+  dynamicFields?: { label: string; key: string; type?: string; placeholder?: string; options?: string[] }[]
 }
 
 const INTEGRATIONS: IntegrationDef[] = [
@@ -55,7 +55,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     ],
     dynamicFields: [
       { label: 'Address (ID)', key: 'address', placeholder: '11 22 33 1' },
-      { label: 'Type', key: 'type', placeholder: 'light' },
+      { label: 'Type', key: 'type', options: ['dimmer', 'switch', 'sensor'] },
       { label: 'Name', key: 'name', placeholder: 'Living Room Dimmer' },
     ]},
   { domain: 'lutron_caseta', name: 'Lutron Caseta', icon: '💡', desc: 'Lutron Caseta Smart Bridge',
@@ -166,19 +166,32 @@ export default function IntegrationsPage() {
     }
   }
 
-  const addEntity = async (domain: string) => {
-    const baseId = prompt(`Enter entity ID (e.g. ${domain}.my_device):`)
-    if (!baseId) return
-    const name = prompt('Enter friendly name:') || baseId
-    // Create the entity by setting its state via API
+  const addEntity = async (domain: string, integration?: string) => {
+    const prefix = integration || domain
+    let entityId: string | null = null
+    let name: string | null = null
+
+    if (integration === 'isy994') {
+      const insteonId = prompt(`Enter Insteon ID (e.g. 11 22 33 1):`)
+      if (!insteonId) return
+      const d = prompt('Enter domain (light/switch/binary_sensor):') || 'light'
+      entityId = `${d}.isy994_${insteonId.replace(/ /g, '_')}`
+      name = prompt('Enter friendly name:') || entityId
+    } else {
+      const input = prompt(`Enter device identifier (e.g. living_room):`)
+      if (!input) return
+      const defaultDomain = domain.startsWith('light') ? 'light' : domain.startsWith('switch') ? 'switch' : 'light'
+      entityId = `${defaultDomain}.${prefix}_${input}`
+      name = prompt('Enter friendly name:') || entityId
+    }
+
     try {
-      const r = await fetch(`/api/states/${baseId}`, {
+      const r = await fetch(`/api/states/${entityId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ state: 'off', attributes: { friendly_name: name } }),
       })
       if (!r.ok) throw new Error(await r.text())
-      // It should appear in registry on next poll
     } catch (e: any) { alert(`Failed: ${e.message}`) }
   }
 
@@ -414,10 +427,6 @@ export default function IntegrationsPage() {
                       )
                     })}
                   </div>
-                  <button className="btn" style={{ fontSize: 11, padding: '4px 10px', marginTop: 6 }}
-                    onClick={() => addEntity(platform.startsWith('light') ? 'light' : platform.startsWith('switch') ? 'switch' : platform)}>
-                    + Add device
-                  </button>
                 </div>
               )
             })}
@@ -475,10 +484,16 @@ export default function IntegrationsPage() {
                         {(cfg.devices || []).map((dev: any, idx: number) => (
                           <div key={idx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
                             {int.dynamicFields!.map(f => (
-                              <input key={f.key} type={f.type || 'text'} value={dev[f.key] || ''}
-                                placeholder={f.placeholder || f.key}
-                                onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
-                                style={{ flex: 1, minWidth: 0, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 11 }} />
+                              f.options
+                                ? <select key={f.key} value={dev[f.key] || ''}
+                                    onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
+                                    style={{ flex: 1, minWidth: 0, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 11 }}>
+                                    {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                                  </select>
+                                : <input key={f.key} type={f.type || 'text'} value={dev[f.key] || ''}
+                                    placeholder={f.placeholder || f.key}
+                                    onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
+                                    style={{ flex: 1, minWidth: 0, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 11 }} />
                             ))}
                             <button className="btn" style={{ fontSize: 10, padding: '2px 6px', color: '#ff453a' }}
                               onClick={() => removeDevice(int.domain, idx)}>✕</button>

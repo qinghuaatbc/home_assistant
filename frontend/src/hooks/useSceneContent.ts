@@ -395,7 +395,7 @@ export function useSceneContent(p: Props) {
         else if (eid.startsWith('switch.')) match = p.activeBehaviors!.has('switch')
         else if (dc === 'garage_door') match = p.activeBehaviors!.has('garage_door')
         else if (dc === 'curtain' || dc === 'blind') match = p.activeBehaviors!.has('curtain')
-        else if (dc === 'door' || dc === 'window') match = true // always visible
+        else if (dc === 'door' || dc === 'window') match = true
         else if (eid.startsWith('binary_sensor.') && dc === 'door') match = true // door_r/door_s always visible
       }
       objs.forEach(o => { o.visible = match })

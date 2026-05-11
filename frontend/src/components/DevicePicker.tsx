@@ -8,9 +8,9 @@ export function guessBehavior(entityId: string, deviceClass?: string): string {
   if (entityId.startsWith('binary_sensor.')) {
     if (deviceClass === 'garage_door') return 'garage_door'
     if (deviceClass === 'curtain' || deviceClass === 'blind') return 'curtain'
-    if (deviceClass === 'window') return 'window'
-    if (deviceClass === 'door') return 'door_r'
-    return 'door_r'
+    if (deviceClass === 'window') return 'window_hinge'
+    if (deviceClass === 'door') return 'door_hinge'
+    return 'door_hinge'
   }
   return 'light'
 }
@@ -23,9 +23,10 @@ export interface BehaviorOption {
 
 export const BEHAVIORS: BehaviorOption[] = [
   { id: 'light', label: '💡 Light', desc: 'On/off with brightness' },
-  { id: 'door_r', label: '🚪 Door (Rotate)', desc: 'Hinged open/close' },
-  { id: 'door_s', label: '🚪 Door (Slide)', desc: 'Sliding open/close' },
-  { id: 'window', label: '🪟 Window', desc: 'Open/close window' },
+  { id: 'door_hinge', label: '🚪 Door (Hinge)', desc: 'Hinged open/close' },
+  { id: 'door_sliding', label: '🚪 Door (Slide)', desc: 'Sliding open/close' },
+  { id: 'window_hinge', label: '🪟 Window (Hinge)', desc: 'Hinged open/close' },
+  { id: 'window_sliding', label: '🪟 Window (Slide)', desc: 'Sliding open/close' },
   { id: 'curtain', label: '🪟 Curtain', desc: 'Roll-up/down' },
   { id: 'garage_door', label: '🚗 Garage', desc: 'Roll-up/down' },
   { id: 'media_player', label: '🎵 Music', desc: 'Media playback' },

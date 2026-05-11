@@ -185,12 +185,9 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         else if (result.entityId.startsWith('switch.')) beh = 'switch'
         else if (dc === 'garage_door') beh = 'garage_door'
         else if (dc === 'curtain' || dc === 'blind') beh = 'curtain'
-        else if (dc === 'door') {
+        else if (dc === 'door' || dc === 'window') {
           beh = (meshName ? behaviors[meshName] : undefined) || guessBehavior(result.entityId, dc)
         }
-        else if (dc === 'window') beh = 'window'
-        // Normalize door_r/door_s → 'door' for filter matching
-        if (beh.startsWith('door_')) beh = 'door'
         if (!activeBehaviors.has(beh)) return
       }
       setClickedMesh(null)
