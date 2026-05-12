@@ -33,4 +33,12 @@ integrations:
   # Demo devices
   - domain: demo
 
+  # IP camera via RTSP
+  - domain: rtsp2hls
+    cameras:
+      - name: Driveway
+        streams:
+          - label: HD
+            rtsp_url: "rtsp://admin:Vancouver007@2264inglewood.ddns.net:554/Streaming/Channels/201"
+
 automation: automations.yaml
