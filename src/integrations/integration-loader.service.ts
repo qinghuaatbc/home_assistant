@@ -82,7 +82,7 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     this.builtInRegistry.set('yamaha_avr', yamahaAvrIntegration);
     this.builtInRegistry.set('lutron_caseta', lutronCasetaIntegration);
     this.builtInRegistry.set('mqtt', mqttIntegration);
-    this.builtInRegistry.set('camera', cameraIntegration);
+    this.builtInRegistry.set('rtsp2hls', cameraIntegration);
     this.builtInRegistry.set('automation', automationIntegration);
     this.builtInRegistry.set('demo', demoIntegration);
     this.builtInRegistry.set('envisalink', envisalinkIntegration);

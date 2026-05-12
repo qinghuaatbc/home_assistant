@@ -58,7 +58,7 @@ const INTEGRATIONS: IntegrationDef[] = [
       { label: 'Type', key: 'type', options: ['dimmer', 'switch', 'sensor'] },
       { label: 'Name', key: 'name', placeholder: 'Living Room Dimmer' },
     ]},
-  { domain: 'camera', name: 'Camera', icon: '📷', desc: 'IP cameras via RTSP (requires FFmpeg)',
+  { domain: 'rtsp2hls', name: 'RTSP2HLS', icon: '📷', desc: 'IP cameras via RTSP (requires FFmpeg)',
     fields: [],
     dynamicFields: [
       { label: 'Name', key: 'name', placeholder: 'Driveway' },
@@ -239,7 +239,7 @@ export default function IntegrationsPage() {
   const addDevice = (domain: string) => {
     setConfigs(prev => {
       const cfg = { ...(prev[domain] || {}) }
-      const key = domain === 'camera' ? 'camera_devices' : 'devices'
+      const key = domain === 'rtsp2hls' ? 'camera_devices' : 'devices'
       const list = [...(cfg[key] || [])]
       list.push({})
       return { ...prev, [domain]: { ...cfg, [key]: list } }
@@ -249,7 +249,7 @@ export default function IntegrationsPage() {
   const updateDevice = (domain: string, idx: number, key: string, value: string) => {
     setConfigs(prev => {
       const cfg = { ...(prev[domain] || {}) }
-      const listKey = domain === 'camera' ? 'camera_devices' : 'devices'
+      const listKey = domain === 'rtsp2hls' ? 'camera_devices' : 'devices'
       const list = [...(cfg[listKey] || [])]
       list[idx] = { ...(list[idx] || {}), [key]: value }
       return { ...prev, [domain]: { ...cfg, [listKey]: list } }
@@ -259,7 +259,7 @@ export default function IntegrationsPage() {
   const removeDevice = (domain: string, idx: number) => {
     setConfigs(prev => {
       const cfg = { ...(prev[domain] || {}) }
-      const listKey = domain === 'camera' ? 'camera_devices' : 'devices'
+      const listKey = domain === 'rtsp2hls' ? 'camera_devices' : 'devices'
       return { ...prev, [domain]: { ...cfg, [listKey]: (cfg[listKey] || []).filter((_: any, i: number) => i !== idx) } }
     })
   }
@@ -286,7 +286,7 @@ export default function IntegrationsPage() {
         const existing = m[domain] || {}
         for (const [k, v] of Object.entries(int)) {
           if (k === 'domain') continue
-          if (domain === 'camera' && k === 'cameras') {
+          if (domain === 'rtsp2hls' && k === 'cameras') {
             // Transform server cameras format → UI camera_devices format
             existing.camera_devices = (v as any[]).map((cam: any) => ({
               name: cam.name || '',
@@ -508,7 +508,7 @@ export default function IntegrationsPage() {
                     {int.dynamicFields && (
                       <div style={{ marginTop: 12 }}>
                         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>Devices</div>
-                        {((int.domain === 'camera' ? cfg.camera_devices : cfg.devices) || []).map((dev: any, idx: number) => (
+                        {((int.domain === 'rtsp2hls' ? cfg.camera_devices : cfg.devices) || []).map((dev: any, idx: number) => (
                           <div key={idx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
                             {int.dynamicFields!.map(f => (
                               f.options

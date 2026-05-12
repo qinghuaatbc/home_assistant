@@ -84,7 +84,7 @@ export class CameraIntegration implements HaIntegration {
         platform: DOMAIN_CAMERA,
         name: cam.name,
         original_name: cam.name,
-        unique_id: `camera_${entityId}`,
+        unique_id: `rtsp2hls_${cam.name}`,
         device_class: 'camera',
       });
 
@@ -123,6 +123,6 @@ export class CameraIntegration implements HaIntegration {
 
   private buildEntityId(name: string): string {
     const slug = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-    return `camera.${slug}`;
+    return `camera.rtsp2hls_${slug}`;
   }
 }
