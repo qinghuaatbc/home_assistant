@@ -140,18 +140,6 @@ const [camMuted, setCamMuted] = useState(true)
 
   useEffect(() => { statesRef.current = states }, [states])
 
-  // Auto open/close camera viewer when state changes (embedded mode only)
-  useEffect(() => {
-    if (fullscreen) return
-    const camSt = states.get('camera.rtsp2hls_driveway')
-    if (!camSt) return
-    if (camSt.state === 'on' || camSt.state === 'streaming') {
-      setCameraViewer('camera.rtsp2hls_driveway')
-    } else if (camSt.state === 'off' || camSt.state === 'idle') {
-      setCameraViewer(null)
-    }
-  }, [fullscreen, states.get('camera.rtsp2hls_driveway')?.state])
-
   // HLS playback for camera viewer
   useEffect(() => {
     if (!cameraViewer || !camVideoRef.current) return
