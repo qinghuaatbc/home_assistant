@@ -21,7 +21,7 @@ const DEMO_ENTITIES: Array<{ entity_id: string; name: string; type: string; attr
   { entity_id: 'binary_sensor.demo_patio_door', name: 'Patio Door', type: 'binary_sensor', attrs: { device_class: 'door' } },
   { entity_id: 'binary_sensor.demo_garage_door', name: 'Garage Door', type: 'binary_sensor', attrs: { device_class: 'garage_door', glb_floor: 1 } },
   { entity_id: 'binary_sensor.demo_motion', name: 'Motion Sensor', type: 'binary_sensor', attrs: { device_class: 'motion' } },
-  { entity_id: 'binary_sensor.demo_living_room_curtain', name: 'Living Room Curtain', type: 'binary_sensor', attrs: { device_class: 'curtain' } },
+  { entity_id: 'binary_sensor.demo_living_room_curtain', name: 'Living Room Curtain', type: 'binary_sensor', attrs: { device_class: 'curtain', glb_floor: 1, glb_pos: [5, -2] } },
   { entity_id: 'sensor.demo_temperature', name: 'Temperature', type: 'sensor', attrs: { unit_of_measurement: '°C', device_class: 'temperature' } },
   { entity_id: 'sensor.demo_humidity', name: 'Humidity', type: 'sensor', attrs: { unit_of_measurement: '%', device_class: 'humidity' } },
   { entity_id: 'media_player.demo_living_room_speaker', name: 'Living Room Speaker', type: 'media_player' },
@@ -75,7 +75,12 @@ export class DemoIntegration implements HaIntegration {
       const ids = call.target?.entity_id
         ? (Array.isArray(call.target.entity_id) ? call.target.entity_id : [call.target.entity_id])
         : []
-      const state = call.service === 'turn_on' ? 'on' : call.service === 'turn_off' ? 'off' : undefined
+      const stateMap: Record<string, string | undefined> = {
+        turn_on: 'on', turn_off: 'off', toggle: undefined,
+        open_cover: 'open', close_cover: 'closed', stop_cover: 'stopped',
+        lock: 'locked', unlock: 'unlocked',
+      }
+      const state = stateMap[call.service]
       for (const eid of ids) {
         const cur = this.stateMachine.getState(eid)
         if (!cur) continue
@@ -84,24 +89,23 @@ export class DemoIntegration implements HaIntegration {
           if (call.service_data?.brightness != null) attrs.brightness = call.service_data.brightness
           if (call.service_data?.volume_level != null) attrs.volume_level = call.service_data.volume_level
           this.stateMachine.setState(eid, state, attrs, call.context)
+        } else if (call.service === 'toggle') {
+          this.stateMachine.setState(eid, cur.state === 'on' ? 'off' : 'on', cur.attributes as any, call.context)
         }
       }
     }
-    for (const domain of ['light', 'switch', 'media_player']) {
+    for (const domain of ['light', 'switch', 'media_player', 'binary_sensor']) {
       this.serviceRegistry.register({
-        domain, service: 'turn_on', name: 'Turn on', description: 'Turn on',
-        fields: {}, handler, target: { entity: true },
+        domain, service: 'turn_on', name: 'Turn on', description: 'Turn on', fields: {}, handler, target: { entity: true },
       })
       this.serviceRegistry.register({
-        domain, service: 'turn_off', name: 'Turn off', description: 'Turn off',
-        fields: {}, handler, target: { entity: true },
+        domain, service: 'turn_off', name: 'Turn off', description: 'Turn off', fields: {}, handler, target: { entity: true },
       })
     }
     this.serviceRegistry.register({
-      domain: 'light', service: 'toggle', name: 'Toggle', description: 'Toggle',
-      fields: {}, handler, target: { entity: true },
+      domain: 'light', service: 'toggle', name: 'Toggle', description: 'Toggle', fields: {}, handler, target: { entity: true },
     })
-    this.logger.log('Demo: registered service handlers (light/switch/media_player)')
+    this.logger.log('Demo: registered service handlers (light/switch/media_player/binary_sensor)')
   }
 
   async teardown(): Promise<void> {}

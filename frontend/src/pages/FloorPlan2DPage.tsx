@@ -8,7 +8,7 @@ import {
   playDing, speakState, Lang, setLang, startMusic, stopMusic,
 } from '../utils/sounds'
 
-const HARDCODED = '4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce'
+const HARDCODED = 'bd811f7d72f5e7010b1712cf6e4c44dd891ca20ee452e0c6cf8eec2b2ee596af'
 
 const BEHAVIOR_META: Record<string, { icon: string; label: string; color: string }> = {
   light:          { icon: '💡', label: 'Lights',          color: '#ffd60a' },
@@ -203,7 +203,7 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
     const cur = getState(eid)
     try {
       const r = await fetch(`/api/states/${eid}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${HARDCODED}` },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ state, attributes: { ...cur?.attributes, ...attrs } }),
       })
       if (!r.ok) toast('Failed to set state', 'error')

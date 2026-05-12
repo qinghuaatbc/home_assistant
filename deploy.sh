@@ -17,14 +17,16 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
   exit 0
 fi
 
+DIR="$(cd "$(dirname "$0")" && pwd)"
+
 echo "→ Building frontend..."
-cd "$(dirname "$0")/frontend" && npm run build 2>&1 | tail -3
+cd "$DIR/frontend" && npm run build 2>&1 | tail -3
 
 echo "→ Building backend..."
-cd "$(dirname "$0")" && npm run build:backend 2>&1
+cd "$DIR" && npm run build:backend 2>&1
 
 echo "→ Syncing to $HOST (port $PORT)..."
-rsync -az --delete \
+sshpass -p "${SSH_PASSWORD}" rsync -az --delete \
   --exclude 'node_modules' \
   --exclude '.git' \
   --exclude 'frontend/node_modules' \
@@ -39,11 +41,11 @@ rsync -az --delete \
   --exclude 'config/floors.json' \
   --exclude 'public/floors/' \
   --exclude 'data/floors/' \
-  -e "ssh -p $PORT -o StrictHostKeyChecking=accept-new" \
-  "$(dirname "$0")/" "$HOST:$REMOTE_DIR/"
+  -e "sshpass -p \"${SSH_PASSWORD}\" ssh -p $PORT -o StrictHostKeyChecking=accept-new" \
+  "$DIR/" "$HOST:$REMOTE_DIR/"
 
 echo "→ Restarting service..."
-ssh -p "$PORT" "$HOST" "pm2 restart home-assistant && sleep 3 && curl -s http://localhost:8123/api/health"
+sshpass -p "${SSH_PASSWORD}" ssh -p "$PORT" "$HOST" "pm2 restart home-assistant && sleep 3 && curl -s http://localhost:8123/api/health"
 
 echo "✓ Deployed successfully"
 echo "  https://6759.ddns.net:8123"

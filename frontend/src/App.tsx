@@ -1,6 +1,7 @@
 import { useState, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { HaProvider, useHa } from './context/HaContext'
+import { getLang } from './utils/sounds'
 import { ToastProvider } from './context/ToastContext'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -27,7 +28,7 @@ function AppInner() {
   // Standalone 3D/2D floorplan routes — uses token from URL param or localStorage
   const isFloorplanRoute = window.location.pathname === '/floorplan' || window.location.pathname === '/3d'
   const isFloorplan2DRoute = window.location.pathname === '/floorplan2d' || window.location.pathname === '/2d'
-  const DEMO_TOKEN = '4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce'
+  const DEMO_TOKEN = 'bd811f7d72f5e7010b1712cf6e4c44dd891ca20ee452e0c6cf8eec2b2ee596af'
   const urlToken = new URLSearchParams(window.location.search).get('token') || localStorage.getItem('ha_token') || DEMO_TOKEN
 
   if (isFloorplanRoute) {
@@ -78,6 +79,10 @@ function AppInner() {
 
 function FloatingAiButton() {
   const [open, setOpen] = useState(false)
+  const t = (en: string, zh: string, fa: string) => {
+    const l = getLang()
+    return l === 'zh' ? zh : l === 'fa' ? fa : en
+  }
   return createPortal(
     <>
       <button onClick={() => setOpen(!open)}
@@ -88,7 +93,7 @@ function FloatingAiButton() {
           fontSize: 18, cursor: 'pointer', boxShadow: '0 4px 16px rgba(77,143,255,0.4)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
-        title={open ? 'Close AI' : 'Open AI'}>
+        title={open ? t('Close AI', '关闭 AI', 'بستن AI') : t('Open AI', '打开 AI', 'باز کردن AI')}>
         {open ? '✕' : '✦'}
       </button>
       {open && <AiChatPanel onClose={() => setOpen(false)} />}

@@ -15,7 +15,7 @@ import { useSceneContent } from '../hooks/useSceneContent'
 export default function FloorPlanPage({ fullscreen, onFullscreenChange, standaloneToken }: { fullscreen?: boolean; onFullscreenChange?: (v: boolean) => void; standaloneToken?: string | null }) {
   const { token: ctxToken, states, callService } = useHa()
   const { toast } = useToast()
-  const HARDCODED = '4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce'
+  const HARDCODED = 'bd811f7d72f5e7010b1712cf6e4c44dd891ca20ee452e0c6cf8eec2b2ee596af'
   const token = standaloneToken || ctxToken || HARDCODED
   const containerRef = useRef<HTMLDivElement>(null)
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null)
@@ -165,7 +165,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   useEffect(() => { updateVisuals() }, [localRev, states, updateVisuals])
 
   // ── Click detection via hook ─────────────────────────────────────────────
-  const { onPointerDown, onPointerMove, onPointerUp } = useSceneClick(
+  const { onClick } = useSceneClick(
     containerRef,
     () => cameraRef.current,
     () => clickables.current, // from useSceneContent
@@ -217,12 +217,11 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const selDomain    = selectedId?.split('.')[0] ?? ''
   const selDevClass  = selState?.attributes?.device_class as string | undefined
   const isSensor     = selDomain === 'binary_sensor'
-  const SET_TOKEN = '4e850946782c1e214827ba1ed5b18f33dcaca0182b8c13f66bd823b3b42fabce'
   const haSetState = async (eid: string, state: string, attrs?: Record<string, unknown>) => {
     const cur = getState(eid)
     try {
       const r = await fetch(`/api/states/${eid}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SET_TOKEN}` },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ state, attributes: { ...cur?.attributes, ...attrs } }),
       })
       if (!r.ok) toast('Failed to set state', 'error')
@@ -419,8 +418,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         </>
       )}
 
-      <div className="fp-canvas" ref={containerRef}
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} />
+      <div className="fp-canvas" ref={containerRef} onClick={onClick} />
       <div style={{ position: 'absolute', bottom: fullscreen ? 80 : 'calc(80px + var(--safe-bottom))', left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', gap: 6 }}>
         {['1', '2', '3', '4', '5'].map(id => (
           <button key={id} className={`fp-floor-btn${String(floor) === id ? ' active' : ''}`}

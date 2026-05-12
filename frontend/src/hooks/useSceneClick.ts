@@ -1,4 +1,4 @@
-import { useCallback, useRef, RefObject } from 'react'
+import { useRef, RefObject, useCallback } from 'react'
 import * as THREE from 'three'
 
 export interface ClickResult {
@@ -13,25 +13,11 @@ export function useSceneClick(
   getClickables: () => THREE.Object3D[],
   onHit: (result: ClickResult) => void,
 ) {
-  const isDragging = { current: false }
-  const ptrDown = { x: 0, y: 0 }
   const onHitRef = useRef(onHit)
   onHitRef.current = onHit
 
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    isDragging.current = false
-    ptrDown.x = e.clientX
-    ptrDown.y = e.clientY
-  }, [])
-
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    const dx = e.clientX - ptrDown.x
-    const dy = e.clientY - ptrDown.y
-    if (Math.sqrt(dx * dx + dy * dy) > 5) isDragging.current = true
-  }, [])
-
-  const onPointerUp = useCallback((e: React.PointerEvent) => {
-    if (isDragging.current) return
+  const onClick = useCallback((e: React.MouseEvent) => {
+    // Ignore drags — only process clicks
     const el = containerRef.current
     const cam = getCamera()
     if (!el || !cam) return
@@ -52,5 +38,5 @@ export function useSceneClick(
     }
   }, [])
 
-  return { onPointerDown, onPointerMove, onPointerUp }
+  return { onClick }
 }

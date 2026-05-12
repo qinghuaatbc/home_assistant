@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#1c1c1e" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />
-    <script>if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js')</script>
+    <script>if('serviceWorker'in navigator)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(r=>r.unregister()));caches.keys().then(k=>Promise.all(k.map(c=>caches.delete(c))))</script>
     <meta name="description" content="Home Assistant Dashboard" />
     <title>Home Assistant</title>
   </head>

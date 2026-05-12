@@ -1,4 +1,5 @@
-import { Controller, Post, Body, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Logger, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { StateMachineService } from '../../core/state-machine/state-machine.service';
 import { ServiceRegistryService } from '../../core/service-registry/service-registry.service';
@@ -35,38 +36,107 @@ export class AiController {
     private readonly contextService: ContextService,
   ) {}
 
+  private t(lang: string) {
+    return (zh: string, en: string, fa: string) =>
+      lang === 'zh' ? zh : lang === 'fa' ? fa : en;
+  }
+
   @Post('chat')
   @ApiOperation({ summary: 'AI chat — ask about your home or control devices' })
-  async chat(@Body() body: { prompt: string }) {
-    if (!body.prompt?.trim()) return { response: 'Please provide a prompt.' };
+  async chat(@Body() body: { prompt: string; lang?: string }) {
+    const lang = body.lang || 'en';
+    if (!body.prompt?.trim()) return { response: this.t(lang)('请输入提示内容', 'Please provide a prompt.', 'لطفاً یک پیام وارد کنید') };
+    return this.processWithClaude(body.prompt, lang);
+  }
+
+  @Post('voice')
+  @UseInterceptors(FileInterceptor('audio'))
+  @ApiOperation({ summary: 'Voice input — transcribe audio + AI response' })
+  async voice(@UploadedFile() file: any, @Body() body: { lang?: string }) {
+    const lang = body.lang || 'en';
+    if (!file?.buffer) return { response: this.t(lang)('未收到音频', 'No audio received', 'صدایی دریافت نشد') };
+
+    const openAiKey = process.env.OPENAI_API_KEY;
+    if (!openAiKey) return { response: this.t(lang)('语音识别未配置，请在 .env 中设置 OPENAI_API_KEY', 'Voice not configured. Set OPENAI_API_KEY in .env', 'تشخیص صدا پیکربندی نشده') };
+
+    try {
+      this.logger.log(`Processing voice: ${file.size}b ${file.mimetype}`);
+
+      const whisperLang = lang === 'zh' ? 'zh' : lang === 'fa' ? 'fa' : 'en';
+      const ext = file.originalname?.split('.').pop() || 'webm';
+      const formData = new FormData();
+      formData.append('model', 'whisper-1');
+      formData.append('file', new Blob([file.buffer], { type: file.mimetype }), `audio.${ext}`);
+      formData.append('response_format', 'json');
+      formData.append('language', whisperLang);
+
+      const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${openAiKey}` },
+        body: formData,
+      });
+
+      if (!whisperRes.ok) {
+        const errText = await whisperRes.text();
+        this.logger.error(`Whisper error: ${whisperRes.status} ${errText}`);
+        return { response: this.t(lang)('语音识别失败：OpenAI 配额不足，请检查账户余额', 'Voice recognition failed: OpenAI quota exceeded', 'تشخیص صدا ناموفق: سهمیه OpenAI تمام شده') };
+      }
+
+      const whisperData: any = await whisperRes.json();
+      const text = (whisperData.text || '').trim();
+      if (!text) return { response: this.t(lang)('未能识别语音', 'Could not recognize speech', 'امکان تشخیص صدا وجود نداشت') };
+
+      this.logger.log(`Transcribed: "${text}"`);
+      return this.processWithClaude(text, lang);
+    } catch (err: any) {
+      this.logger.error(`Voice error: ${err.message}`);
+      return { response: this.t(lang)('语音处理错误', `Voice error: ${err.message}`, `خطای صدا: ${err.message}`) };
+    }
+  }
+
+  private async processWithClaude(prompt: string, lang: string): Promise<any> {
+    const _t = this.t(lang);
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) return { response: 'AI not configured. Set ANTHROPIC_API_KEY in .env' };
+    if (!apiKey) return { text: prompt, response: _t('AI 未配置，请在 .env 中设置 ANTHROPIC_API_KEY', 'AI not configured. Set ANTHROPIC_API_KEY in .env', 'AI پیکربندی نشده') };
+
+    const langInstruction = lang === 'zh'
+      ? '请用中文回复。\n控制规则："开灯"=打开所有灯，"关灯"=关闭所有灯，"开客厅灯"=只开客厅灯。批量操作一次控制所有匹配设备。\n设备对照：客厅灯=light.demo_living_room, 卧室灯=light.demo_bedroom, 厨房灯=light.demo_kitchen, 餐厅灯=light.demo_dining_light, 办公室灯=light.demo_office_light, 厨房吊灯=light.demo_kitchen_light。\n"开门"=binary_sensor.turn_on front_door, "关门"=binary_sensor.turn_off front_door, "开窗帘"=binary_sensor.turn_on living_room_curtain, "关窗帘"=binary_sensor.turn_off living_room_curtain, "开车库门"=binary_sensor.turn_on garage_door, "关车库门"=binary_sensor.turn_off garage_door。'
+      : lang === 'fa'
+      ? 'لطفاً به فارسی پاسخ دهید. اگر کاربر گفت "همه چراغ‌ها را روشن کن"، همه چراغ‌ها را یکجا کنترل کنید.'
+      : 'Respond in English. When the user asks to control multiple devices, call call_service once with entity_id as an array of all matching entities.\n"open the door" → binary_sensor.turn_on, "close the door" → binary_sensor.turn_off, "open the garage" → binary_sensor.turn_on garage_door, "close the curtains" → binary_sensor.turn_off curtain.';
 
     try {
       const allStates = this.stateMachine.getStates();
-      const statesList = Array.from(allStates.entries())
-        .map(([id, s]) => `${id}: ${s.state}${s.attributes?.friendly_name ? ` (${s.attributes.friendly_name})` : ''}`)
+      const statesList = allStates
+        .map(s => `${s.entity_id}: ${s.state}${s.attributes?.friendly_name ? ` (${s.attributes.friendly_name})` : ''}`)
         .slice(0, 100).join('\n');
 
-      // First call: ask AI
+      const examples: string[] = [];
+      const byDomain: Record<string, string[]> = {};
+      for (const s of allStates) {
+        const domain = s.entity_id.split('.')[0];
+        if (!byDomain[domain]) byDomain[domain] = [];
+        if (byDomain[domain].length < 3) byDomain[domain].push(s.entity_id);
+      }
+      for (const [domain, ids] of Object.entries(byDomain)) {
+        if (ids.length > 0) examples.push(`- ${domain}: ${ids.join(', ')}`);
+      }
+      const namingExamples = examples.join('\n');
+
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-        },
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 1024,
-          system: `You are a home automation assistant controlling a smart home.\n\nAvailable devices:\n${statesList}\n\nWhen the user asks to control multiple devices (e.g. "turn on all lights", "open every door"), call call_service once with entity_id as an array of all matching entities.\n\nDevice naming convention:\n- Lights: light.living_room, light.bedroom, light.kitchen, light.kitchen_light, light.dining_light, light.office_light\n- Switches: switch.fan, switch.tv\n- Binary sensors: binary_sensor.front_door, binary_sensor.back_door, binary_sensor.garage_door\n- Sensors: sensor.temperature, sensor.humidity\n- Media: media_player.living_room_speaker, media_player.bedroom_speaker`,
-          messages: [{ role: 'user', content: body.prompt }],
+          system: `You are a home automation assistant controlling a smart home.\n\n${langInstruction}\n\nAvailable devices:\n${statesList}\n\nDevice naming convention (examples):\n${namingExamples}`,
+          messages: [{ role: 'user', content: prompt }],
           tools: [CALL_SERVICE_TOOL],
         }),
       });
 
-      if (!res.ok) return { response: `AI error: ${res.status} ${await res.text()}` };
+      if (!res.ok) return { text: prompt, response: _t('AI 错误', `AI error: ${res.status}`, `خطای AI: ${res.status}`) };
 
       const data = await res.json();
       const toolUse = data.content?.find((c: any) => c.type === 'tool_use');
@@ -81,8 +151,7 @@ export class AiController {
           let updated = false;
           try {
             await this.serviceRegistry.call({
-              domain,
-              service,
+              domain, service,
               service_data: serviceData ?? {},
               target: { entity_id: [eid] },
               context: this.contextService.system(),
@@ -104,19 +173,18 @@ export class AiController {
         }
 
         if (allFailed) {
-          return { response: 'Failed to control any devices. Check device names.' };
+          return { text: prompt, response: _t('无法控制任何设备，请检查设备名称。', 'Failed to control any devices. Check device names.', 'کنترل هیچ دستگاهی ممکن نشد. نام دستگاه‌ها را بررسی کنید.') };
         }
 
-        // Second call: AI confirms
         const res2 = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 256,
-            system: 'Confirm what you did concisely.',
+            system: lang === 'zh' ? '用中文简洁确认。' : lang === 'fa' ? 'به طور خلاصه تأیید کنید.' : 'Confirm what you did concisely.',
             messages: [
-              { role: 'user', content: body.prompt },
+              { role: 'user', content: prompt },
               { role: 'assistant', content: data.content },
               { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: 'Done' }] },
             ],
@@ -125,14 +193,14 @@ export class AiController {
 
         if (res2.ok) {
           const d2 = await res2.json();
-          return { response: d2.content[0].text, action: { domain, service, entity_id } };
+          return { text: prompt, response: d2.content[0].text, action: { domain, service, entity_id } };
         }
       }
 
-      return { response: data.content?.[0]?.text ?? 'OK' };
+      return { text: prompt, response: data.content?.[0]?.text ?? 'OK' };
     } catch (err: any) {
       this.logger.error(`AI error: ${err.message}`);
-      return { response: `Error: ${err.message}` };
+      return { text: prompt, response: _t('AI 错误', `Error: ${err.message}`, `خطا: ${err.message}`) };
     }
   }
 }
