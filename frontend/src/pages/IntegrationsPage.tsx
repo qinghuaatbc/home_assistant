@@ -286,7 +286,16 @@ export default function IntegrationsPage() {
         const existing = m[domain] || {}
         for (const [k, v] of Object.entries(int)) {
           if (k === 'domain') continue
-          existing[k] = v
+          if (domain === 'camera' && k === 'cameras') {
+            // Transform server cameras format → UI camera_devices format
+            existing.camera_devices = (v as any[]).map((cam: any) => ({
+              name: cam.name || '',
+              label: (cam.streams?.[0]?.label) || '',
+              rtsp_url: (cam.streams?.[0]?.rtsp_url) || '',
+            }))
+          } else {
+            existing[k] = v
+          }
         }
         m[domain] = existing
       }
