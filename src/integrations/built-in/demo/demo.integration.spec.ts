@@ -65,7 +65,7 @@ describe('DemoIntegration', () => {
 
   it('should register service handlers on setup', async () => {
     await integration.setup({ domain: 'demo', entities: [] });
-    // light.turn_on, light.turn_off, light.toggle, switch.turn_on, switch.turn_off, media_player.turn_on, media_player.turn_off
-    expect(serviceRegistry.register).toHaveBeenCalledTimes(7);
+    // light.turn_on/off/toggle + switch.turn_on/off + media_player.turn_on/off + binary_sensor.turn_on/off = 9
+    expect(serviceRegistry.register).toHaveBeenCalledTimes(9);
   });
 });
