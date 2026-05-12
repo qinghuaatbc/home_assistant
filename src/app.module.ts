@@ -24,14 +24,16 @@ import { ContextService } from './core/context/context.service';
       load: [haConfigLoader],
     }),
 
-    // Database (TypeORM with SQLite)
+    // Database (TypeORM with SQLite + migrations)
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         type: 'better-sqlite3' as const,
         database: configService.get<string>('database.database', 'ha.db'),
         autoLoadEntities: true,
-        synchronize: process.env.NODE_ENV !== 'production',
+        synchronize: false,
+        migrationsRun: true,
+        migrations: [__dirname + '/database/migrations/*.{ts,js}'],
         logging: configService.get<boolean>('database.logging', false),
       }),
       inject: [ConfigService],
