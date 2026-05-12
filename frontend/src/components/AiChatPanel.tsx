@@ -26,7 +26,7 @@ const T: Record<Lang, { placeholder: string; send: string; thinking: string; noR
 const LANG_LIST: Lang[] = ['en', 'zh', 'fa']
 const RECORDING_DURATION_MS = 5000
 
-export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => void; autoRecord?: boolean }) {
+export default function AiChatPanel({ onClose }: { onClose: () => void }) {
   const { token } = useHa()
   const [prompt, setPrompt] = useState('')
   const [messages, setMessages] = useState<{ role: string; text: string }[]>([])
@@ -38,6 +38,7 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<any>(null)
+  const autoSendTimerRef = useRef<any>(null)
   const startTimeRef = useRef(0)
   const lang = getLang() as Lang
   const t = T[lang]
@@ -48,20 +49,12 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
+      if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current)
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop()
       }
     }
   }, [])
-
-  // Auto-start recording when panel opens with autoRecord=true
-  useEffect(() => {
-    if (autoRecord) {
-      // Small delay to ensure DOM is ready
-      const t = setTimeout(() => startRecording(), 300)
-      return () => clearTimeout(t)
-    }
-  }, [autoRecord])
 
   const send = useCallback(async (text?: string) => {
     const msg = (text ?? prompt).trim()
@@ -80,6 +73,21 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
     } catch { setMessages(prev => [...prev, { role: 'assistant', text: t.error }]) }
     setLoading(false)
   }, [prompt, loading, token, lang, t])
+
+  // Auto-send 5s after user stops typing (for iOS dictation)
+  useEffect(() => {
+    if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current)
+    if (prompt.trim() && !loading && !recording) {
+      autoSendTimerRef.current = setTimeout(() => send(), 5000)
+    }
+    return () => { if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current) }
+  }, [prompt, loading, recording, send])
+
+  // Cancel auto-send timer on manual send
+  const wrappedSend = useCallback((text?: string) => {
+    if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current)
+    send(text)
+  }, [send])
 
   const sendAudio = useCallback(async (blob: Blob, fileName?: string) => {
     setMessages(prev => [...prev, { role: 'user', text: '🎤 …' }])
@@ -121,8 +129,8 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
   const startRecording = useCallback(async () => {
     if (recording || loading) return
     if (!navigator.mediaDevices?.getUserMedia) {
-      // Browser doesn't support mic API - the label wrapping the 🎤 button
-      // will open the native audio recorder via the file input.
+      const isSecure = window.isSecureContext
+      setMessages(prev => [...prev, { role: 'assistant', text: isSecure ? 'Mic API not available in this browser' : 'Mic requires HTTPS. Use the Cloudflare tunnel URL.' }])
       return
     }
     try {
@@ -221,7 +229,7 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
       </div>
       <div style={{ display: 'flex', gap: 4, padding: '4px 6px', borderTop: '1px solid #333', alignItems: 'center' }}>
         <input ref={inputRef} value={prompt} onChange={e => setPrompt(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && send()}
+          onKeyDown={e => e.key === 'Enter' && wrappedSend()}
           placeholder={t.placeholder} style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #555', background: '#222', color: '#fff', fontSize: 16, minWidth: 0 }}
           disabled={loading || recording || !token} />
         {recording ? (
@@ -235,26 +243,18 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
             {Math.max(0, Math.ceil((RECORDING_DURATION_MS - recordingTime) / 1000))}s
           </button>
         ) : (
-          <label style={{
+          <button onClick={startRecording} disabled={loading || !token}
+            style={{
               background: '#2c2c2e', border: 'none', borderRadius: 6,
               color: '#aaa', fontSize: 14, cursor: loading || !token ? 'not-allowed' : 'pointer',
-              padding: '6px 7px', lineHeight: 1, minWidth: 28, display: 'inline-block',
-              textAlign: 'center', opacity: loading || !token ? 0.4 : 1,
-            }} title={t.noMic}>
+              padding: '6px 7px', lineHeight: 1, minWidth: 28, opacity: loading || !token ? 0.4 : 1,
+            }}
+            title={t.noMic}>
             🎤
-            <input type="file" accept="audio/*" capture="environment"
-              style={{ display: 'none' }}
-              disabled={loading || !token}
-              onChange={async (e) => {
-                const file = e.target.files?.[0]
-                if (!file) return
-                e.target.value = ''
-                sendAudio(file, file.name)
-              }} />
-          </label>
+          </button>
         )}
         <button className="btn" style={{ fontSize: 12, padding: '4px 10px' }}
-          onClick={() => send()} disabled={loading || recording || !prompt.trim()}>{t.send}</button>
+          onClick={() => wrappedSend()} disabled={loading || recording || !prompt.trim()}>{t.send}</button>
       </div>
     </div>
   )
