@@ -1,7 +1,4 @@
-interface Props {
-  current: string
-  onChange: (tab: string) => void
-}
+import { useNavigate, useLocation } from 'react-router-dom'
 
 const TABS = [
   { id: 'dashboard',    icon: '⊞',  label: 'Home'    },
@@ -16,14 +13,17 @@ const TABS = [
   { id: 'settings',     icon: '☰',  label: 'More'    },
 ]
 
-export default function TabBar({ current, onChange }: Props) {
+export default function TabBar() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const current = location.pathname.slice(1) || ''
   return (
     <nav className="tab-bar" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
       {TABS.map((t) => (
         <button
           key={t.id}
           className={`tab-item ${current === t.id ? 'active' : ''}`}
-          onClick={() => onChange(t.id)}
+          onClick={() => navigate('/' + t.id)}
           style={{ flex: '0 0 auto', padding: '6px 10px' }}
         >
           <span className="tab-icon">{t.icon}</span>
