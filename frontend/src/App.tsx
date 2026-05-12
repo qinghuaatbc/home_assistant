@@ -19,7 +19,7 @@ const AreasPage       = lazy(() => import('./pages/AreasPage'))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'))
 const SettingsPage    = lazy(() => import('./pages/SettingsPage'))
 
-const DEMO_TOKEN = 'bd811f7d72f5e7010b1712cf6e4c44dd891ca20ee452e0c6cf8eec2b2ee596af'
+const DEMO_TOKEN = 'f033260c0a8940ade499be72fd22be3955db72a2bee845214e64575ca73000af'
 
 function getToken(): string {
   return new URLSearchParams(window.location.search).get('token') || localStorage.getItem('ha_token') || DEMO_TOKEN
@@ -110,7 +110,9 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/3d" element={<StandaloneFloorPlan />} />
+        <Route path="/floorplan" element={<StandaloneFloorPlan />} />
         <Route path="/2d" element={<StandaloneFloorPlan2D />} />
+        <Route path="/floorplan2d" element={<StandaloneFloorPlan2D />} />
         <Route path="/*" element={
           <HaProvider>
             <ToastProvider>

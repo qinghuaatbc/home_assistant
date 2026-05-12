@@ -16,7 +16,7 @@ import { useSceneContent } from '../hooks/useSceneContent'
 export default function FloorPlanPage({ fullscreen, onFullscreenChange, standaloneToken }: { fullscreen?: boolean; onFullscreenChange?: (v: boolean) => void; standaloneToken?: string | null }) {
   const { token: ctxToken, states, callService } = useHa()
   const { toast } = useToast()
-  const HARDCODED = 'bd811f7d72f5e7010b1712cf6e4c44dd891ca20ee452e0c6cf8eec2b2ee596af'
+  const HARDCODED = 'f033260c0a8940ade499be72fd22be3955db72a2bee845214e64575ca73000af'
   const token = standaloneToken || ctxToken || HARDCODED
   const containerRef = useRef<HTMLDivElement>(null)
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null)

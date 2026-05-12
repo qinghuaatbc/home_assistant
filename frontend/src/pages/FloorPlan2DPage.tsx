@@ -8,7 +8,7 @@ import {
   playDing, speakState, Lang, setLang, startMusic, stopMusic,
 } from '../utils/sounds'
 
-const HARDCODED = 'bd811f7d72f5e7010b1712cf6e4c44dd891ca20ee452e0c6cf8eec2b2ee596af'
+const HARDCODED = 'f033260c0a8940ade499be72fd22be3955db72a2bee845214e64575ca73000af'
 
 const BEHAVIOR_META: Record<string, { icon: string; label: string; color: string }> = {
   light:          { icon: '💡', label: 'Lights',          color: '#ffd60a' },
