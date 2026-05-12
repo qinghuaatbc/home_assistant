@@ -39,6 +39,8 @@ function AuthLayout() {
             <Route path="entities" element={<EntitiesPage />} />
             <Route path="floorplan" element={<FloorPlanPage />} />
             <Route path="floorplan2d" element={<FloorPlan2DPage />} />
+            <Route path="app/floorplan" element={<FloorPlanPage />} />
+            <Route path="app/floorplan2d" element={<FloorPlan2DPage />} />
             <Route path="history" element={<HistoryPage />} />
             <Route path="events" element={<EventsPage />} />
             <Route path="automations" element={<AutomationsPage />} />
@@ -111,7 +113,9 @@ export default function App() {
       <Routes>
         {/* Standalone fullscreen — for sharing/embedding, no login needed */}
         <Route path="/3d" element={<StandaloneFloorPlan />} />
+        <Route path="/floorplan" element={<StandaloneFloorPlan />} />
         <Route path="/2d" element={<StandaloneFloorPlan2D />} />
+        <Route path="/floorplan2d" element={<StandaloneFloorPlan2D />} />
         {/* Main app with TabBar */}
         <Route path="/*" element={
           <HaProvider>

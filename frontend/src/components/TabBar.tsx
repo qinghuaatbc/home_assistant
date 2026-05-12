@@ -16,14 +16,14 @@ const TABS = [
 export default function TabBar() {
   const navigate = useNavigate()
   const location = useLocation()
-  const current = location.pathname.slice(1) || ''
+  const current = location.pathname.replace('/app/', '') || ''
   return (
     <nav className="tab-bar" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
       {TABS.map((t) => (
         <button
           key={t.id}
-          className={`tab-item ${current === t.id ? 'active' : ''}`}
-          onClick={() => navigate('/' + t.id)}
+          className={`tab-item ${current === t.id || current.replace('/','') === t.id ? 'active' : ''}`}
+          onClick={() => navigate(t.id === 'floorplan' || t.id === 'floorplan2d' ? '/app/' + t.id : '/' + t.id)}
           style={{ flex: '0 0 auto', padding: '6px 10px' }}
         >
           <span className="tab-icon">{t.icon}</span>
