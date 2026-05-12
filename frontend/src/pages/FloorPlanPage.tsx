@@ -437,7 +437,7 @@ const [camMuted, setCamMuted] = useState(true)
   else document.body.style.overflow = ''
 
   return (
-    <div className={`fp-page${fullscreen ? ' fp-fullscreen' : ''}`}>
+    <div className={`fp-page${fullscreen ? ' fp-fullscreen' : ''}`} style={fullscreen ? undefined : { bottom: 0 }}>
       {!fullscreen && (
         <div className="fp-header">
           <span className="fp-title">3D Floor Plan</span>
