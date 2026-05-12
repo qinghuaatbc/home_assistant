@@ -7,6 +7,7 @@ import { StateMachineService } from '../../core/state-machine/state-machine.serv
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
+import * as yaml from 'js-yaml';
 
 interface IntegrationStatus { domain: string; status: string; error?: string }
 
@@ -112,32 +113,9 @@ export class ConfigController {
   async applyConfig(@Body() body: { integrations: any[] }) {
     const logger = new Logger('ConfigApply');
     const yamlPath = path.resolve(process.cwd(), 'config', 'configuration.yaml');
-    const existing = fs.readFileSync(yamlPath, 'utf-8');
-    // Preserve top-level config (http, auth, database, etc.), only replace integrations block
-    const lines = existing.split('\n');
-    const intStart = lines.findIndex(l => l.trim() === 'integrations:');
-    const newLines = [
-      ...(intStart >= 0 ? lines.slice(0, intStart) : lines),
-      'integrations:',
-      ...body.integrations.map((int: any) => {
-        const out = [`  - domain: ${int.domain}`]
-        for (const [k, v] of Object.entries(int)) {
-          if (k === 'domain') continue
-          if (Array.isArray(v)) {
-            out.push(`    ${k}:`)
-            for (const item of v) {
-              if (typeof item === 'object') {
-                out.push(`      - ${Object.entries(item).map(([ik, iv]) => `${ik}: ${iv}`).join('\n        ')}`)
-              }
-            }
-          } else if (typeof v === 'string') {
-            out.push(`    ${k}: "${v}"`)
-          }
-        }
-        return out.join('\n')
-      }),
-    ]
-    fs.writeFileSync(yamlPath, newLines.join('\n') + '\n', 'utf-8');
+    const existing = yaml.load(fs.readFileSync(yamlPath, 'utf-8')) as Record<string, any>;
+    existing.integrations = body.integrations;
+    fs.writeFileSync(yamlPath, yaml.dump(existing, { indent: 2, lineWidth: 120, noRefs: true }), 'utf-8');
     logger.log('Configuration saved, restarting...');
     // Return response before restarting so client doesn't get 502
     const result = { ok: true, message: 'Configuration saved. Server restarting…' };
