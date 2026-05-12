@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import * as THREE from 'three'
+import Hls from 'hls.js'
 import { useHa } from '../context/HaContext'
 import { useToast } from '../context/ToastContext'
 import { HaState, Mappings, MappingEntry, BehaviorMap, FloorId } from '../types'
@@ -21,6 +22,8 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null)
   const sceneRef     = useRef<THREE.Scene | null>(null)
   const cameraRef    = useRef<THREE.PerspectiveCamera | null>(null)
+  const camVideoRef  = useRef<HTMLVideoElement>(null)
+  const camHlsRef    = useRef<Hls | null>(null)
   const controlsRef  = useRef<any>(null) // OrbitControls
   const statesRef    = useRef(states)
 
@@ -42,6 +45,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const [localRev, setLocalRev] = useState(0) // increment to trigger re-render after local toggle
   const [soundMode, setSoundMode] = useState(0)
   const [camLocked, setCamLocked] = useState(false)
+  const [cameraViewer, setCameraViewer] = useState<string | null>(null)
   const [langIdx, setLangIdx] = useState(0)
   const LANG_LIST: Lang[] = ['en', 'zh', 'fa']
   const filterParam = new URLSearchParams(window.location.search).get('filter') || ''
@@ -133,6 +137,26 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
 
   useEffect(() => { statesRef.current = states }, [states])
 
+  // HLS playback for camera viewer
+  useEffect(() => {
+    if (!cameraViewer || !camVideoRef.current) return
+    const st = states.get(cameraViewer)
+    const url = st?.attributes?.hls_url as string
+    if (!url) return
+    camHlsRef.current?.destroy()
+    if (Hls.isSupported()) {
+      const hls = new Hls({ lowLatencyMode: true })
+      hls.loadSource(url)
+      hls.attachMedia(camVideoRef.current)
+      hls.on(Hls.Events.MANIFEST_PARSED, () => camVideoRef.current?.play().catch(() => {}))
+      camHlsRef.current = hls
+    } else if (camVideoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+      camVideoRef.current.src = url
+      camVideoRef.current.play().catch(() => {})
+    }
+    return () => { camHlsRef.current?.destroy(); camHlsRef.current = null }
+  }, [cameraViewer, states])
+
   // ── Init Three.js + scene content ──────────────────────────────────────
   const sceneHandle = useThreeScene(containerRef, (t) => {
     if (onAnimateRef.current) onAnimateRef.current(t)
@@ -203,8 +227,8 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         if (result.entityId) {
           setSelectedId(result.entityId)
           const st = statesRef.current.get(result.entityId)
-          // Cameras: select only, don't toggle state
-          if (result.entityId.startsWith('camera.')) return
+          // Cameras: open viewer modal
+          if (result.entityId.startsWith('camera.')) { setCameraViewer(result.entityId); return }
           const prevSt = st
           const newState = st?.state === 'on' ? 'off' : 'on'
           statesRef.current = new Map(statesRef.current).set(result.entityId, { ...st!, state: newState })
@@ -492,6 +516,25 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
       )}
 
       {panel}
+
+      {/* Camera viewer modal */}
+      {cameraViewer && (() => {
+        const st = states.get(cameraViewer)
+        const hlsUrl = st?.attributes?.hls_url as string
+        const camName = (st?.attributes?.friendly_name as string) || cameraViewer
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: '#000', display: 'flex', flexDirection: 'column' }}
+            onClick={() => setCameraViewer(null)}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: '#1c1c1e' }}>
+              <span style={{ color: '#fff', fontWeight: 600, fontSize: 14 }}>📷 {camName}</span>
+              <button onClick={() => setCameraViewer(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>✕</button>
+            </div>
+            <video ref={camVideoRef} autoPlay muted playsInline
+              style={{ flex: 1, width: '100%', objectFit: 'contain' }}
+              onClick={e => e.stopPropagation()} />
+          </div>
+        )
+      })()}
     </div>
   )
 }
