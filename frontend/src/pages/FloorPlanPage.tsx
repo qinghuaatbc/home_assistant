@@ -46,6 +46,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const [soundMode, setSoundMode] = useState(0)
   const [camLocked, setCamLocked] = useState(false)
   const [cameraViewer, setCameraViewer] = useState<string | null>(null)
+const [camMuted, setCamMuted] = useState(true)
   const [langIdx, setLangIdx] = useState(0)
   const LANG_LIST: Lang[] = ['en', 'zh', 'fa']
   const filterParam = new URLSearchParams(window.location.search).get('filter') || ''
@@ -527,9 +528,15 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
             onClick={() => setCameraViewer(null)}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: '#1c1c1e' }}>
               <span style={{ color: '#fff', fontWeight: 600, fontSize: 14 }}>📷 {camName}</span>
-              <button onClick={() => setCameraViewer(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>✕</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={e => { e.stopPropagation(); setCamMuted(m => !m) }}
+                  style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>
+                  {camMuted ? '🔇' : '🔊'}
+                </button>
+                <button onClick={() => setCameraViewer(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>✕</button>
+              </div>
             </div>
-            <video ref={camVideoRef} autoPlay muted playsInline
+            <video ref={camVideoRef} autoPlay muted={camMuted} playsInline
               style={{ flex: 1, width: '100%', objectFit: 'contain' }}
               onClick={e => e.stopPropagation()} />
           </div>
