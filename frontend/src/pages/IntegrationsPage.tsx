@@ -65,6 +65,17 @@ const INTEGRATIONS: IntegrationDef[] = [
       { key: 'port', label: 'Port', type: 'number', placeholder: '8080', default: '8080' },
       { key: 'interval_seconds', label: 'Poll interval (s)', type: 'number', placeholder: '60', default: '60' },
     ]},
+  { domain: 'http_sensor', name: 'HTTP Sensor', icon: '📡', desc: 'Poll any HTTP JSON endpoint for sensor values',
+    fields: [],
+    dynamicFields: [
+      { label: 'Name', key: 'name', placeholder: 'Living Room' },
+      { label: 'URL', key: 'url', placeholder: 'http://192.168.1.100/api' },
+      { label: 'Interval (s)', key: 'interval', type: 'number', placeholder: '60' },
+      { label: 'JSON path', key: 'path', placeholder: 'temperature' },
+      { label: 'Field label', key: 'label', placeholder: 'Temperature' },
+      { label: 'Field key', key: 'key', placeholder: 'temperature' },
+      { label: 'Unit', key: 'unit', placeholder: '°C' },
+    ]},
   { domain: 'rtsp2hls', name: 'RTSP2HLS', icon: '📷', desc: 'IP cameras via RTSP (requires FFmpeg)',
     fields: [],
     dynamicFields: [

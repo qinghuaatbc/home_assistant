@@ -1,0 +1,8 @@
+{
+  "domain": "http_sensor",
+  "name": "HTTP Sensor",
+  "version": "1.0.0",
+  "description": "HTTP-polled sensors: temperature, humidity, pressure, etc.",
+  "iot_class": "local_polling",
+  "config_flow": true
+}
