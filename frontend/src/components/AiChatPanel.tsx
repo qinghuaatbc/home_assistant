@@ -197,7 +197,7 @@ export default function AiChatPanel({ onClose }: { onClose: () => void }) {
     <div style={{
       position: 'fixed', bottom: 70, right: 16, width: 280,
       background: '#1c1c1e', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
-      zIndex: 9999, display: 'flex', flexDirection: 'column', maxHeight: 360, overflow: 'hidden',
+      zIndex: 9999, display: 'flex', flexDirection: 'column', maxHeight: 260, overflow: 'hidden',
       border: '1px solid #333',
     }} onClick={e => e.stopPropagation()}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid #333' }}>
