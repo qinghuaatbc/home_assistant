@@ -177,7 +177,7 @@ export class CameraStreamService extends EventEmitter implements OnApplicationSh
       '-loglevel', 'warning',
       '-rtsp_transport', 'tcp',
       '-i', entry.rtspUrl,
-      '-c:v', 'copy',
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
       '-c:a', 'aac',
       '-f', 'hls',
       '-hls_time', '2',
