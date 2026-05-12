@@ -9,6 +9,7 @@ import { RegistryController } from './registry/registry.controller';
 import { BackupController } from './backup/backup.controller';
 import { AiController } from './ai/ai.controller';
 import { GlbController } from './glb/glb.controller';
+import { PluginController } from './plugin/plugin.controller';
 import { AuthModule } from '../auth/auth.module';
 import { RegistryModule } from '../registry/registry.module';
 import { ContextService } from '../core/context/context.service';
@@ -26,6 +27,7 @@ import { ContextService } from '../core/context/context.service';
     BackupController,
     AiController,
     GlbController,
+    PluginController,
   ],
   providers: [ContextService],
 })

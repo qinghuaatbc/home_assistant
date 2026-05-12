@@ -106,4 +106,9 @@ export class PluginLoaderService implements OnApplicationBootstrap {
   hasPlugin(domain: string): boolean {
     return this.plugins.has(domain);
   }
+
+  /** Get the plugin directory path */
+  getPluginDir(): string {
+    return this.pluginDir;
+  }
 }
