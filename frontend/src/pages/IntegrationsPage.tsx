@@ -311,8 +311,8 @@ export default function IntegrationsPage() {
         const cfg = configs[int.domain]
         if (!cfg) return null
         const hasVal = Object.entries(cfg).some(([k, v]) => {
-          if (k === 'devices') return Array.isArray(v) && v.length > 0
-          return !!v
+          if (k === 'devices' || k === 'camera_devices') return Array.isArray(v) && v.length > 0
+          return v !== undefined && v !== null && v !== ''
         })
         if (!hasVal) return null
         const out: any = { domain: int.domain }
