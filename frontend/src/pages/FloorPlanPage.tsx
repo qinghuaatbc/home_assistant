@@ -178,6 +178,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         const dc = states.get(result.entityId)?.attributes?.device_class as string | undefined
         let beh = ''
         if (result.entityId.startsWith('light.')) beh = 'light'
+        else if (result.entityId.startsWith('camera.')) beh = 'camera'
         else if (result.entityId.startsWith('media_player.')) beh = 'media_player'
         else if (result.entityId.startsWith('switch.')) beh = 'switch'
         else if (dc === 'garage_door') beh = 'garage_door'
@@ -197,6 +198,8 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         if (result.entityId) {
           setSelectedId(result.entityId)
           const st = statesRef.current.get(result.entityId)
+          // Cameras: select only, don't toggle state
+          if (result.entityId.startsWith('camera.')) return
           const prevSt = st
           const newState = st?.state === 'on' ? 'off' : 'on'
           statesRef.current = new Map(statesRef.current).set(result.entityId, { ...st!, state: newState })
@@ -278,7 +281,8 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   }
 
   const sensorIcon = (dc?: string) =>
-    dc === 'door' || dc === 'garage_door' ? '🚪' : dc === 'curtain' || dc === 'blind' ? '🪟' : '🔲'
+    dc === 'door' || dc === 'garage_door' ? '🚪' : dc === 'curtain' || dc === 'blind' ? '🪟' : dc === 'camera' ? '📷' : '🔲'
+  const isCamera = selectedId?.startsWith('camera.')
   const sensorLabel = (dc?: string, open?: boolean) => {
     if (dc === 'garage_door') return open ? 'Open' : 'Closed'
     if (dc === 'door')        return open ? 'Open' : 'Closed'
@@ -372,10 +376,14 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
             {isSensor ? sensorLabel(selDevClass, selOn) : (selOn ? 'On' : 'Off')}
           </div>
         </div>
-        <label className="ios-toggle" onClick={e => e.stopPropagation()}>
-          <input type="checkbox" checked={selOn ?? false} onChange={toggle} />
-          <span className="ios-slider" />
-        </label>
+        {isCamera ? (
+          <a href={`/dashboard?camera=${selectedId}`} className="btn" style={{ fontSize: 11, padding: '4px 8px', textDecoration: 'none' }}>📷 View</a>
+        ) : (
+          <label className="ios-toggle" onClick={e => e.stopPropagation()}>
+            <input type="checkbox" checked={selOn ?? false} onChange={toggle} />
+            <span className="ios-slider" />
+          </label>
+        )}
         <button className="fp-close" onClick={() => setSelectedId(null)}>✕</button>
       </div>
       {selDomain === 'light' && <BrightnessSlider value={selBrightPct} onChange={setBright} />}
