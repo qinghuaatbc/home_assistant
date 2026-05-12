@@ -130,7 +130,14 @@ export default function IntegrationsPage() {
           const existing = m[domain] || {}
           for (const [k, v] of Object.entries(int)) {
             if (k === 'domain') continue
-            existing[k] = v
+            if (domain === 'rtsp2hls' && k === 'cameras') {
+              existing.devices = (v as any[]).map((cam: any) => ({
+                name: cam.name || '',
+                rtsp_url: (cam.streams?.[0]?.rtsp_url) || '',
+              }))
+            } else {
+              existing[k] = v
+            }
           }
           m[domain] = existing
         }
