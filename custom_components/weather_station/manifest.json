@@ -1,0 +1,10 @@
+{
+  "domain": "weather_station",
+  "name": "Weather Station",
+  "version": "1.0.0",
+  "description": "HTTP-polled temperature, humidity, and wind sensor",
+  "iot_class": "local_polling",
+  "config_flow": true,
+  "dependencies": [],
+  "requirements": []
+}

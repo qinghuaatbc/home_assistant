@@ -58,6 +58,13 @@ const INTEGRATIONS: IntegrationDef[] = [
       { label: 'Type', key: 'type', options: ['dimmer', 'switch', 'sensor'] },
       { label: 'Name', key: 'name', placeholder: 'Living Room Dimmer' },
     ]},
+  { domain: 'weather_station', name: 'Weather Station', icon: '🌤️', desc: 'HTTP-polled temperature, humidity, wind sensor',
+    fields: [
+      { key: 'name', label: 'Name', placeholder: 'Weather Station', default: 'Weather Station' },
+      { key: 'host', label: 'Host / IP', placeholder: '192.168.1.100', default: 'localhost' },
+      { key: 'port', label: 'Port', type: 'number', placeholder: '8080', default: '8080' },
+      { key: 'interval_seconds', label: 'Poll interval (s)', type: 'number', placeholder: '60', default: '60' },
+    ]},
   { domain: 'rtsp2hls', name: 'RTSP2HLS', icon: '📷', desc: 'IP cameras via RTSP (requires FFmpeg)',
     fields: [],
     dynamicFields: [
