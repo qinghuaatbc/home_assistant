@@ -25,6 +25,9 @@ jobs:
       - name: Install backend dependencies
         run: npm ci
 
+      - name: Backend TypeScript check
+        run: npx tsc --noEmit
+
       - name: Run backend tests
         run: npm test
 
@@ -34,5 +37,49 @@ jobs:
       - name: Install frontend dependencies
         run: cd frontend && npm ci
 
+      - name: Frontend TypeScript check
+        run: cd frontend && npx tsc --noEmit
+
       - name: Build frontend
-        run: cd frontend && npm run build
+        run: npm run frontend:build
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install & Build
+        run: |
+          npm ci
+          npm run build:backend
+          cd frontend && npm ci && cd ..
+          npm run frontend:build
+
+      - name: Deploy via rsync
+        uses: burnett01/rsync-deployments@7.0.2
+        with:
+          switches: -az --delete --exclude='node_modules' --exclude='.git' --exclude='.env' --exclude='*.db' --exclude='config/configuration.yaml' --exclude='config/3d-mappings.json' --exclude='public/floors/' --exclude='data/floors/'
+          path: ./
+          remote_path: /home/qinghuaatbc/home_assistant
+          remote_host: 6759.ddns.net
+          remote_port: 2201
+          remote_user: qinghuaatbc
+          remote_key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Restart PM2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: 6759.ddns.net
+          port: 2201
+          username: qinghuaatbc
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            pm2 restart home-assistant
