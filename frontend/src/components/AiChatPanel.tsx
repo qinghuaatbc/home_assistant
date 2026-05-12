@@ -35,6 +35,7 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
   const [recordingTime, setRecordingTime] = useState(0)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<any>(null)
@@ -81,12 +82,13 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
     setLoading(false)
   }, [prompt, loading, token, lang, t])
 
-  const sendAudio = useCallback(async (blob: Blob) => {
+  const sendAudio = useCallback(async (blob: Blob, fileName?: string) => {
     setMessages(prev => [...prev, { role: 'user', text: '🎤 …' }])
     setLoading(true)
     try {
       const form = new FormData()
-      form.append('audio', blob, 'audio.webm')
+      const name = fileName || 'audio.webm'
+      form.append('audio', blob, name)
       form.append('lang', lang)
       const r = await fetch('/api/ai/voice', {
         method: 'POST',
@@ -120,8 +122,8 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
   const startRecording = useCallback(async () => {
     if (recording || loading) return
     if (!navigator.mediaDevices?.getUserMedia) {
-      const isSecure = window.isSecureContext
-      setMessages(prev => [...prev, { role: 'assistant', text: isSecure ? 'Mic API not available in this browser' : 'Mic requires HTTPS. Use the Cloudflare tunnel URL.' }])
+      // Fallback: use file input (works in WebViews like WeChat, in-app browsers)
+      fileInputRef.current?.click()
       return
     }
     try {
@@ -247,6 +249,14 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
         <button className="btn" style={{ fontSize: 12, padding: '4px 10px' }}
           onClick={() => send()} disabled={loading || recording || !prompt.trim()}>{t.send}</button>
       </div>
+      <input ref={fileInputRef} type="file" accept="audio/*" capture="environment"
+        style={{ display: 'none' }}
+        onChange={async (e) => {
+          const file = e.target.files?.[0]
+          if (!file) return
+          e.target.value = ''
+          sendAudio(file, file.name)
+        }} />
     </div>
   )
 }
