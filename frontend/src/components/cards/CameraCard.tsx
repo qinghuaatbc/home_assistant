@@ -36,12 +36,13 @@ export default function CameraCard({ state }: Props) {
   const modalHlsRef = useRef<Hls | null>(null)
   const [muted, setMuted] = useState(true)
 
-  // Start preview stream in card
+  // Preview stream starts only when modal opens (no constant background streaming)
+  const [previewActive, setPreviewActive] = useState(false)
   useEffect(() => {
-    if (!previewRef.current || !defaultUrl) return
+    if (!previewActive || !previewRef.current || !defaultUrl) return
     attachHls(previewRef.current, defaultUrl, previewHlsRef)
     return () => { previewHlsRef.current?.destroy(); previewHlsRef.current = null }
-  }, [defaultUrl])
+  }, [previewActive, defaultUrl])
 
   // Modal stream
   useEffect(() => {
@@ -65,19 +66,12 @@ export default function CameraCard({ state }: Props) {
 
   return (
     <>
-      {/* Card with live preview */}
-      <div className="camera-card" onClick={openModal} style={{ cursor: 'pointer' }}>
-        <video
-          ref={previewRef}
-          autoPlay
-          muted
-          playsInline
-          className="camera-preview"
-          style={{ background: '#000' }}
-        />
-        <div className="camera-info">
-          <span className="camera-name">{name}</span>
-          {isStreaming && <span className="camera-badge">● LIVE</span>}
+      {/* Card - tap to view live stream */}
+      <div className="camera-card" onClick={openModal} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111' }}>
+        <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>📷</div>
+          <div style={{ fontSize: 12, color: '#888' }}>{name}</div>
+          <div style={{ fontSize: 10, color: '#666', marginTop: 4 }}>Tap to view live</div>
         </div>
       </div>
 

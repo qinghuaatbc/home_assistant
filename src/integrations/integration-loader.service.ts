@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { EventBusService } from '../core/event-bus/event-bus.service';
 import { ContextService } from '../core/context/context.service';
+import { PluginLoaderService } from '../core/plugin-loader/plugin-loader.service';
 import { HaIntegration, IntegrationConfig } from './interfaces/integration.interface';
 import { LightIntegration } from './built-in/light/light.integration';
 import { SwitchIntegration } from './built-in/switch/switch.integration';
@@ -59,6 +60,7 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     private readonly configService: ConfigService,
     private readonly eventBus: EventBusService,
     private readonly contextService: ContextService,
+    private readonly pluginLoader: PluginLoaderService,
     lightIntegration: LightIntegration,
     switchIntegration: SwitchIntegration,
     sensorIntegration: SensorIntegration,
@@ -125,10 +127,20 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     this.logger.debug(`Loading integration: ${domain}`);
 
     try {
-      const integration = this.builtInRegistry.get(domain);
+      let integration = this.builtInRegistry.get(domain);
+
+      // Fall back to plugin if not built-in
+      if (!integration) {
+        const plugin = this.pluginLoader.getPlugin(domain);
+        if (plugin) {
+          const instance = await plugin.module.create(config);
+          integration = instance as unknown as HaIntegration;
+          this.logger.log(`Loaded integration from plugin: ${domain}`);
+        }
+      }
 
       if (!integration) {
-        throw new Error(`Integration '${domain}' not found in built-in registry`);
+        throw new Error(`Integration '${domain}' not found — not built-in and no plugin available`);
       }
 
       const success = await integration.setup(config);
