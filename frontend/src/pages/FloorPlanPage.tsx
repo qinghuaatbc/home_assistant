@@ -140,6 +140,17 @@ const [camMuted, setCamMuted] = useState(true)
 
   useEffect(() => { statesRef.current = states }, [states])
 
+  // Auto open/close camera viewer when state changes (e.g. AI control)
+  useEffect(() => {
+    const camSt = states.get('camera.rtsp2hls_driveway')
+    if (!camSt) return
+    if (camSt.state === 'on' || camSt.state === 'streaming') {
+      setCameraViewer('camera.rtsp2hls_driveway')
+    } else if (camSt.state === 'off' || camSt.state === 'idle') {
+      setCameraViewer(null)
+    }
+  }, [states.get('camera.rtsp2hls_driveway')?.state])
+
   // HLS playback for camera viewer
   useEffect(() => {
     if (!cameraViewer || !camVideoRef.current) return
@@ -230,8 +241,8 @@ const [camMuted, setCamMuted] = useState(true)
         if (result.entityId) {
           setSelectedId(result.entityId)
           const st = statesRef.current.get(result.entityId)
-          // Cameras: open viewer modal
-          if (result.entityId.startsWith('camera.')) { setCameraViewer(result.entityId); return }
+          // Cameras: open viewer modal + play sound
+          if (result.entityId.startsWith('camera.')) { playBehaviorSound(result.entityId, true); setCameraViewer(result.entityId); return }
           const prevSt = st
           const newState = st?.state === 'on' ? 'off' : 'on'
           statesRef.current = new Map(statesRef.current).set(result.entityId, { ...st!, state: newState })
@@ -529,8 +540,8 @@ const [camMuted, setCamMuted] = useState(true)
           <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: '#000', display: 'flex', flexDirection: 'column' }}
             onClick={() => setCameraViewer(null)}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: '#1c1c1e' }}>
-              <span style={{ color: '#fff', fontWeight: 600, fontSize: 14 }}>📷 {camName}</span>
-              <div style={{ display: 'flex', gap: 16 }}>
+              <span style={{ color: '#fff', fontWeight: 600, fontSize: 14 }}>📷 {camName} {LANG_LIST[langIdx] === 'en' ? '' : LANG_LIST[langIdx] === 'zh' ? '直播' : 'زنده'}</span>
+              <div style={{ display: 'flex', gap: 24 }}>
                 <button onClick={e => { e.stopPropagation(); setCamMuted(m => !m) }}
                   style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>
                   {camMuted ? '🔇' : '🔊'}
