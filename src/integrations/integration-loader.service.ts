@@ -6,6 +6,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { EventBusService } from '../core/event-bus/event-bus.service';
 import { ContextService } from '../core/context/context.service';
+import { StateMachineService } from '../core/state-machine/state-machine.service';
+import { EntityRegistryService } from '../registry/entity-registry/entity-registry.service';
 import { PluginLoaderService } from '../core/plugin-loader/plugin-loader.service';
 import { HaIntegration, IntegrationConfig } from './interfaces/integration.interface';
 import { LightIntegration } from './built-in/light/light.integration';
@@ -61,6 +63,8 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     private readonly eventBus: EventBusService,
     private readonly contextService: ContextService,
     private readonly pluginLoader: PluginLoaderService,
+    private readonly stateMachine: StateMachineService,
+    private readonly entityRegistry: EntityRegistryService,
     lightIntegration: LightIntegration,
     switchIntegration: SwitchIntegration,
     sensorIntegration: SensorIntegration,
@@ -166,7 +170,12 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
       if (!integration) {
         const plugin = this.pluginLoader.getPlugin(domain);
         if (plugin) {
-          const instance = await plugin.module.create(config);
+          const instance = await plugin.module.create(config, {
+            stateMachine: this.stateMachine,
+            entityRegistry: this.entityRegistry,
+            contextService: this.contextService,
+            eventBus: this.eventBus,
+          } as any);
           integration = instance as unknown as HaIntegration;
           this.logger.log(`Loaded integration from plugin: ${domain}`);
         }

@@ -30,8 +30,11 @@ describe('IntegrationLoaderService', () => {
       listPlugins: jest.fn().mockReturnValue([]),
     } as any;
 
+    const mockStateMachine = { getState: jest.fn(), getStates: jest.fn().mockReturnValue([]), setState: jest.fn() } as any;
+    const mockEntityRegistry = { registerEntity: jest.fn().mockResolvedValue(undefined) } as any;
+
     loader = new IntegrationLoaderService(
-      mockConfig, mockEventBus, mockContext, mockPluginLoader,
+      mockConfig, mockEventBus, mockContext, mockPluginLoader, mockStateMachine, mockEntityRegistry,
       createMockIntegration('light'), createMockIntegration('switch'),
       createMockIntegration('sensor'), createMockIntegration('binary_sensor'),
       createMockIntegration('isy994'), createMockIntegration('weather'),
