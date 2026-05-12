@@ -62,7 +62,6 @@ const INTEGRATIONS: IntegrationDef[] = [
     fields: [],
     dynamicFields: [
       { label: 'Name', key: 'name', placeholder: 'Driveway' },
-      { label: 'Label', key: 'label', placeholder: 'HD' },
       { label: 'RTSP URL', key: 'rtsp_url', placeholder: 'rtsp://user:pass@ip:554/stream' },
     ]},
   { domain: 'lutron_caseta', name: 'Lutron Caseta', icon: '💡', desc: 'Lutron Caseta Smart Bridge',
@@ -239,28 +238,25 @@ export default function IntegrationsPage() {
   const addDevice = (domain: string) => {
     setConfigs(prev => {
       const cfg = { ...(prev[domain] || {}) }
-      const key = domain === 'rtsp2hls' ? 'camera_devices' : 'devices'
-      const list = [...(cfg[key] || [])]
+      const list = [...(cfg.devices || [])]
       list.push({})
-      return { ...prev, [domain]: { ...cfg, [key]: list } }
+      return { ...prev, [domain]: { ...cfg, devices: list } }
     })
   }
 
   const updateDevice = (domain: string, idx: number, key: string, value: string) => {
     setConfigs(prev => {
       const cfg = { ...(prev[domain] || {}) }
-      const listKey = domain === 'rtsp2hls' ? 'camera_devices' : 'devices'
-      const list = [...(cfg[listKey] || [])]
+      const list = [...(cfg.devices || [])]
       list[idx] = { ...(list[idx] || {}), [key]: value }
-      return { ...prev, [domain]: { ...cfg, [listKey]: list } }
+      return { ...prev, [domain]: { ...cfg, devices: list } }
     })
   }
 
   const removeDevice = (domain: string, idx: number) => {
     setConfigs(prev => {
       const cfg = { ...(prev[domain] || {}) }
-      const listKey = domain === 'rtsp2hls' ? 'camera_devices' : 'devices'
-      return { ...prev, [domain]: { ...cfg, [listKey]: (cfg[listKey] || []).filter((_: any, i: number) => i !== idx) } }
+      return { ...prev, [domain]: { ...cfg, devices: (cfg.devices || []).filter((_: any, i: number) => i !== idx) } }
     })
   }
 
@@ -287,10 +283,9 @@ export default function IntegrationsPage() {
         for (const [k, v] of Object.entries(int)) {
           if (k === 'domain') continue
           if (domain === 'rtsp2hls' && k === 'cameras') {
-            // Transform server cameras format → UI camera_devices format
-            existing.camera_devices = (v as any[]).map((cam: any) => ({
+            // Transform server cameras format → UI devices format
+            existing.devices = (v as any[]).map((cam: any) => ({
               name: cam.name || '',
-              label: (cam.streams?.[0]?.label) || '',
               rtsp_url: (cam.streams?.[0]?.rtsp_url) || '',
             }))
           } else {
@@ -311,21 +306,20 @@ export default function IntegrationsPage() {
         const cfg = configs[int.domain]
         if (!cfg) return null
         const hasVal = Object.entries(cfg).some(([k, v]) => {
-          if (k === 'devices' || k === 'camera_devices') return Array.isArray(v) && v.length > 0
+          if (k === 'devices') return Array.isArray(v) && v.length > 0
           return v !== undefined && v !== null && v !== ''
         })
         if (!hasVal) return null
         const out: any = { domain: int.domain }
         for (const [k, v] of Object.entries(cfg)) {
-          if (k === 'devices') { if (Array.isArray(v) && v.length > 0) out.devices = v }
-          else if (k === 'camera_devices') {
+          if (k === 'devices' && int.domain === 'rtsp2hls') {
             if (Array.isArray(v) && v.length > 0) {
               out.cameras = v.map((d: any) => ({
                 name: d.name || 'Camera',
-                streams: [{ label: d.label || 'Main', rtsp_url: d.rtsp_url }],
+                streams: [{ label: 'Main', rtsp_url: d.rtsp_url }],
               }))
             }
-          }
+          } else if (k === 'devices') { if (Array.isArray(v) && v.length > 0) out.devices = v }
           else if (v) { out[k] = v }
         }
         return out
@@ -508,7 +502,7 @@ export default function IntegrationsPage() {
                     {int.dynamicFields && (
                       <div style={{ marginTop: 12 }}>
                         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>Devices</div>
-                        {((int.domain === 'rtsp2hls' ? cfg.camera_devices : cfg.devices) || []).map((dev: any, idx: number) => (
+                        {(cfg.devices || []).map((dev: any, idx: number) => (
                           <div key={idx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
                             {int.dynamicFields!.map(f => (
                               f.options
