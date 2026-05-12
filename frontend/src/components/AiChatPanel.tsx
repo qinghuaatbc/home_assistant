@@ -35,7 +35,6 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
   const [recordingTime, setRecordingTime] = useState(0)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const timerRef = useRef<any>(null)
@@ -122,8 +121,8 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
   const startRecording = useCallback(async () => {
     if (recording || loading) return
     if (!navigator.mediaDevices?.getUserMedia) {
-      // Fallback: use file input (works in WebViews like WeChat, in-app browsers)
-      fileInputRef.current?.click()
+      // Browser doesn't support mic API - the label wrapping the 🎤 button
+      // will open the native audio recorder via the file input.
       return
     }
     try {
@@ -236,27 +235,27 @@ export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => vo
             {Math.max(0, Math.ceil((RECORDING_DURATION_MS - recordingTime) / 1000))}s
           </button>
         ) : (
-          <button onClick={startRecording} disabled={loading || !token}
-            style={{
+          <label style={{
               background: '#2c2c2e', border: 'none', borderRadius: 6,
               color: '#aaa', fontSize: 14, cursor: loading || !token ? 'not-allowed' : 'pointer',
-              padding: '6px 7px', lineHeight: 1, minWidth: 28, opacity: loading || !token ? 0.4 : 1,
-            }}
-            title={t.noMic}>
+              padding: '6px 7px', lineHeight: 1, minWidth: 28, display: 'inline-block',
+              textAlign: 'center', opacity: loading || !token ? 0.4 : 1,
+            }} title={t.noMic}>
             🎤
-          </button>
+            <input type="file" accept="audio/*" capture="environment"
+              style={{ display: 'none' }}
+              disabled={loading || !token}
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                e.target.value = ''
+                sendAudio(file, file.name)
+              }} />
+          </label>
         )}
         <button className="btn" style={{ fontSize: 12, padding: '4px 10px' }}
           onClick={() => send()} disabled={loading || recording || !prompt.trim()}>{t.send}</button>
       </div>
-      <input ref={fileInputRef} type="file" accept="audio/*" capture="environment"
-        style={{ display: 'none' }}
-        onChange={async (e) => {
-          const file = e.target.files?.[0]
-          if (!file) return
-          e.target.value = ''
-          sendAudio(file, file.name)
-        }} />
     </div>
   )
 }
