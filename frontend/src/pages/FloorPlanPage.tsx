@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import * as THREE from 'three'
 import Hls from 'hls.js'
 import { useHa } from '../context/HaContext'
@@ -14,6 +15,7 @@ import { useSceneContent } from '../hooks/useSceneContent'
 
 
 export default function FloorPlanPage({ fullscreen, onFullscreenChange, standaloneToken }: { fullscreen?: boolean; onFullscreenChange?: (v: boolean) => void; standaloneToken?: string | null }) {
+  const navigate = useNavigate()
   const { token: ctxToken, states, callService } = useHa()
   const { toast } = useToast()
   const HARDCODED = 'f033260c0a8940ade499be72fd22be3955db72a2bee845214e64575ca73000af'
@@ -430,7 +432,7 @@ const [camMuted, setCamMuted] = useState(true)
           <span className="fp-title">3D Floor Plan</span>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <button className="btn" style={{ fontSize: 10, padding: '3px 8px' }}
-              onClick={() => onFullscreenChange?.(true)}>⛶</button>
+              onClick={() => navigate('/3d')}>⛶</button>
             <button className={`btn${editMode ? ' active' : ''}`} style={{ fontSize: 10, padding: '3px 8px' }}
               onClick={() => setEditMode(!editMode)}>
               {editMode ? '✕ Done' : '✎ Edit'}
@@ -528,7 +530,7 @@ const [camMuted, setCamMuted] = useState(true)
             onClick={() => setCameraViewer(null)}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: '#1c1c1e' }}>
               <span style={{ color: '#fff', fontWeight: 600, fontSize: 14 }}>📷 {camName}</span>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 16 }}>
                 <button onClick={e => { e.stopPropagation(); setCamMuted(m => !m) }}
                   style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>
                   {camMuted ? '🔇' : '🔊'}

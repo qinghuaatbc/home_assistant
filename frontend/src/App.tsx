@@ -109,10 +109,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Standalone fullscreen — for sharing/embedding, no login needed */}
         <Route path="/3d" element={<StandaloneFloorPlan />} />
-        <Route path="/floorplan" element={<StandaloneFloorPlan />} />
         <Route path="/2d" element={<StandaloneFloorPlan2D />} />
-        <Route path="/floorplan2d" element={<StandaloneFloorPlan2D />} />
+        {/* Main app with TabBar */}
         <Route path="/*" element={
           <HaProvider>
             <ToastProvider>
