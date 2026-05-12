@@ -39,7 +39,7 @@ describe('PluginLoaderService', () => {
   it('should create plugin directory if not exists', async () => {
     // onApplicationBootstrap creates the directory
     expect(fs.existsSync(testPluginDir)).toBe(false);
-    await service.onApplicationBootstrap();
+    await service.onModuleInit();
     expect(fs.existsSync(testPluginDir)).toBe(true);
   });
 

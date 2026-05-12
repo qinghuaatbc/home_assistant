@@ -1,11 +1,11 @@
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PluginManifest, PluginInstance, PluginModule } from './plugin.interface';
 
 @Injectable()
-export class PluginLoaderService implements OnApplicationBootstrap {
+export class PluginLoaderService implements OnModuleInit {
   private readonly logger = new Logger(PluginLoaderService.name);
   private readonly plugins = new Map<string, PluginInstance>();
   private readonly watchers = new Map<string, fs.FSWatcher>();
@@ -19,9 +19,10 @@ export class PluginLoaderService implements OnApplicationBootstrap {
     this.pluginDir = configured || path.resolve(process.cwd(), 'custom_components');
   }
 
-  async onApplicationBootstrap(): Promise<void> {
+  async onModuleInit(): Promise<void> {
     await this.scanPlugins();
-    this.startWatching();
+    // Delay watcher to avoid race with startup file events
+    setTimeout(() => this.startWatching(), 5000);
   }
 
   /** Start watching the plugin directory for changes */
@@ -50,11 +51,16 @@ export class PluginLoaderService implements OnApplicationBootstrap {
 
     const pluginDir = path.join(this.pluginDir, pluginName);
     if (!fs.existsSync(pluginDir)) {
-      // Plugin was deleted
-      for (const [domain, inst] of this.plugins) {
-        if (inst.manifest.domain === pluginName || pluginName.includes(inst.manifest.domain)) {
-          this.plugins.delete(domain);
-          this.logger.log(`Plugin removed: ${domain}`);
+      // Only remove if the plugin was loaded for a while (not during startup rsync)
+      // This prevents transient file operations from deleting registered plugins
+      const existingPlugin = [...this.plugins.values()].find(p => p.manifest.domain === pluginName || pluginName.includes(p.manifest.domain));
+      if (existingPlugin) {
+        // Check if the plugin dir has been gone for more than 3 seconds
+        // by waiting before deciding to delete
+        await new Promise(r => setTimeout(r, 3000));
+        if (!fs.existsSync(pluginDir)) {
+          this.plugins.delete(existingPlugin.manifest.domain);
+          this.logger.log(`Plugin removed: ${existingPlugin.manifest.domain}`);
         }
       }
       return;
