@@ -119,6 +119,11 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
           const pos = Array.isArray(a.glb_pos) ? [(a.glb_pos as number[])[0], (a.glb_pos as number[])[1]] as [number, number] : undefined
           senGlb.push({ entityId, name, floor: f as 1|2|3, meshName, deviceClass: dc, pos })
         } else if (Array.isArray(a.glb_pos)) sen.push({ entityId, name, floor: f as 1|2|3, x: (a.glb_pos as number[])[0], z: (a.glb_pos as number[])[1], deviceClass: dc })
+      } else if (entityId.startsWith('camera.')) {
+        const dc = 'camera'
+        if (meshName) {
+          senGlb.push({ entityId, name, floor: f as 1|2|3, meshName, deviceClass: dc })
+        } else if (Array.isArray(a.glb_pos)) sen.push({ entityId, name, floor: f as 1|2|3, x: (a.glb_pos as number[])[0], z: (a.glb_pos as number[])[1], deviceClass: dc })
       } else if (entityId.startsWith('media_player.')) {
         if (meshName) med.push({ entityId, name, floor: f as 1|2|3, meshName })
       }
