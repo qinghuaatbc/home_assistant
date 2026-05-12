@@ -9,6 +9,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LocalAuthGuard } from './guards/local-auth.guard';
+import { AdminGuard } from './guards/admin.guard';
 import { UserEntity } from './entities/user.entity';
 import { LongLivedTokenEntity } from './entities/long-lived-token.entity';
 
@@ -34,8 +35,9 @@ import { LongLivedTokenEntity } from './entities/long-lived-token.entity';
     LocalStrategy,
     JwtAuthGuard,
     LocalAuthGuard,
+    AdminGuard,
   ],
   controllers: [AuthController],
-  exports: [AuthService, JwtAuthGuard, JwtModule],
+  exports: [AuthService, JwtAuthGuard, AdminGuard, JwtModule],
 })
 export class AuthModule {}

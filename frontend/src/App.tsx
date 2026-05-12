@@ -96,7 +96,7 @@ function FloatingAiButton() {
         title={open ? t('Close AI', '关闭 AI', 'بستن AI') : t('Open AI', '打开 AI', 'باز کردن AI')}>
         {open ? '✕' : '✦'}
       </button>
-      {open && <AiChatPanel onClose={() => setOpen(false)} autoRecord={true} />}
+      {open && <AiChatPanel onClose={() => setOpen(false)} />}
     </>,
     document.body,
   )

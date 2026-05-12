@@ -39,10 +39,25 @@ export class StateMachineService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    // Listen for the start event to restore states from DB
     this.eventBus.listen(EVENT_HOMEASSISTANT_START, async () => {
       await this.restoreStates();
     });
+
+    // Prune history older than 30 days, run once at startup then every 24 hours
+    const pruneHistory = async () => {
+      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      try {
+        const result = await this.stateRepo.createQueryBuilder()
+          .delete()
+          .where('last_updated < :cutoff', { cutoff })
+          .execute();
+        if (result.affected) this.logger.log(`Pruned ${result.affected} history records older than 30 days`);
+      } catch (err) {
+        this.logger.error(`History pruning failed: ${(err as Error).message}`);
+      }
+    };
+    pruneHistory();
+    setInterval(pruneHistory, 24 * 60 * 60 * 1000);
   }
 
   /**

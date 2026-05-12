@@ -44,7 +44,6 @@ import { GetConfigHandler } from './handlers/get-config.handler';
  * - ping: Keepalive
  */
 @WebSocketGateway({
-  cors: { origin: '*', credentials: true },
   transports: ['websocket'],
   path: '/api/websocket',
 })

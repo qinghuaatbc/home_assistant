@@ -11,3 +11,4 @@ public/floors/*.glb
 .DS_Store
 *.tsbuildinfo
 data/floors/*.glb
+mcp-server/claude_desktop_config.json

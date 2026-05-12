@@ -1,7 +1,8 @@
-import { Controller, Get, Put, Post, Delete, Param, Body, UseGuards, Logger } from '@nestjs/common';
+import { Controller, Get, Put, Post, Delete, Param, Body, UseGuards, Logger, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { AdminGuard } from '../../auth/guards/admin.guard';
 import { StateMachineService } from '../../core/state-machine/state-machine.service';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -59,6 +60,7 @@ export class ConfigController {
   }
 
   @Put('automations')
+  @UseGuards(AdminGuard)
   @ApiOperation({ summary: 'Update automations YAML content' })
   async updateAutomations(@Body() body: { content: string }) {
     const autoPath = getMappingsPath().replace(MAPPINGS_FILE, 'automations.yaml');
@@ -105,6 +107,7 @@ export class ConfigController {
   }
 
   @Post('apply')
+  @UseGuards(AdminGuard)
   @ApiOperation({ summary: 'Save integration config and restart server' })
   async applyConfig(@Body() body: { integrations: any[] }) {
     const logger = new Logger('ConfigApply');
@@ -144,11 +147,11 @@ export class ConfigController {
   @Delete('floors/:id')
   @ApiOperation({ summary: 'Delete a floor' })
   async deleteFloor(@Param('id') id: string) {
+    if (!/^\d+$/.test(id)) throw new BadRequestException('Invalid floor id');
     const fp = getFloorsPath();
     if (!fs.existsSync(fp)) return { ok: true };
     const floors: any[] = JSON.parse(fs.readFileSync(fp, 'utf-8')).filter((f: any) => f.id !== id);
     fs.writeFileSync(fp, JSON.stringify(floors, null, 2), 'utf-8');
-    // Delete associated GLB file from data/floors/
     const glbPath = path.resolve(process.cwd(), 'data', 'floors', `floor${id}.glb`);
     if (fs.existsSync(glbPath)) fs.unlinkSync(glbPath);
     return { ok: true };

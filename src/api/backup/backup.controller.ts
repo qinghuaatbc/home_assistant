@@ -11,15 +11,15 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { AdminGuard } from '../../auth/guards/admin.guard';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as child_process from 'child_process';
 
 @ApiTags('backup')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('backup')
 export class BackupController {
   private readonly logger = new Logger(BackupController.name);
@@ -55,14 +55,18 @@ export class BackupController {
     const dbPath = this.configService.get<string>('database.database', 'ha.db');
     const absPath = path.resolve(dbPath);
 
+    const SQLITE_MAGIC = Buffer.from('53514c69746520666f726d61742033', 'hex'); // "SQLite format 3"
+    if (!file.buffer.slice(0, 15).equals(SQLITE_MAGIC)) {
+      res.status(400).json({ error: 'Uploaded file is not a valid SQLite database' });
+      return;
+    }
+
     try {
-      // Backup current DB as safety
       if (fs.existsSync(absPath)) {
         fs.copyFileSync(absPath, `${absPath}.pre-restore`);
         this.logger.warn(`Pre-restore backup saved: ${absPath}.pre-restore`);
       }
 
-      // Replace with uploaded file
       fs.writeFileSync(absPath, file.buffer);
 
       this.logger.log('Database restored from backup');

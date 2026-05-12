@@ -31,7 +31,7 @@ import { ContextService } from './core/context/context.service';
         type: 'better-sqlite3' as const,
         database: configService.get<string>('database.database', 'ha.db'),
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: process.env.NODE_ENV !== 'production',
         logging: configService.get<boolean>('database.logging', false),
       }),
       inject: [ConfigService],

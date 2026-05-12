@@ -115,7 +115,20 @@ export class EventBusService implements OnModuleInit {
     eventType: string,
     listener: EventListener<T>,
   ): void {
-    this.emitter.once(eventType, listener as (...args: unknown[]) => void);
+    const wrappedListener = (event: HaEvent<T>) => {
+      try {
+        const result = listener(event);
+        if (result instanceof Promise) {
+          result.catch((err: Error) =>
+            this.logger.error(`Async listenOnce error for ${eventType}: ${err.message}`, err.stack),
+          );
+        }
+      } catch (err: unknown) {
+        const error = err as Error;
+        this.logger.error(`listenOnce error for ${eventType}: ${error.message}`, error.stack);
+      }
+    };
+    this.emitter.once(eventType, wrappedListener as (...args: unknown[]) => void);
   }
 
   /**

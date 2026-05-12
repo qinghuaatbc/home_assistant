@@ -7,6 +7,7 @@ import { join } from 'path';
 import { AppModule } from './app.module';
 import { HaExceptionFilter } from './common/filters/ha-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { SocketIoAdapter } from './websocket/socket-io.adapter';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
@@ -23,6 +24,20 @@ async function bootstrap(): Promise<void> {
   const configService = app.get(ConfigService);
   const port = configService.get<number>('http.port', 8123);
   const corsOrigins = configService.get<string[]>('http.cors_allowed_origins', ['*']);
+
+  // Refuse to start in production with the default insecure JWT secret
+  const jwtSecret = configService.get<string>('auth.jwt_secret');
+  if (jwtSecret === 'CHANGE_THIS_SECRET') {
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('FATAL: auth.jwt_secret is still the default value. Set HA_JWT_SECRET or configure it in configuration.yaml before running in production.');
+      process.exit(1);
+    } else {
+      logger.warn('WARNING: auth.jwt_secret is using the insecure default. Set HA_JWT_SECRET before deploying to production.');
+    }
+  }
+
+  // Use custom adapter so WebSocket CORS respects cors_allowed_origins config
+  app.useWebSocketAdapter(new SocketIoAdapter(app));
 
   // CORS configuration
   app.enableCors({

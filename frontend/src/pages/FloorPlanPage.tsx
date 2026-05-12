@@ -48,30 +48,27 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const activeBehaviors = filterParam ? new Set(filterParam.split(',')) : null
   const getState = (eid: string) => statesRef.current.get(eid) || states.get(eid)
 
-  // Load floor names (also refresh on visibility change, e.g. returning from Integrations page)
   useEffect(() => {
     if (!token) return
     let cancelled = false
-    const load = () => fetch('/api/config/floors', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then((list: any[]) => {
-        if (cancelled) return
-        const m: Record<string, string> = {}
-        list.forEach(f => { m[f.id] = f.name })
-        setFloorNames(m)
-      }).catch(() => {})
-    load()
-    const iv = setInterval(load, 5000)
-    return () => { cancelled = true; clearInterval(iv) }
+    let iv: ReturnType<typeof setInterval> | null = null
+    const load = () => {
+      if (cancelled || document.hidden) return
+      fetch('/api/config/floors', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json()).then((list: any[]) => {
+          if (cancelled) return
+          const m: Record<string, string> = {}
+          list.forEach(f => { m[f.id] = f.name })
+          setFloorNames(m)
+        }).catch(() => {})
+    }
+    const start = () => { load(); iv = setInterval(load, 30000) }
+    const stop = () => { if (iv !== null) { clearInterval(iv); iv = null } }
+    const onVisibility = () => document.hidden ? stop() : start()
+    document.addEventListener('visibilitychange', onVisibility)
+    start()
+    return () => { cancelled = true; stop(); document.removeEventListener('visibilitychange', onVisibility) }
   }, [token])
-
-  const saveAll = async (m: Mappings, b: BehaviorMap) => {
-    if (!token) return
-    const body = buildMappingsPayload(m, b)
-    try {
-      const r = await fetch('/api/config/3d-mappings', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings: body }) })
-      if (!r.ok) toast('Save failed', 'error')
-    } catch { toast('Network error saving mappings', 'error') }
-  }
 
   const saveMappings = async (m: Mappings, b: BehaviorMap) => {
     if (!token) return
@@ -200,11 +197,17 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         if (result.entityId) {
           setSelectedId(result.entityId)
           const st = statesRef.current.get(result.entityId)
+          const prevSt = st
           const newState = st?.state === 'on' ? 'off' : 'on'
           statesRef.current = new Map(statesRef.current).set(result.entityId, { ...st!, state: newState })
           setLocalRev(n => n + 1)
           playBehaviorSound(result.entityId, newState === 'on')
-          haSetState(result.entityId, newState)
+          haSetState(result.entityId, newState).then(ok => {
+            if (!ok && prevSt) {
+              statesRef.current = new Map(statesRef.current).set(result.entityId, prevSt)
+              setLocalRev(n => n + 1)
+            }
+          })
         } else setSelectedId(null)
       }, 0)
     },
@@ -217,15 +220,16 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const selDomain    = selectedId?.split('.')[0] ?? ''
   const selDevClass  = selState?.attributes?.device_class as string | undefined
   const isSensor     = selDomain === 'binary_sensor'
-  const haSetState = async (eid: string, state: string, attrs?: Record<string, unknown>) => {
+  const haSetState = async (eid: string, state: string, attrs?: Record<string, unknown>): Promise<boolean> => {
     const cur = getState(eid)
     try {
       const r = await fetch(`/api/states/${eid}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ state, attributes: { ...cur?.attributes, ...attrs } }),
       })
-      if (!r.ok) toast('Failed to set state', 'error')
-    } catch { toast('Network error', 'error') }
+      if (!r.ok) { toast('Failed to set state', 'error'); return false }
+      return true
+    } catch { toast('Network error', 'error'); return false }
   }
 
   const playBehaviorSound = (eid: string, on: boolean) => {
@@ -256,11 +260,17 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     ? Math.round(((selState.attributes.brightness as number) / 255) * 100) : 100
   const toggle = () => {
     if (!selectedId) return
+    const prevState = statesRef.current.get(selectedId)
     const newState = selOn ? 'off' : 'on'
     statesRef.current = new Map(statesRef.current).set(selectedId, { ...selState!, state: newState })
     setLocalRev(n => n + 1)
     playBehaviorSound(selectedId, newState === 'on')
-    haSetState(selectedId, newState)
+    haSetState(selectedId, newState).then(ok => {
+      if (!ok && prevState) {
+        statesRef.current = new Map(statesRef.current).set(selectedId, prevState)
+        setLocalRev(n => n + 1)
+      }
+    })
   }
   const setBright = (pct: number) => {
     if (!selectedId) return
@@ -268,7 +278,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   }
 
   const sensorIcon = (dc?: string) =>
-    dc === 'door' || dc === 'garage_door' ? '🚪' : dc === 'curtain' || dc === 'blind' ? '🪟' : '🪟'
+    dc === 'door' || dc === 'garage_door' ? '🚪' : dc === 'curtain' || dc === 'blind' ? '🪟' : '🔲'
   const sensorLabel = (dc?: string, open?: boolean) => {
     if (dc === 'garage_door') return open ? 'Open' : 'Closed'
     if (dc === 'door')        return open ? 'Open' : 'Closed'
@@ -311,7 +321,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
           if (mesh) { merged[mesh] = eid; beh[mesh] = guessBehavior(eid, st.attributes?.device_class as string | undefined); added = true }
         })
         setMappings(merged); setBehaviors(beh)
-        if (added) saveAll(merged, beh)
+        if (added) saveMappings(merged, beh)
       }).catch(() => {})
   }, [token, states])
 
@@ -327,7 +337,7 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  })
+  }, [editMode, fullscreen])
 
   // ── Binding history (undo) ──────────────────────────────────────────────
   const [hist, setHist] = useState<Array<{ m: Mappings; b: BehaviorMap }>>([])

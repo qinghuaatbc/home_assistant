@@ -14,6 +14,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { AuthService, CreateLltDto } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { LoginRateLimitGuard } from './guards/login-rate-limit.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { UserEntity } from './entities/user.entity';
 
@@ -27,7 +28,7 @@ export class AuthController {
    * POST /auth/login
    */
   @Post('login')
-  @UseGuards(LocalAuthGuard)
+  @UseGuards(LoginRateLimitGuard, LocalAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with username/password' })
   @ApiBody({
@@ -47,6 +48,7 @@ export class AuthController {
    * POST /auth/token
    */
   @Post('token')
+  @UseGuards(LoginRateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'OAuth2 password grant' })
   async token(

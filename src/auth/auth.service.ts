@@ -252,16 +252,18 @@ export class AuthService implements OnModuleInit {
     const count = await this.userRepo.count();
     if (count > 0) return;
 
-    this.logger.warn(
-      '='.repeat(60) + '\n' +
-      'Creating default admin user: admin / admin\n' +
-      'CHANGE THIS PASSWORD IMMEDIATELY!\n' +
-      '='.repeat(60),
-    );
+    const password = crypto.randomBytes(12).toString('base64url');
+
+    this.logger.warn('='.repeat(60));
+    this.logger.warn('First-run: creating default admin account');
+    this.logger.warn(`  Username: admin`);
+    this.logger.warn(`  Password: ${password}`);
+    this.logger.warn('Save this password — it will not be shown again.');
+    this.logger.warn('='.repeat(60));
 
     await this.createUser({
       username: 'admin',
-      password: 'admin',
+      password,
       display_name: 'Administrator',
       is_admin: true,
     });

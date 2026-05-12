@@ -85,8 +85,8 @@ export class AutomationEngineService implements OnApplicationShutdown {
 
     const context = this.contextService.system();
 
-    // Loop protection: if this context chain is already in flight, abort
-    if (this.activeContextIds.has(context.id)) {
+    // Loop protection: prevent the same automation from re-entering while already running
+    if (this.activeContextIds.has(automationId)) {
       this.logger.warn(`Automation ${automationId} loop detected, aborting`);
       return;
     }
@@ -95,7 +95,7 @@ export class AutomationEngineService implements OnApplicationShutdown {
     runtime.activeRuns++;
     runtime.lastTriggeredAt = now;
     runtime.lastTriggeredBy = triggerLabel;
-    this.activeContextIds.add(context.id);
+    this.activeContextIds.add(automationId);
 
     this.stateMachine.setState(`automation.${automationId}`, 'on', {
       friendly_name: runtime.config.alias ?? automationId,
@@ -112,7 +112,7 @@ export class AutomationEngineService implements OnApplicationShutdown {
       this.logger.error(`Automation ${automationId} failed: ${(err as Error).message}`);
     } finally {
       runtime.activeRuns--;
-      this.activeContextIds.delete(context.id);
+      this.activeContextIds.delete(automationId);
     }
   }
 

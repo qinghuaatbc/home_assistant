@@ -73,7 +73,8 @@ export class ActionExecutorService {
   }
 
   private execDelay(action: DelayAction): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, action.seconds * 1000));
+    const seconds = Math.min(action.seconds ?? 0, 3600);
+    return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
   }
 
   private async execCondition(

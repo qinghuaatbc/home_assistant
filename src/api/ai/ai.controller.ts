@@ -46,11 +46,12 @@ export class AiController {
   async chat(@Body() body: { prompt: string; lang?: string }) {
     const lang = body.lang || 'en';
     if (!body.prompt?.trim()) return { response: this.t(lang)('请输入提示内容', 'Please provide a prompt.', 'لطفاً یک پیام وارد کنید') };
+    if (body.prompt.length > 4000) return { response: this.t(lang)('输入内容过长', 'Prompt too long (max 4000 chars)', 'پیام بیش از حد طولانی است') };
     return this.processWithClaude(body.prompt, lang);
   }
 
   @Post('voice')
-  @UseInterceptors(FileInterceptor('audio'))
+  @UseInterceptors(FileInterceptor('audio', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @ApiOperation({ summary: 'Voice input — transcribe audio + AI response' })
   async voice(@UploadedFile() file: any, @Body() body: { lang?: string }) {
     const lang = body.lang || 'en';

@@ -30,7 +30,7 @@ interface HaCtx {
   health: HaHealth | null
   states: Map<string, HaState>
   callService: (domain: string, service: string, data?: Record<string, unknown>, entityId?: string | string[]) => Promise<{ success: boolean; error?: string }>
-  setEntityState: (entityId: string, state: string, attributes?: Record<string, unknown>) => Promise<void>
+  setEntityState: (entityId: string, state: string, attributes?: Record<string, unknown>) => Promise<boolean>
 }
 
 const Ctx = createContext<HaCtx | null>(null)
@@ -48,6 +48,7 @@ export function HaProvider({ children }: { children: ReactNode }) {
   const [states, setStates] = useState<Map<string, HaState>>(new Map())
   const wsRef = useRef<Socket | null>(null)
   const cmdId = useRef(1)
+  const pendingCalls = useRef<Map<number, (msg: any) => void>>(new Map())
 
   const applyTheme = (t: string) => {
     if (t === 'light') document.documentElement.classList.add('light')
@@ -93,13 +94,14 @@ export function HaProvider({ children }: { children: ReactNode }) {
     if (!wsRef.current || !token) return { success: false, error: 'Not connected' }
     const id = cmdId.current++
     return new Promise(resolve => {
-      const handler = (msg: any) => {
-        if (msg.id === id && msg.type === 'result') {
-          wsRef.current?.off('message', handler)
-          resolve({ success: msg.success !== false, error: msg.error?.message })
-        }
-      }
-      wsRef.current?.on('message', handler)
+      const timer = setTimeout(() => {
+        pendingCalls.current.delete(id)
+        resolve({ success: false, error: 'Timeout' })
+      }, 10000)
+      pendingCalls.current.set(id, (msg: any) => {
+        clearTimeout(timer)
+        resolve({ success: msg.success !== false, error: msg.error?.message })
+      })
       wsRef.current?.emit('message', {
         id,
         type: 'call_service',
@@ -108,7 +110,6 @@ export function HaProvider({ children }: { children: ReactNode }) {
         service_data: data,
         target: entityId ? { entity_id: entityId } : undefined,
       })
-      setTimeout(() => { wsRef.current?.off('message', handler); resolve({ success: false, error: 'Timeout' }) }, 10000)
     })
   }, [token])
 
@@ -116,14 +117,19 @@ export function HaProvider({ children }: { children: ReactNode }) {
     entityId: string,
     state: string,
     attributes: Record<string, unknown> = {},
-  ) => {
-    if (!token) return
+  ): Promise<boolean> => {
+    if (!token) return false
     const current = states.get(entityId)
-    await fetch(`/api/states/${entityId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ state, attributes: { ...current?.attributes, ...attributes } }),
-    })
+    try {
+      const r = await fetch(`/api/states/${entityId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ state, attributes: { ...current?.attributes, ...attributes } }),
+      })
+      return r.ok
+    } catch {
+      return false
+    }
   }, [token, states])
 
   // Poll health endpoint
@@ -146,7 +152,15 @@ export function HaProvider({ children }: { children: ReactNode }) {
     })
     wsRef.current = socket
 
-    socket.on('message', (msg: { type: string; result?: HaState[]; event?: { data?: { entity_id?: string; new_state?: HaState } } }) => {
+    socket.on('message', (msg: any) => {
+      // Dispatch pending call_service responses
+      if (msg.id && msg.type === 'result' && pendingCalls.current.has(msg.id)) {
+        const resolve = pendingCalls.current.get(msg.id)!
+        pendingCalls.current.delete(msg.id)
+        resolve(msg)
+        return
+      }
+
       if (msg.type === 'auth_required') {
         socket.emit('message', { type: 'auth', access_token: token })
       }
@@ -169,7 +183,7 @@ export function HaProvider({ children }: { children: ReactNode }) {
       }
 
       if (msg.type === 'result' && Array.isArray(msg.result)) {
-        setStates(new Map(msg.result.map((s) => [s.entity_id, s])))
+        setStates(new Map(msg.result.map((s: HaState) => [s.entity_id, s])))
       }
 
       if (msg.type === 'event' && msg.event?.data) {
@@ -191,6 +205,10 @@ export function HaProvider({ children }: { children: ReactNode }) {
       socket.disconnect()
       wsRef.current = null
       setWsConnected(false)
+      for (const resolve of pendingCalls.current.values()) {
+        resolve({ type: 'result', success: false, error: { message: 'Disconnected' } })
+      }
+      pendingCalls.current.clear()
     }
   }, [token])
 
