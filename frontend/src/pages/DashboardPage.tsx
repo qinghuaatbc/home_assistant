@@ -27,6 +27,12 @@ function usePinned() {
 
 export default function DashboardPage() {
   const { token, states, wsConnected, health } = useHa()
+  const [mappingCount, setMappingCount] = useState(0)
+  useEffect(() => {
+    if (!token) return
+    fetch('/api/config/3d-mappings', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then((d: any) => setMappingCount(Object.keys(d).filter(k => k !== 'mappings').length)).catch(() => {})
+  }, [token])
   const pinned = usePinned()
   const [areas, setAreas] = useState<{ area_id: string; name: string }[]>([])
   const [entityAreas, setEntityAreas] = useState<Map<string, string>>(new Map())
@@ -158,7 +164,7 @@ export default function DashboardPage() {
             </div>
             <div className="stat-card">
               <div className="stat-value" style={{ color: 'var(--purple)' }}>
-                {[...states.values()].filter(s => s.attributes?.glb_mesh || s.attributes?.glb_pos || s.attributes?.glb_floor).length}
+                {mappingCount}
               </div>
               <div className="stat-label">3D Bound</div>
             </div>
