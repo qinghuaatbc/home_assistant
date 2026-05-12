@@ -58,6 +58,13 @@ const INTEGRATIONS: IntegrationDef[] = [
       { label: 'Type', key: 'type', options: ['dimmer', 'switch', 'sensor'] },
       { label: 'Name', key: 'name', placeholder: 'Living Room Dimmer' },
     ]},
+  { domain: 'camera', name: 'Camera', icon: '📷', desc: 'IP cameras via RTSP (requires FFmpeg)',
+    fields: [],
+    dynamicFields: [
+      { label: 'Name', key: 'name', placeholder: 'Driveway' },
+      { label: 'Label', key: 'label', placeholder: 'HD' },
+      { label: 'RTSP URL', key: 'rtsp_url', placeholder: 'rtsp://user:pass@ip:554/stream' },
+    ]},
   { domain: 'lutron_caseta', name: 'Lutron Caseta', icon: '💡', desc: 'Lutron Caseta Smart Bridge',
     fields: [
       { key: 'host', label: 'Bridge IP', placeholder: '192.168.1.167', default: '' },
@@ -232,25 +239,28 @@ export default function IntegrationsPage() {
   const addDevice = (domain: string) => {
     setConfigs(prev => {
       const cfg = { ...(prev[domain] || {}) }
-      const list = [...(cfg.devices || [])]
-      list.push({ integrationId: 0, entity_id: '', type: 'dimmer', name: '' })
-      return { ...prev, [domain]: { ...cfg, devices: list } }
+      const key = domain === 'camera' ? 'camera_devices' : 'devices'
+      const list = [...(cfg[key] || [])]
+      list.push({})
+      return { ...prev, [domain]: { ...cfg, [key]: list } }
     })
   }
 
   const updateDevice = (domain: string, idx: number, key: string, value: string) => {
     setConfigs(prev => {
       const cfg = { ...(prev[domain] || {}) }
-      const list = [...(cfg.devices || [])]
-      list[idx] = { ...list[idx], [key]: value }
-      return { ...prev, [domain]: { ...cfg, devices: list } }
+      const listKey = domain === 'camera' ? 'camera_devices' : 'devices'
+      const list = [...(cfg[listKey] || [])]
+      list[idx] = { ...(list[idx] || {}), [key]: value }
+      return { ...prev, [domain]: { ...cfg, [listKey]: list } }
     })
   }
 
   const removeDevice = (domain: string, idx: number) => {
     setConfigs(prev => {
       const cfg = { ...(prev[domain] || {}) }
-      return { ...prev, [domain]: { ...cfg, devices: (cfg.devices || []).filter((_: any, i: number) => i !== idx) } }
+      const listKey = domain === 'camera' ? 'camera_devices' : 'devices'
+      return { ...prev, [domain]: { ...cfg, [listKey]: (cfg[listKey] || []).filter((_: any, i: number) => i !== idx) } }
     })
   }
 
@@ -299,6 +309,14 @@ export default function IntegrationsPage() {
         const out: any = { domain: int.domain }
         for (const [k, v] of Object.entries(cfg)) {
           if (k === 'devices') { if (Array.isArray(v) && v.length > 0) out.devices = v }
+          else if (k === 'camera_devices') {
+            if (Array.isArray(v) && v.length > 0) {
+              out.cameras = v.map((d: any) => ({
+                name: d.name || 'Camera',
+                streams: [{ label: d.label || 'Main', rtsp_url: d.rtsp_url }],
+              }))
+            }
+          }
           else if (v) { out[k] = v }
         }
         return out
@@ -481,7 +499,7 @@ export default function IntegrationsPage() {
                     {int.dynamicFields && (
                       <div style={{ marginTop: 12 }}>
                         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>Devices</div>
-                        {(cfg.devices || []).map((dev: any, idx: number) => (
+                        {((int.domain === 'camera' ? cfg.camera_devices : cfg.devices) || []).map((dev: any, idx: number) => (
                           <div key={idx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
                             {int.dynamicFields!.map(f => (
                               f.options
