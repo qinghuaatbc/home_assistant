@@ -115,6 +115,39 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     this.logger.log(
       `Integration loading complete: ${loaded} loaded, ${failed} failed`,
     );
+
+    // Phase 2: Fire on_start for all loaded integrations (in load order)
+    if (loaded > 0) {
+      this.logger.debug('Firing on_start for loaded integrations...');
+      for (const integration of this.loadedIntegrations) {
+        if (integration.on_start) {
+          try {
+            await integration.on_start();
+            this.logger.debug(`on_start: ${integration.manifest.domain}`);
+          } catch (err: unknown) {
+            const error = err as Error;
+            this.logger.error(`on_start failed for '${integration.manifest.domain}': ${error.message}`);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Notify an integration that its config has changed at runtime.
+   */
+  async notifyConfigChange(domain: string, config: IntegrationConfig): Promise<void> {
+    const integration = this.loadedIntegrations.find(i => i.manifest.domain === domain);
+    if (!integration) {
+      this.logger.warn(`notifyConfigChange: integration '${domain}' not loaded`);
+      return;
+    }
+    if (integration.on_config_change) {
+      await integration.on_config_change(config);
+      this.logger.log(`Config change applied: ${domain}`);
+    } else {
+      this.logger.debug(`Integration '${domain}' has no on_config_change handler`);
+    }
   }
 
   /**
@@ -187,6 +220,20 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     this.logger.log('Shutting down integrations...');
     const reversed = [...this.loadedIntegrations].reverse();
 
+    // Phase 1: on_stop
+    for (const integration of reversed) {
+      if (integration.on_stop) {
+        try {
+          await integration.on_stop();
+          this.logger.debug(`Integration on_stop: ${integration.manifest.domain}`);
+        } catch (err: unknown) {
+          const error = err as Error;
+          this.logger.error(`Error during on_stop of ${integration.manifest.domain}: ${error.message}`);
+        }
+      }
+    }
+
+    // Phase 2: teardown
     for (const integration of reversed) {
       try {
         await integration.teardown();
