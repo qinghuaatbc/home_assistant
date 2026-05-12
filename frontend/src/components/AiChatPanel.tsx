@@ -26,7 +26,7 @@ const T: Record<Lang, { placeholder: string; send: string; thinking: string; noR
 const LANG_LIST: Lang[] = ['en', 'zh', 'fa']
 const RECORDING_DURATION_MS = 5000
 
-export default function AiChatPanel({ onClose }: { onClose: () => void }) {
+export default function AiChatPanel({ onClose, autoRecord }: { onClose: () => void; autoRecord?: boolean }) {
   const { token } = useHa()
   const [prompt, setPrompt] = useState('')
   const [messages, setMessages] = useState<{ role: string; text: string }[]>([])
@@ -53,6 +53,15 @@ export default function AiChatPanel({ onClose }: { onClose: () => void }) {
       }
     }
   }, [])
+
+  // Auto-start recording when panel opens with autoRecord=true
+  useEffect(() => {
+    if (autoRecord) {
+      // Small delay to ensure DOM is ready
+      const t = setTimeout(() => startRecording(), 300)
+      return () => clearTimeout(t)
+    }
+  }, [autoRecord])
 
   const send = useCallback(async (text?: string) => {
     const msg = (text ?? prompt).trim()
