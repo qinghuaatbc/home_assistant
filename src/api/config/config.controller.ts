@@ -6,7 +6,7 @@ import { AdminGuard } from '../../auth/guards/admin.guard';
 import { StateMachineService } from '../../core/state-machine/state-machine.service';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { exec } from 'child_process';
 
 interface IntegrationStatus { domain: string; status: string; error?: string }
 
@@ -139,9 +139,14 @@ export class ConfigController {
     ]
     fs.writeFileSync(yamlPath, newLines.join('\n') + '\n', 'utf-8');
     logger.log('Configuration saved, restarting...');
-    // Restart via PM2
-    try { execSync('pm2 restart home-assistant', { timeout: 5000 }) } catch {}
-    return { ok: true, message: 'Configuration saved. Server restarting…' };
+    // Return response before restarting so client doesn't get 502
+    const result = { ok: true, message: 'Configuration saved. Server restarting…' };
+    setTimeout(() => {
+      exec('pm2 restart home-assistant', (err) => {
+        if (err) logger.error(`Restart failed: ${err.message}`);
+      });
+    }, 500);
+    return result;
   }
 
   @Delete('floors/:id')
