@@ -207,6 +207,11 @@ function translateName(name: string, lang: Lang): string {
   return NAME_TRANSLATIONS[lang][name] || name
 }
 
+export function speakText(text: string) {
+  if (!voiceEnabled) return
+  say(text, LANG_VOICES[currentLang].lang)
+}
+
 export function speakState(entityName: string, state: string) {
   if (!voiceEnabled) return
   const lang = LANG_VOICES[currentLang].lang

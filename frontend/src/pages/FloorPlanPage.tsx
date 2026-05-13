@@ -7,14 +7,27 @@ import { useToast } from '../context/ToastContext'
 import { HaState, Mappings, MappingEntry, BehaviorMap, FloorId } from '../types'
 import { guessBehavior, BEHAVIORS, BrightnessSlider, DevicePicker } from '../components/DevicePicker'
 import EditPanel from '../components/EditPanel'
-import { playLightToggle, playDoorToggle, playGarageToggle, playCurtainToggle, playMediaToggle, playSwitchToggle, playDing, speakState, Lang, setLang, startMusic, stopMusic } from '../utils/sounds'
+import { playLightToggle, playDoorToggle, playGarageToggle, playCurtainToggle, playMediaToggle, playSwitchToggle, playDing, speakState, speakText, Lang, getLang, setLang, startMusic, stopMusic } from '../utils/sounds'
+
+const FLOOR_TR: Record<string, { zh: string; fa: string }> = {
+  'Main Floor': { zh: '主层', fa: 'اصلی' },
+  'Up Floor':   { zh: '上层', fa: 'بالا' },
+  'Basement':   { zh: '地下室', fa: 'زیرزمین' },
+  'Main':       { zh: '主层', fa: 'اصلی' },
+  'Upper':      { zh: '上层', fa: 'بالا' },
+  'Lower':      { zh: '下层', fa: 'پایین' },
+}
+function trFloor(name: string, lang: string): string {
+  if (lang === 'en') return name
+  return (FLOOR_TR[name] as any)?.[lang] ?? name
+}
 import { useThreeScene } from '../hooks/useThreeScene'
 import { useSceneClick } from '../hooks/useSceneClick'
 import { useSceneContent } from '../hooks/useSceneContent'
 
 
 
-export default function FloorPlanPage({ fullscreen, onFullscreenChange, standaloneToken }: { fullscreen?: boolean; onFullscreenChange?: (v: boolean) => void; standaloneToken?: string | null }) {
+export default function FloorPlanPage({ fullscreen, onFullscreenChange, standaloneToken, soundMode: soundModeProp }: { fullscreen?: boolean; onFullscreenChange?: (v: boolean) => void; standaloneToken?: string | null; soundMode?: number }) {
   const navigate = useNavigate()
   const { token: ctxToken, states, callService } = useHa()
   const { toast } = useToast()
@@ -45,11 +58,11 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
   const [clickedMesh, setClickedMesh] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null)
   const [localRev, setLocalRev] = useState(0) // increment to trigger re-render after local toggle
-  const [soundMode, setSoundMode] = useState(0)
+  const soundMode = soundModeProp ?? 1
   const [camLocked, setCamLocked] = useState(false)
   const [cameraViewer, setCameraViewer] = useState<string | null>(null)
-const [camMuted, setCamMuted] = useState(true)
-  const [langIdx, setLangIdx] = useState(0)
+  const [camMuted, setCamMuted] = useState(true)
+  const [langIdx, setLangIdx] = useState(() => { const l = getLang(); return l === 'zh' ? 1 : l === 'fa' ? 2 : 0 })
   const LANG_LIST: Lang[] = ['en', 'zh', 'fa']
   const filterParam = new URLSearchParams(window.location.search).get('filter') || ''
   const activeBehaviors = filterParam ? new Set(filterParam.split(',')) : null
@@ -469,30 +482,44 @@ const [camMuted, setCamMuted] = useState(true)
       )}
 
       <div className="fp-canvas" ref={containerRef} onClick={onClick} />
-      <div style={{ position: 'absolute', bottom: fullscreen ? 80 : 'calc(80px + var(--safe-bottom))', left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', gap: 6 }}>
-        {['1', '2', '3', '4', '5'].map(id => (
-          <button key={id} className={`fp-floor-btn${String(floor) === id ? ' active' : ''}`}
-            onClick={() => { setFloor(Number(id) as any); setSelectedId(null) }}
-            style={{ display: floorNames[id] ? undefined : 'none' }}>
-            {floorNames[id] || id}
-          </button>
-        ))}
-      </div>
-      <div style={{ position: 'absolute', bottom: fullscreen ? 80 : 'calc(80px + var(--safe-bottom))', right: 16, zIndex: 20, display: 'flex', gap: 6 }}>
-        <button className="fp-floor-btn" style={{ fontSize: 14, padding: '4px 10px', opacity: camLocked ? 1 : 0.5 }}
-          onClick={() => setCamLocked(!camLocked)}>
+      {/* Floor selector + camlock — right side vertical column */}
+      <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', zIndex: 20, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+        {['1', '2', '3', '4', '5'].map(id => {
+          if (!floorNames[id]) return null
+          const active = String(floor) === id
+          const lang = LANG_LIST[langIdx]
+          const label = trFloor(floorNames[id], lang)
+          return (
+            <button key={id} onClick={() => {
+              setFloor(Number(id) as FloorId); setSelectedId(null)
+              if (soundMode >= 1) playDing()
+              if (soundMode === 2) speakText(label)
+            }} style={{
+              width: 52, minHeight: 44, borderRadius: 12, cursor: 'pointer',
+              background: active ? 'rgba(77,143,255,0.88)' : 'rgba(0,0,0,0.52)',
+              backdropFilter: 'blur(10px)',
+              border: `1.5px solid ${active ? '#4d8fff' : 'rgba(255,255,255,0.18)'}`,
+              boxShadow: active ? '0 0 14px rgba(77,143,255,0.55)' : '0 2px 8px rgba(0,0,0,0.35)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: 2, padding: '6px 4px', transition: 'all 0.18s',
+            }}>
+              <span style={{ fontSize: 9, fontWeight: active ? 700 : 500, color: active ? '#fff' : 'rgba(255,255,255,0.8)', textAlign: 'center', lineHeight: 1.25, wordBreak: 'keep-all' }}>{label}</span>
+            </button>
+          )
+        })}
+        {/* Camlock */}
+        <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.12)', margin: '2px 0' }} />
+        <button onClick={() => setCamLocked(!camLocked)} style={{
+          width: 52, height: 44, borderRadius: 12, cursor: 'pointer',
+          background: camLocked ? 'rgba(77,143,255,0.88)' : 'rgba(0,0,0,0.52)',
+          backdropFilter: 'blur(10px)',
+          border: `1.5px solid ${camLocked ? '#4d8fff' : 'rgba(255,255,255,0.18)'}`,
+          boxShadow: camLocked ? '0 0 14px rgba(77,143,255,0.55)' : '0 2px 8px rgba(0,0,0,0.35)',
+          fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'all 0.18s',
+        }}>
           {camLocked ? '🔒' : '🔓'}
         </button>
-        <button className="fp-floor-btn" style={{ fontSize: 14, padding: '4px 10px' }}
-          onClick={() => setSoundMode((soundMode + 1) % 3)}>
-          {soundMode === 0 ? '🔇' : soundMode === 1 ? '🔔' : '🗣'}
-        </button>
-        {soundMode === 2 && (
-          <button className="fp-floor-btn" style={{ fontSize: 11, padding: '4px 6px' }}
-            onClick={() => { const n = (langIdx + 1) % 3; setLangIdx(n); setLang(LANG_LIST[n]) }}>
-            {LANG_LIST[langIdx] === 'en' ? 'EN' : LANG_LIST[langIdx] === 'zh' ? '中文' : 'فارسی'}
-          </button>
-        )}
       </div>
 
       {glbLoading && <div className="fp-glb-badge"><div className="fp-spinner-sm" /> Loading model…</div>}

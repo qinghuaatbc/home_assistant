@@ -8,24 +8,62 @@ import LoginPage from './pages/LoginPage'
 import TabBar from './components/TabBar'
 import AiChatPanel from './components/AiChatPanel'
 
-const DashboardPage   = lazy(() => import('./pages/DashboardPage'))
-const EntitiesPage    = lazy(() => import('./pages/EntitiesPage'))
-const FloorPlanPage   = lazy(() => import('./pages/FloorPlanPage'))
-const FloorPlan2DPage = lazy(() => import('./pages/FloorPlan2DPage'))
-const AutomationsPage = lazy(() => import('./pages/AutomationsPage'))
-const EventsPage      = lazy(() => import('./pages/EventsPage'))
-const HistoryPage     = lazy(() => import('./pages/HistoryPage'))
-const AreasPage       = lazy(() => import('./pages/AreasPage'))
+const DashboardPage    = lazy(() => import('./pages/DashboardPage'))
+const EntitiesPage     = lazy(() => import('./pages/EntitiesPage'))
+const FloorPlanPage    = lazy(() => import('./pages/FloorPlanPage'))
+const FloorPlan2DPage  = lazy(() => import('./pages/FloorPlan2DPage'))
+const AutomationsPage  = lazy(() => import('./pages/AutomationsPage'))
+const EventsPage       = lazy(() => import('./pages/EventsPage'))
+const HistoryPage      = lazy(() => import('./pages/HistoryPage'))
+const AreasPage        = lazy(() => import('./pages/AreasPage'))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'))
-const SettingsPage    = lazy(() => import('./pages/SettingsPage'))
-
-const DEMO_TOKEN = 'f033260c0a8940ade499be72fd22be3955db72a2bee845214e64575ca73000af'
+const SettingsPage     = lazy(() => import('./pages/SettingsPage'))
+const RtiPanelPage     = lazy(() => import('./pages/RtiPanelPage'))
 
 function getToken(): string {
-  return new URLSearchParams(window.location.search).get('token') || localStorage.getItem('ha_token') || DEMO_TOKEN
+  return new URLSearchParams(window.location.search).get('token') || localStorage.getItem('ha_token') || ''
 }
 
-// Layout for authenticated pages with TabBar
+function isRtiMode(): boolean {
+  return new URLSearchParams(window.location.search).get('rti') === '1'
+}
+
+// ─── Global AI button — persistent across all pages ───────────────────────────
+// AiChatPanel stays mounted (display: none when closed) to preserve chat history
+
+function FloatingAiButton() {
+  const [open, setOpen] = useState(false)
+  const l = (en: string, zh: string, fa: string) => {
+    const lang = getLang()
+    return lang === 'zh' ? zh : lang === 'fa' ? fa : en
+  }
+  return createPortal(
+    <>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          position: 'fixed', bottom: 16, right: 6, zIndex: 9999,
+          width: 44, height: 44, borderRadius: 22, border: 'none',
+          background: open ? '#ff453a' : '#4d8fff', color: '#fff',
+          fontSize: 18, cursor: 'pointer', boxShadow: '0 4px 16px rgba(77,143,255,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'background 0.2s',
+        }}
+        title={open ? l('Close AI', '关闭 AI', 'بستن AI') : l('Open AI', '打开 AI', 'باز کردن AI')}
+      >
+        {open ? '✕' : '✦'}
+      </button>
+      {/* Always mounted — preserves chat history */}
+      <div style={{ display: open ? 'block' : 'none', pointerEvents: open ? 'auto' : 'none' }}>
+        <AiChatPanel onClose={() => setOpen(false)} />
+      </div>
+    </>,
+    document.body,
+  )
+}
+
+// ─── Layout for authenticated pages ───────────────────────────────────────────
+
 function AuthLayout() {
   const { token } = useHa()
   if (!token) return <LoginPage />
@@ -55,10 +93,39 @@ function AuthLayout() {
   )
 }
 
-// Standalone floorplan (no TabBar, uses URL/localStorage token)
+// ─── RTI full panel (3D/2D + categories) ──────────────────────────────────────
+
+function RtiPanel() {
+  const t = getToken()
+  if (t) localStorage.setItem('ha_token', t)
+  return (
+    <HaProvider>
+      <ToastProvider>
+        <Suspense fallback={<div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', color: '#666' }}>Loading…</div>}>
+          <RtiPanelPage standaloneToken={t} />
+        </Suspense>
+        <FloatingAiButton />
+      </ToastProvider>
+    </HaProvider>
+  )
+}
+
+function RtiKiosk() {
+  const t = getToken()
+  if (t) localStorage.setItem('ha_token', t)
+  return (
+    <HaProvider>
+      <ToastProvider>
+        <FloorPlanPage fullscreen={true} onFullscreenChange={() => {}} standaloneToken={t} />
+        <FloatingAiButton />
+      </ToastProvider>
+    </HaProvider>
+  )
+}
+
 function StandaloneFloorPlan() {
   const t = getToken()
-  localStorage.setItem('ha_token', t)
+  if (t) localStorage.setItem('ha_token', t)
   return (
     <HaProvider>
       <ToastProvider>
@@ -82,41 +149,17 @@ function StandaloneFloorPlan2D() {
   )
 }
 
-function FloatingAiButton() {
-  const [open, setOpen] = useState(false)
-  const l = (en: string, zh: string, fa: string) => {
-    const lang = getLang()
-    return lang === 'zh' ? zh : lang === 'fa' ? fa : en
-  }
-  return createPortal(
-    <>
-      <button onClick={() => setOpen(!open)}
-        style={{
-          position: 'fixed', bottom: 200, right: 16, zIndex: 9999,
-          width: 44, height: 44, borderRadius: 22, border: 'none',
-          background: open ? '#ff453a' : '#4d8fff', color: '#fff',
-          fontSize: 18, cursor: 'pointer', boxShadow: '0 4px 16px rgba(77,143,255,0.4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}
-        title={open ? l('Close AI', '关闭 AI', 'بستن AI') : l('Open AI', '打开 AI', 'باز کردن AI')}>
-        {open ? '✕' : '✦'}
-      </button>
-      {open && <AiChatPanel onClose={() => setOpen(false)} />}
-    </>,
-    document.body,
-  )
-}
-
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Standalone fullscreen — for sharing/embedding, no login needed */}
-        <Route path="/3d" element={<StandaloneFloorPlan />} />
-        <Route path="/floorplan" element={<StandaloneFloorPlan />} />
-        <Route path="/2d" element={<StandaloneFloorPlan2D />} />
+        <Route path="/rti"      element={<RtiPanel />} />
+        <Route path="/panel"    element={<RtiPanel />} />
+        <Route path="/rti3d"    element={<RtiKiosk />} />
+        <Route path="/3d"       element={<StandaloneFloorPlan />} />
+        <Route path="/floorplan" element={isRtiMode() ? <RtiKiosk /> : <StandaloneFloorPlan />} />
+        <Route path="/2d"       element={<StandaloneFloorPlan2D />} />
         <Route path="/floorplan2d" element={<StandaloneFloorPlan2D />} />
-        {/* Main app with TabBar */}
         <Route path="/*" element={
           <HaProvider>
             <ToastProvider>
