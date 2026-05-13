@@ -1012,13 +1012,15 @@ function CategoryNav({ cat, onChange, vertical }: { cat: Cat; onChange: (c: Cat)
           const active = cat === c.id
           return (
             <button key={c.id} onClick={() => handleClick(c.id)} style={{
-              background: active ? 'rgba(77,143,255,0.15)' : 'none', border: 'none',
-              borderLeft: `3px solid ${active ? '#4d8fff' : 'transparent'}`,
+              background: active ? 'rgba(77,143,255,0.18)' : 'none', border: 'none',
+              borderLeft: `4px solid ${active ? '#4d8fff' : 'transparent'}`,
               cursor: 'pointer', padding: '14px 0',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'background 0.15s',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+              transition: 'background 0.15s, border-color 0.15s',
+              boxShadow: active ? 'inset 0 0 18px rgba(77,143,255,0.08)' : 'none',
             }}>
-              <span style={{ fontSize: 22 }}>{c.icon}</span>
-              <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#4d8fff' : th === 'day' ? 'rgba(0,0,0,0.65)' : 'rgba(255,255,255,0.65)', letterSpacing: 0.2 }}>{t.cats[c.id]}</span>
+              <span style={{ fontSize: active ? 26 : 22, transition: 'font-size 0.15s', filter: active ? 'drop-shadow(0 0 6px rgba(77,143,255,0.55))' : 'none' }}>{c.icon}</span>
+              <span style={{ fontSize: active ? 13 : 12, fontWeight: active ? 700 : 500, color: active ? '#4d8fff' : th === 'day' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)', letterSpacing: 0.2 }}>{t.cats[c.id]}</span>
             </button>
           )
         })}
@@ -1036,14 +1038,15 @@ function CategoryNav({ cat, onChange, vertical }: { cat: Cat; onChange: (c: Cat)
         const active = cat === c.id
         return (
           <button key={c.id} onClick={() => handleClick(c.id)} style={{
-            flex: 1, background: 'none', border: 'none', cursor: 'pointer',
+            flex: 1, border: 'none', cursor: 'pointer',
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
             gap: 3, padding: '6px 0',
-            borderTop: `2px solid ${active ? '#4d8fff' : 'transparent'}`,
-            transition: 'border-color 0.15s',
+            borderTop: `3px solid ${active ? '#4d8fff' : 'transparent'}`,
+            background: active ? th === 'day' ? 'rgba(77,143,255,0.08)' : 'rgba(77,143,255,0.12)' : 'none',
+            transition: 'border-color 0.15s, background 0.15s',
           }}>
-            <span style={{ fontSize: 22, filter: active ? 'none' : 'grayscale(0.5)', opacity: active ? 1 : 0.7 }}>{c.icon}</span>
-            <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#4d8fff' : th === 'day' ? 'rgba(0,0,0,0.65)' : 'rgba(255,255,255,0.65)' }}>{t.cats[c.id]}</span>
+            <span style={{ fontSize: active ? 26 : 22, transition: 'font-size 0.15s', filter: active ? 'drop-shadow(0 0 6px rgba(77,143,255,0.6))' : 'grayscale(0.4) opacity(0.65)' }}>{c.icon}</span>
+            <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#4d8fff' : th === 'day' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)' }}>{t.cats[c.id]}</span>
           </button>
         )
       })}
@@ -1206,7 +1209,7 @@ function RightSidebar({ mode, onMode, theme, onTheme, lang, onLang, soundMode, o
       background: sideBg, backdropFilter: 'blur(20px)',
       borderLeft: `1px solid ${sideBorder}`,
       zIndex: 40, display: 'flex', flexDirection: 'column', alignItems: 'center',
-      padding: '10px 0 70px',  // bottom padding for the global AI button
+      padding: '10px 0 90px',  // bottom padding to clear the global AI button at bottom:80
       gap: 2, overflowY: 'auto',
     }}>
       {/* WS status */}
