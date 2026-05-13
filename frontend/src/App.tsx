@@ -112,7 +112,6 @@ export default function App() {
         <Route path="/panel"       element={<RtiPanel />} />
 
         {/* All legacy routes redirect to panel */}
-        <Route path="/rti"         element={<Navigate to="/panel" replace />} />
         <Route path="/3d"          element={<Navigate to="/panel" replace />} />
         <Route path="/rti3d"       element={<Navigate to="/panel" replace />} />
         <Route path="/2d"          element={<Navigate to="/panel" replace />} />
