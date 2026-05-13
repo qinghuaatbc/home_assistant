@@ -555,15 +555,13 @@ export default function FloorPlanPage({ fullscreen, onFullscreenChange, standalo
         return (
           <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: '#000', display: 'flex', flexDirection: 'column' }}
             onClick={() => setCameraViewer(null)}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: '#1c1c1e' }}>
-              <span style={{ color: '#fff', fontWeight: 600, fontSize: 14 }}>📷 {camName} {LANG_LIST[langIdx] === 'en' ? '' : LANG_LIST[langIdx] === 'zh' ? '直播' : 'زنده'}</span>
-              <div style={{ display: 'flex', gap: 24 }}>
-                <button onClick={e => { e.stopPropagation(); setCamMuted(m => !m) }}
-                  style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>
-                  {camMuted ? '🔇' : '🔊'}
-                </button>
-                <button onClick={() => setCameraViewer(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>✕</button>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: '#1c1c1e' }}>
+              <button onClick={e => { e.stopPropagation(); setCamMuted(m => !m) }}
+                style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', flexShrink: 0 }}>
+                {camMuted ? '🔇' : '🔊'}
+              </button>
+              <button onClick={() => setCameraViewer(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', flexShrink: 0 }}>✕</button>
+              <span style={{ color: '#fff', fontWeight: 600, fontSize: 14, marginLeft: 8 }}>📷 {camName} {LANG_LIST[langIdx] === 'en' ? '' : LANG_LIST[langIdx] === 'zh' ? '直播' : 'زنده'}</span>
             </div>
             <video ref={camVideoRef} autoPlay muted={camMuted} playsInline
               style={{ flex: 1, width: '100%', objectFit: 'contain' }}
