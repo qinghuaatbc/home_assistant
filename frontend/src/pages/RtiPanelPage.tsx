@@ -137,7 +137,7 @@ function useRtiStyles() {
 @keyframes speakerPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.13)}}
 @keyframes garageUp{from{transform:translateY(0)}to{transform:translateY(-100%)}}
 @keyframes garageDown{from{transform:translateY(-100%)}to{transform:translateY(0)}}
-.rti-slider{-webkit-appearance:none;appearance:none;height:10px;border-radius:8px;outline:none;cursor:pointer;width:100%}
+.rti-slider{-webkit-appearance:none;appearance:none;height:10px;border-radius:8px;outline:none;cursor:pointer;width:100%;touch-action:none}
 .rti-slider::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.95);box-shadow:0 2px 10px rgba(0,0,0,0.4);cursor:grab;border:none;transition:transform 0.15s}
 .rti-slider::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.15)}
 .rti-slider::-moz-range-thumb{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.95);box-shadow:0 2px 10px rgba(0,0,0,0.4);cursor:grab;border:none}
@@ -165,6 +165,20 @@ function useSound() {
       speakState(name, stateWord)
     }
   }, [soundMode, lang])
+}
+
+// ─── REST service call (more reliable than WebSocket callService) ──────────────
+
+function useRestCall() {
+  const { token } = useHa()
+  return useCallback((domain: string, service: string, data: Record<string, unknown>, entityId: string | string[]) => {
+    if (!token) return
+    fetch(`/api/services/${domain}/${service}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ service_data: data, target: { entity_id: entityId } }),
+    }).catch(() => {})
+  }, [token])
 }
 
 // ─── EQ Bars ───────────────────────────────────────────────────────────────────
@@ -208,7 +222,7 @@ function FancySlider({ value, min = 0, max = 100, onChange, color, unit = '%' }:
   const [local, setLocal] = useState(value)
   const ref = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { setLocal(value) }, [value])
+  useEffect(() => { if (!dragging) setLocal(value) }, [value, dragging])
 
   const pct = Math.round(((local - min) / (max - min)) * 100)
   const inactive = th === 'day' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.15)'
@@ -273,7 +287,7 @@ function BulbImg({ on, bPct }: { on: boolean; bPct: number }) {
 // ─── Light Card ───────────────────────────────────────────────────────────────
 
 const LightRtiCard = memo(({ s }: { s: HaState }) => {
-  const { callService } = useHa()
+  const callService = useRestCall()
   const t = useT(); const th = useTh(); const sound = useSound()
   const on = s.state === 'on'
   const bPct = Math.round(Number(s.attributes.brightness ?? 0) / 255 * 100)
@@ -299,6 +313,7 @@ const LightRtiCard = memo(({ s }: { s: HaState }) => {
           background: on ? `rgba(255,${warmG},50,${0.04 + b * 0.07})` : th === 'day' ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.06)',
           boxShadow: on ? `0 4px ${Math.round(10 + b * 30)}px rgba(255,${warmG},50,${b * 0.5})` : th === 'day' ? '0 2px 10px rgba(0,0,0,0.07)' : 'none',
           transition: 'background 0.4s, box-shadow 0.4s',
+          touchAction: 'manipulation',
         })
       }}
       onClick={toggle}
@@ -351,7 +366,7 @@ function SpeakerImg({ powered, playing, volume }: { powered: boolean; playing: b
 // ─── Media Card (no transport buttons) ────────────────────────────────────────
 
 const MediaRtiCard = memo(({ s }: { s: HaState }) => {
-  const { callService } = useHa()
+  const callService = useRestCall()
   const th = useTh(); const sound = useSound()
   const playing = s.state === 'playing'
   const vol = Math.round(Number(s.attributes.volume_level ?? 0) * 100)
@@ -379,6 +394,7 @@ const MediaRtiCard = memo(({ s }: { s: HaState }) => {
           background: powered ? `rgba(77,143,255,${0.04 + v * 0.05})` : th === 'day' ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.06)',
           boxShadow: playing ? `0 4px ${Math.round(10 + v * 28)}px rgba(77,143,255,${v * 0.45})` : th === 'day' ? '0 2px 10px rgba(0,0,0,0.07)' : 'none',
           transition: 'background 0.4s, box-shadow 0.4s',
+          touchAction: 'manipulation',
         })
       }}
       onClick={togglePower}
@@ -480,7 +496,7 @@ const SensorRtiCard = memo(({ s }: { s: HaState }) => {
 // ─── Alarm Card ───────────────────────────────────────────────────────────────
 
 const AlarmCard = memo(({ s }: { s: HaState }) => {
-  const { callService } = useHa()
+  const callService = useRestCall()
   const t = useT(); const th = useTh()
   const name = String(s.attributes.friendly_name ?? 'Alarm')
   const armed = s.state.startsWith('armed')
@@ -534,7 +550,7 @@ function rawAngleToProgress(raw: number): number {
 }
 
 const NestThermostat = memo(({ s }: { s: HaState }) => {
-  const { callService } = useHa()
+  const callService = useRestCall()
   const th = useTh(); const t = useT()
   const svgRef = useRef<SVGSVGElement>(null)
   const dragging = useRef(false)
@@ -716,7 +732,7 @@ function GarageDoorVisual({ open, toggling }: { open: boolean; toggling: boolean
 // ─── Garage Cover Card (cover.* entities) ────────────────────────────────────
 
 const GarageCoverCard = memo(({ s }: { s: HaState }) => {
-  const { callService } = useHa()
+  const callService = useRestCall()
   const t = useT(); const th = useTh(); const sound = useSound()
   const name = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
   const isOpen   = s.state === 'open'    || s.state === 'opening'
@@ -788,7 +804,7 @@ const GarageCoverCard = memo(({ s }: { s: HaState }) => {
 // ─── Switch / Garage Card ─────────────────────────────────────────────────────
 
 const SwitchRtiCard = memo(({ s, icon = '🔌' }: { s: HaState; icon?: string }) => {
-  const { callService } = useHa()
+  const callService = useRestCall()
   const t = useT(); const th = useTh(); const sound = useSound()
   const on = s.state === 'on'
   const name = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
