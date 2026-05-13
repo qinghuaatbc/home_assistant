@@ -9,6 +9,7 @@ export const DOMAIN_SCENE = 'scene';
 export const DOMAIN_GROUP = 'group';
 export const DOMAIN_INPUT_BOOLEAN = 'input_boolean';
 export const DOMAIN_HOMEASSISTANT = 'homeassistant';
+export const DOMAIN_FAN = 'fan';
 
 /** Common service names */
 export const SERVICE_TURN_ON = 'turn_on';
@@ -102,6 +103,20 @@ export const DOMAIN_CATALOG: DomainDef[] = [
     services: [],
     attributes: ['temperature', 'humidity', 'pressure', 'wind_speed'],
     read_only: true,
+  },
+  {
+    domain: 'fan',
+    label: 'Fan',
+    icon: '🌀',
+    services: ['turn_on', 'turn_off', 'toggle', 'set_percentage', 'set_preset_mode'],
+    attributes: ['percentage', 'preset_mode', 'preset_modes', 'percentage_step'],
+  },
+  {
+    domain: 'scene',
+    label: 'Scene',
+    icon: '🎭',
+    services: ['turn_on'],
+    attributes: ['icon', 'entity_count', 'last_activated'],
   },
   {
     domain: 'automation',

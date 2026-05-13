@@ -309,5 +309,48 @@ integrations:
             name: "Front Door"
             device_class: door
 
+# ── RTI MQTT Bridge ───────────────────────────────────────────────────────────
+# Bidirectional bridge between RTI Control processors and HA via MQTT.
+#
+# RTI Integration Designer setup:
+#   1. Add MQTT Driver, connect to same broker below
+#   2. Subscribe to  "rti/state/#"     → maps to RTI variables/feedback
+#   3. Publish to    "rti/command/<domain>/<entity_name>"  → controls HA entities
+#
+# Web Object URL for RTI touchpanel:
+#   http://<ha-server>:8123/rti?token=<long-lived-token>
+#
+# Command payload examples (RTI publishes these):
+#   Topic:   rti/command/light/living_room
+#   Payload: {"state":"ON","brightness_pct":80}   or just "ON"
+#
+#   Topic:   rti/command/switch/fan
+#   Payload: "TOGGLE"
+#
+#   Topic:   rti/command/media_player/receiver
+#   Payload: {"state":"ON","volume":45,"source":"HDMI1"}
+#
+#   Topic:   rti/command/service   (direct service call)
+#   Payload: {"service":"light.turn_on","entity_id":"light.living_room","data":{"brightness":200}}
+#
+# State feedback HA publishes (RTI subscribes):
+#   rti/state/light/living_room  → {"entity_id":"light.living_room","state":"on","brightness":200,"brightness_pct":78}
+#   rti/state/switch/fan         → {"entity_id":"switch.fan","state":"off"}
+#   rti/state/media_player/avr   → {"entity_id":"media_player.avr","state":"on","volume":45,"source":"HDMI1"}
+
+  - domain: rti
+    broker: "192.168.1.10"       # MQTT broker IP (can be same as MQTT integration)
+    port: 1883
+    # username: "rti"
+    # password: "secret"
+    command_prefix: "rti/command" # RTI publishes here
+    state_prefix: "rti/state"     # HA publishes here, RTI subscribes
+    retain: true                  # retained = RTI gets last state on reconnect
+    # state_domains:              # optional: limit which domains get state feedback
+    #   - light
+    #   - switch
+    #   - media_player
+    #   - binary_sensor
+
 # ── Automations ───────────────────────────────────────────────────────────────
 automation: automations.yaml

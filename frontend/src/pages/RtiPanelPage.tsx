@@ -12,7 +12,7 @@ const FloorPlan3D = lazy(() => import('./FloorPlanPage'))
 // ─── Types & i18n ─────────────────────────────────────────────────────────────
 
 type Mode  = '3d' | '2d'
-type Cat   = 'security' | 'music' | 'lights' | 'theater' | 'climate' | 'garage'
+type Cat   = 'security' | 'music' | 'lights' | 'theater' | 'climate' | 'garage' | 'scenes'
 type Theme = 'dark' | 'day'
 type Lang  = 'en' | 'zh' | 'fa'
 
@@ -25,24 +25,28 @@ const TR: Record<Lang, {
   armHome: string; armAway: string; disarm: string
   bri: string; vol: string; langBtn: string
   noDevices: string; heating: string; cooling: string; idle: string
+  activate: string; trigger: string; speed: string
 }> = {
   en: {
-    cats: { security:'Security', music:'Music', lights:'Lights', theater:'Theater', climate:'Climate', garage:'Garage' },
+    cats: { security:'Security', music:'Music', lights:'Lights', theater:'Theater', climate:'Climate', garage:'Garage', scenes:'Scenes' },
     on:'ON', off:'OFF', open:'OPEN', closed:'CLOSED', detected:'DETECTED', clear:'CLEAR',
     armHome:'ARM HOME', armAway:'ARM AWAY', disarm:'DISARM', bri:'bri', vol:'vol', langBtn:'EN',
     noDevices:'No devices', heating:'Heating', cooling:'Cooling', idle:'Idle',
+    activate:'Activate', trigger:'Trigger', speed:'Speed',
   },
   zh: {
-    cats: { security:'安防', music:'音乐', lights:'灯光', theater:'影院', climate:'气候', garage:'车库' },
+    cats: { security:'安防', music:'音乐', lights:'灯光', theater:'影院', climate:'气候', garage:'车库', scenes:'场景' },
     on:'开', off:'关', open:'开门', closed:'关闭', detected:'已检测', clear:'正常',
     armHome:'在家布防', armAway:'离家布防', disarm:'撤防', bri:'亮', vol:'音量', langBtn:'中文',
     noDevices:'无设备', heating:'加热中', cooling:'制冷中', idle:'待机',
+    activate:'激活', trigger:'触发', speed:'风速',
   },
   fa: {
-    cats: { security:'امنیت', music:'موسیقی', lights:'چراغ‌ها', theater:'سینما', climate:'آب‌وهوا', garage:'گاراژ' },
+    cats: { security:'امنیت', music:'موسیقی', lights:'چراغ‌ها', theater:'سینما', climate:'آب‌وهوا', garage:'گاراژ', scenes:'صحنه‌ها' },
     on:'روشن', off:'خاموش', open:'باز', closed:'بسته', detected:'تشخیص', clear:'پاک',
     armHome:'حالت خانه', armAway:'حالت خروج', disarm:'غیرفعال', bri:'روشنایی', vol:'صدا', langBtn:'فارسی',
     noDevices:'دستگاهی نیست', heating:'گرمایش', cooling:'سرمایش', idle:'آماده',
+    activate:'فعال', trigger:'اجرا', speed:'سرعت',
   },
 }
 
@@ -61,6 +65,7 @@ const CATS: { id: Cat; icon: string }[] = [
   { id: 'theater',  icon: '🎬' },
   { id: 'climate',  icon: '🌡️' },
   { id: 'garage',   icon: '🚗' },
+  { id: 'scenes',   icon: '🎭' },
 ]
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
@@ -137,6 +142,7 @@ function useRtiStyles() {
 @keyframes speakerPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.13)}}
 @keyframes garageUp{from{transform:translateY(0)}to{transform:translateY(-100%)}}
 @keyframes garageDown{from{transform:translateY(-100%)}to{transform:translateY(0)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .rti-slider{-webkit-appearance:none;appearance:none;height:10px;border-radius:8px;outline:none;cursor:pointer;width:100%;touch-action:none}
 .rti-slider::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.95);box-shadow:0 2px 10px rgba(0,0,0,0.4);cursor:grab;border:none;transition:transform 0.15s}
 .rti-slider::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.15)}
@@ -969,6 +975,163 @@ const CameraRtiCard = memo(({ s }: { s: HaState }) => {
   )
 })
 
+// ─── Fan Card ─────────────────────────────────────────────────────────────────
+
+const FanRtiCard = memo(({ s }: { s: HaState }) => {
+  const callService = useRestCall()
+  const t = useT(); const th = useTh()
+  const on = s.state === 'on'
+  const pct = Number(s.attributes.percentage ?? 0)
+  const presets: string[] = (s.attributes.preset_modes as string[]) ?? []
+  const preset = String(s.attributes.preset_mode ?? '')
+  const name = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
+  const step = Number(s.attributes.percentage_step ?? 1)
+  const spinDeg = on ? 360 / Math.max(0.3, 1 - pct / 100 * 0.85) : 0
+  const period = on ? (2.5 - pct / 100 * 2.1).toFixed(2) : '2'
+
+  const toggle = useCallback(() => {
+    callService('fan', on ? 'turn_off' : 'turn_on', {}, s.entity_id)
+  }, [on, s.entity_id, callService])
+
+  const setSpeed = useCallback((v: number) => {
+    callService('fan', 'set_percentage', { percentage: v }, s.entity_id)
+  }, [s.entity_id, callService])
+
+  return (
+    <div style={{
+      ...cardSt(th, {
+        padding: '12px 12px 10px', gap: 6, cursor: 'pointer', touchAction: 'manipulation',
+        background: on ? 'rgba(48,209,88,0.05)' : th === 'day' ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.06)',
+        boxShadow: on ? '0 4px 20px rgba(48,209,88,0.2)' : th === 'day' ? '0 2px 10px rgba(0,0,0,0.07)' : 'none',
+        transition: 'background 0.4s, box-shadow 0.4s',
+      })
+    }} onClick={toggle}>
+      <div style={{ textAlign: 'center' }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: on ? '#30d158' : tc1(th), transition: 'color 0.3s' }}>{name}</span>
+        {on && <span style={{ fontSize: 11, color: tc2(th), marginLeft: 6 }}>{t.speed} {pct}%</span>}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 0' }}>
+        <span style={{
+          fontSize: 44,
+          display: 'inline-block',
+          animation: on ? `spin ${period}s linear infinite` : 'none',
+          filter: on ? 'drop-shadow(0 0 10px rgba(48,209,88,0.6))' : 'grayscale(1) opacity(0.3)',
+          transition: 'filter 0.4s',
+        }}>🌀</span>
+      </div>
+      <div onClick={e => e.stopPropagation()}>
+        <FancySlider value={pct} min={0} max={100} color={on ? '#30d158' : '#555'} onChange={setSpeed} />
+      </div>
+      {presets.length > 0 && on && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+          {presets.map(p => (
+            <button key={p} onClick={() => callService('fan', 'set_preset_mode', { preset_mode: p }, s.entity_id)}
+              style={{ ...mkBtn(preset === p, false, th), padding: '5px 8px', fontSize: 11, flex: 'none', borderRadius: 8 }}>
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+})
+
+// ─── Scene Card ───────────────────────────────────────────────────────────────
+
+const SceneRtiCard = memo(({ s }: { s: HaState }) => {
+  const callService = useRestCall()
+  const t = useT(); const th = useTh()
+  const name = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
+  const icon = String(s.attributes.icon ?? '🎭')
+  const entityCount = Number(s.attributes.entity_count ?? 0)
+  const lastActivated = s.attributes.last_activated as string | null
+  const [pressed, setPressed] = useState(false)
+
+  const activate = useCallback(() => {
+    callService('scene', 'turn_on', {}, s.entity_id)
+    setPressed(true)
+    setTimeout(() => setPressed(false), 800)
+  }, [s.entity_id, callService])
+
+  return (
+    <div style={{
+      ...cardSt(th, {
+        padding: '14px 12px', gap: 8, cursor: 'pointer', touchAction: 'manipulation',
+        alignItems: 'center', justifyContent: 'center',
+        background: pressed ? 'rgba(255,214,10,0.12)' : th === 'day' ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.06)',
+        boxShadow: pressed ? '0 4px 24px rgba(255,214,10,0.35)' : th === 'day' ? '0 2px 10px rgba(0,0,0,0.07)' : 'none',
+        transition: 'background 0.3s, box-shadow 0.3s',
+        transform: pressed ? 'scale(0.96)' : 'scale(1)',
+      })
+    }} onClick={activate}>
+      <span style={{
+        fontSize: 36,
+        filter: pressed ? 'drop-shadow(0 0 14px rgba(255,214,10,0.9))' : 'none',
+        transition: 'filter 0.3s',
+      }}>{icon}</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: tc1(th), textAlign: 'center' }}>{name}</span>
+      {entityCount > 0 && <span style={{ fontSize: 11, color: tc2(th) }}>{entityCount} entities</span>}
+      <button style={{ ...mkBtn(pressed, false, th), width: '100%', padding: '9px 0' }}>{t.activate}</button>
+      {lastActivated && (
+        <span style={{ fontSize: 10, color: tc2(th) }}>{new Date(lastActivated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+      )}
+    </div>
+  )
+})
+
+// ─── Automation Card ──────────────────────────────────────────────────────────
+
+const AutomationRtiCard = memo(({ s }: { s: HaState }) => {
+  const callService = useRestCall()
+  const t = useT(); const th = useTh()
+  const name = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
+  const enabled = s.state === 'on'
+  const lastTriggered = s.attributes.last_triggered as string | null
+  const [triggered, setTriggered] = useState(false)
+
+  const trigger = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    callService('automation', 'trigger', {}, s.entity_id)
+    setTriggered(true)
+    setTimeout(() => setTriggered(false), 1200)
+  }, [s.entity_id, callService])
+
+  const toggleEnabled = useCallback(() => {
+    callService('automation', enabled ? 'turn_off' : 'turn_on', {}, s.entity_id)
+  }, [enabled, s.entity_id, callService])
+
+  return (
+    <div style={{
+      ...cardSt(th, {
+        padding: '12px 12px 10px', gap: 8, touchAction: 'manipulation',
+        borderLeft: `3px solid ${enabled ? '#ff9f0a' : 'transparent'}`,
+        background: triggered ? 'rgba(255,159,10,0.1)' : th === 'day' ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.06)',
+        boxShadow: triggered ? '0 4px 24px rgba(255,159,10,0.3)' : th === 'day' ? '0 2px 10px rgba(0,0,0,0.07)' : 'none',
+        transition: 'background 0.3s, box-shadow 0.3s, border-color 0.3s',
+      })
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={toggleEnabled}>
+        <span style={{ fontSize: 22, filter: enabled ? 'drop-shadow(0 0 6px rgba(255,159,10,0.7))' : 'grayscale(1) opacity(0.4)', transition: 'filter 0.3s' }}>⚡</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: enabled ? '#ff9f0a' : tc2(th), flex: 1, transition: 'color 0.3s' }}>{name}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: enabled ? '#ff9f0a' : tc2(th), background: enabled ? 'rgba(255,159,10,0.15)' : 'rgba(128,128,128,0.1)', borderRadius: 6, padding: '2px 7px' }}>
+          {enabled ? t.on : t.off}
+        </span>
+      </div>
+      {lastTriggered && (
+        <span style={{ fontSize: 10, color: tc2(th), marginLeft: 28 }}>
+          {new Date(lastTriggered).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+        </span>
+      )}
+      <button onClick={trigger} style={{
+        ...mkBtn(triggered, false, th),
+        padding: '9px 0', width: '100%',
+        background: triggered ? 'rgba(255,159,10,0.3)' : undefined,
+        color: triggered ? '#ff9f0a' : undefined,
+      }}>{t.trigger}</button>
+    </div>
+  )
+})
+
 // ─── Category Views ───────────────────────────────────────────────────────────
 
 function filterStates(states: Map<string, HaState>, test: (s: HaState) => boolean) {
@@ -1019,8 +1182,14 @@ function MusicView({ states, cols }: { states: Map<string, HaState>; cols: numbe
 
 function LightsView({ states, cols }: { states: Map<string, HaState>; cols: number }) {
   const lights = filterStates(states, s => s.entity_id.startsWith('light.'))
-  if (!lights.length) return <EmptyState icon="💡" cat="lights" />
-  return <CardGrid cols={cols}>{lights.map(s => <LightRtiCard key={s.entity_id} s={s} />)}</CardGrid>
+  const fans   = filterStates(states, s => s.entity_id.startsWith('fan.'))
+  if (!lights.length && !fans.length) return <EmptyState icon="💡" cat="lights" />
+  return (
+    <CardGrid cols={cols}>
+      {lights.map(s => <LightRtiCard key={s.entity_id} s={s} />)}
+      {fans.map(s => <FanRtiCard key={s.entity_id} s={s} />)}
+    </CardGrid>
+  )
 }
 
 function TheaterView({ states, cols }: { states: Map<string, HaState>; cols: number }) {
@@ -1053,6 +1222,18 @@ function GarageView({ states, cols }: { states: Map<string, HaState>; cols: numb
       {covers.map(s => <GarageCoverCard key={s.entity_id} s={s} />)}
       {switches.map(s => <SwitchRtiCard key={s.entity_id} s={s} icon="🚗" />)}
       {sensors.map(s => <SensorRtiCard key={s.entity_id} s={s} />)}
+    </CardGrid>
+  )
+}
+
+function ScenesView({ states, cols }: { states: Map<string, HaState>; cols: number }) {
+  const scenes     = filterStates(states, s => s.entity_id.startsWith('scene.'))
+  const automations = filterStates(states, s => s.entity_id.startsWith('automation.'))
+  if (!scenes.length && !automations.length) return <EmptyState icon="🎭" cat="scenes" />
+  return (
+    <CardGrid cols={cols}>
+      {scenes.map(s => <SceneRtiCard key={s.entity_id} s={s} />)}
+      {automations.map(s => <AutomationRtiCard key={s.entity_id} s={s} />)}
     </CardGrid>
   )
 }
@@ -1380,6 +1561,7 @@ export default function RtiPanelPage({ standaloneToken }: { standaloneToken?: st
                   {cat === 'theater'  && <TheaterView  states={states} cols={cols} />}
                   {cat === 'climate'  && <ClimateView  states={states} cols={cols} />}
                   {cat === 'garage'   && <GarageView   states={states} cols={cols} />}
+                  {cat === 'scenes'   && <ScenesView   states={states} cols={cols} />}
                 </div>
                 <CategoryNav cat={cat} onChange={setCat} vertical={isLandscape} />
               </>

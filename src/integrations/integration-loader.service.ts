@@ -23,6 +23,9 @@ import { CameraIntegration } from './built-in/camera/camera.integration';
 import { AutomationIntegration } from '../automations/automation.integration';
 import { DemoIntegration } from './built-in/demo/demo.integration';
 import { EnvisalinkIntegration } from './built-in/envisalink/envisalink.integration';
+import { RtiIntegration } from './built-in/rti/rti.integration';
+import { FanIntegration } from './built-in/fan/fan.integration';
+import { SceneIntegration } from './built-in/scene/scene.integration';
 import {
   EVENT_HOMEASSISTANT_START,
   EVENT_COMPONENT_LOADED,
@@ -78,6 +81,9 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     automationIntegration: AutomationIntegration,
     demoIntegration: DemoIntegration,
     envisalinkIntegration: EnvisalinkIntegration,
+    rtiIntegration: RtiIntegration,
+    fanIntegration: FanIntegration,
+    sceneIntegration: SceneIntegration,
   ) {
     this.builtInRegistry.set('light', lightIntegration);
     this.builtInRegistry.set('switch', switchIntegration);
@@ -92,6 +98,9 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     this.builtInRegistry.set('automation', automationIntegration);
     this.builtInRegistry.set('demo', demoIntegration);
     this.builtInRegistry.set('envisalink', envisalinkIntegration);
+    this.builtInRegistry.set('rti', rtiIntegration);
+    this.builtInRegistry.set('fan', fanIntegration);
+    this.builtInRegistry.set('scene', sceneIntegration);
   }
 
   /**

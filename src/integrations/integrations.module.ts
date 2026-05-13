@@ -23,6 +23,9 @@ import { AutomationModule } from '../automations/automation.module';
 import { AutomationIntegration } from '../automations/automation.integration';
 import { DemoIntegration } from './built-in/demo/demo.integration';
 import { EnvisalinkIntegration } from './built-in/envisalink/envisalink.integration';
+import { RtiIntegration } from './built-in/rti/rti.integration';
+import { FanIntegration } from './built-in/fan/fan.integration';
+import { SceneIntegration } from './built-in/scene/scene.integration';
 
 @Module({
   imports: [RegistryModule, AutomationModule],
@@ -57,6 +60,12 @@ import { EnvisalinkIntegration } from './built-in/envisalink/envisalink.integrat
     DemoIntegration,
     // EnvisaLink (DSC / Honeywell)
     EnvisalinkIntegration,
+    // RTI MQTT Bridge
+    RtiIntegration,
+    // Fan
+    FanIntegration,
+    // Scene
+    SceneIntegration,
   ],
   exports: [IntegrationLoaderService],
 })
