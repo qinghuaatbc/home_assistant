@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { HaProvider, useHa } from './context/HaContext'
 import { getLang } from './utils/sounds'
 import { ToastProvider } from './context/ToastContext'
@@ -24,12 +24,7 @@ function getToken(): string {
   return new URLSearchParams(window.location.search).get('token') || localStorage.getItem('ha_token') || ''
 }
 
-function isRtiMode(): boolean {
-  return new URLSearchParams(window.location.search).get('rti') === '1'
-}
-
 // ─── Global AI button — persistent across all pages ───────────────────────────
-// AiChatPanel stays mounted (display: none when closed) to preserve chat history
 
 function FloatingAiButton() {
   const [open, setOpen] = useState(false)
@@ -53,7 +48,6 @@ function FloatingAiButton() {
       >
         {open ? '✕' : '✦'}
       </button>
-      {/* Always mounted — preserves chat history */}
       <div style={{ display: open ? 'block' : 'none', pointerEvents: open ? 'auto' : 'none' }}>
         <AiChatPanel onClose={() => setOpen(false)} />
       </div>
@@ -93,7 +87,7 @@ function AuthLayout() {
   )
 }
 
-// ─── RTI full panel (3D/2D + categories) ──────────────────────────────────────
+// ─── RTI full panel (3D/2D + categories) — primary entry point ────────────────
 
 function RtiPanel() {
   const t = getToken()
@@ -110,56 +104,22 @@ function RtiPanel() {
   )
 }
 
-function RtiKiosk() {
-  const t = getToken()
-  if (t) localStorage.setItem('ha_token', t)
-  return (
-    <HaProvider>
-      <ToastProvider>
-        <FloorPlanPage fullscreen={true} onFullscreenChange={() => {}} standaloneToken={t} />
-        <FloatingAiButton />
-      </ToastProvider>
-    </HaProvider>
-  )
-}
-
-function StandaloneFloorPlan() {
-  const t = getToken()
-  if (t) localStorage.setItem('ha_token', t)
-  return (
-    <HaProvider>
-      <ToastProvider>
-        <FloorPlanPage fullscreen={true} onFullscreenChange={() => {}} standaloneToken={t} />
-        <FloatingAiButton />
-      </ToastProvider>
-    </HaProvider>
-  )
-}
-
-function StandaloneFloorPlan2D() {
-  const t = getToken()
-  localStorage.setItem('ha_token', t)
-  return (
-    <HaProvider>
-      <ToastProvider>
-        <FloorPlan2DPage fullscreen={true} standaloneToken={t} />
-        <FloatingAiButton />
-      </ToastProvider>
-    </HaProvider>
-  )
-}
-
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/rti"      element={<RtiPanel />} />
-        <Route path="/panel"    element={<RtiPanel />} />
-        <Route path="/rti3d"    element={<RtiKiosk />} />
-        <Route path="/3d"       element={<StandaloneFloorPlan />} />
-        <Route path="/floorplan" element={isRtiMode() ? <RtiKiosk /> : <StandaloneFloorPlan />} />
-        <Route path="/2d"       element={<StandaloneFloorPlan2D />} />
-        <Route path="/floorplan2d" element={<StandaloneFloorPlan2D />} />
+        {/* Primary panel entry point */}
+        <Route path="/panel"       element={<RtiPanel />} />
+        <Route path="/rti"         element={<RtiPanel />} />
+
+        {/* Legacy routes — redirect to panel */}
+        <Route path="/3d"          element={<Navigate to="/panel" replace />} />
+        <Route path="/rti3d"       element={<Navigate to="/panel" replace />} />
+        <Route path="/2d"          element={<Navigate to="/panel" replace />} />
+        <Route path="/floorplan"   element={<Navigate to="/panel" replace />} />
+        <Route path="/floorplan2d" element={<Navigate to="/panel" replace />} />
+
+        {/* Full app with auth + tab bar */}
         <Route path="/*" element={
           <HaProvider>
             <ToastProvider>
