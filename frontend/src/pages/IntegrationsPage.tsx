@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useHa } from '../context/HaContext'
 
 function toggleTheme() {
@@ -81,6 +81,15 @@ const INTEGRATIONS: IntegrationDef[] = [
     dynamicFields: [
       { label: 'Name', key: 'name', placeholder: 'Driveway' },
       { label: 'RTSP URL', key: 'rtsp_url', placeholder: 'rtsp://user:pass@ip:554/stream' },
+    ]},
+  { domain: 'rti', name: 'RTI Control (MQTT Bridge)', icon: '🎛️', desc: 'RTI XP processor ↔ HA via MQTT. Bidirectional: RTI buttons control devices, HA state feeds back to RTI variables.',
+    fields: [
+      { key: 'broker', label: 'MQTT Broker IP', placeholder: '192.168.1.10', default: 'localhost' },
+      { key: 'port', label: 'Port', placeholder: '1883', default: '1883', type: 'number' },
+      { key: 'username', label: 'Username (optional)', placeholder: '', default: '' },
+      { key: 'password', label: 'Password (optional)', placeholder: '', default: '', type: 'password' },
+      { key: 'command_prefix', label: 'Command prefix (RTI → HA)', placeholder: 'rti/command', default: 'rti/command' },
+      { key: 'state_prefix', label: 'State prefix (HA → RTI)', placeholder: 'rti/state', default: 'rti/state' },
     ]},
   { domain: 'lutron_caseta', name: 'Lutron Caseta', icon: '💡', desc: 'Lutron Caseta Smart Bridge',
     fields: [
@@ -524,6 +533,9 @@ export default function IntegrationsPage() {
                           style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
                       </div>
                     ))}
+                    {int.domain === 'rti' && (
+                      <RtiWebObjectPanel token={token} cfg={cfg} />
+                    )}
                     {int.dynamicFields && (
                       <div style={{ marginTop: 12 }}>
                         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>Devices</div>
@@ -593,6 +605,13 @@ export default function IntegrationsPage() {
         {activeTab === 'integrations' && (
           <>
             <div className="section" style={{ marginTop: 24 }}>
+              <div className="section-title">📋 Dashboard Cards</div>
+              <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 12px', paddingLeft: 4 }}>
+                Edit <code style={{ fontSize: 11, background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>dashboard.yaml</code> — assign card types to entities for each 2D panel tab.
+              </div>
+              <DashboardYamlEditor token={token} />
+            </div>
+            <div className="section" style={{ marginTop: 24 }}>
               <div className="section-title">🏗️ 3D Floors</div>
               <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 12px', paddingLeft: 4 }}>
                 Name floors and upload .glb models (SketchUp, Blender exports).
@@ -602,6 +621,156 @@ export default function IntegrationsPage() {
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+function RtiWebObjectPanel({ token, cfg }: { token: string | null; cfg: any }) {
+  const [lltName, setLltName] = useState('RTI Panel')
+  const [lltToken, setLltToken] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const urlRef = useRef<HTMLInputElement>(null)
+
+  const cmdPrefix = cfg.command_prefix || 'rti/command'
+  const statePrefix = cfg.state_prefix || 'rti/state'
+
+  const webObjectUrl = lltToken
+    ? `${window.location.origin}/panel?token=${lltToken}`
+    : `${window.location.origin}/panel?token=<paste-token-here>`
+
+  const createToken = async () => {
+    if (!token) return
+    setCreating(true)
+    try {
+      const r = await fetch('/api/auth/long_lived_tokens', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: lltName, expires_days: 3650 }),
+      })
+      if (r.ok) {
+        const { token: t } = await r.json()
+        setLltToken(t)
+      }
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '6px 10px', borderRadius: 6,
+    border: '1px solid var(--border)', background: 'var(--surface)',
+    color: 'var(--text)', fontSize: 11, boxSizing: 'border-box', fontFamily: 'monospace',
+  }
+
+  return (
+    <div style={{ marginTop: 16, padding: 12, borderRadius: 8, background: 'rgba(77,143,255,0.08)', border: '1px solid rgba(77,143,255,0.25)' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#4d8fff', marginBottom: 10 }}>🎛️ RTI Integration Designer Setup</div>
+
+      {/* MQTT topic reference */}
+      <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 8 }}>
+        <b style={{ color: 'var(--text)' }}>MQTT Driver topics</b>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ fontSize: 10, color: 'var(--text2)', minWidth: 80 }}>RTI → HA</span>
+          <input readOnly value={`${cmdPrefix}/<domain>/<entity_name>`} style={inputStyle} onClick={e => (e.target as HTMLInputElement).select()} />
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ fontSize: 10, color: 'var(--text2)', minWidth: 80 }}>HA → RTI</span>
+          <input readOnly value={`${statePrefix}/<domain>/<entity_name>`} style={inputStyle} onClick={e => (e.target as HTMLInputElement).select()} />
+        </div>
+      </div>
+
+      {/* Example payloads */}
+      <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 6 }}><b style={{ color: 'var(--text)' }}>Payload examples</b></div>
+      <div style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text2)', lineHeight: 1.7, marginBottom: 12 }}>
+        <div><span style={{ color: '#4d8fff' }}>{cmdPrefix}/light/living_room</span> ← <span style={{ color: '#30d158' }}>{`{"state":"ON","brightness_pct":80}`}</span></div>
+        <div><span style={{ color: '#4d8fff' }}>{cmdPrefix}/switch/fan</span> ← <span style={{ color: '#30d158' }}>"TOGGLE"</span></div>
+        <div><span style={{ color: '#4d8fff' }}>{cmdPrefix}/media_player/receiver</span> ← <span style={{ color: '#30d158' }}>{`{"state":"ON","volume":45,"source":"HDMI1"}`}</span></div>
+        <div><span style={{ color: '#ff9f0a' }}>{statePrefix}/light/living_room</span> → <span style={{ color: 'var(--text2)' }}>{`{"state":"on","brightness_pct":78}`}</span></div>
+      </div>
+
+      {/* Web Object URL generator */}
+      <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 6 }}><b style={{ color: 'var(--text)' }}>Web Object URL</b> (RTI touchpanel)</div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+        <input value={lltName} onChange={e => setLltName(e.target.value)}
+          placeholder="Token name" style={{ ...inputStyle, flex: 1 }} />
+        <button className="btn btn-accent" style={{ fontSize: 11, padding: '4px 10px', whiteSpace: 'nowrap' }}
+          onClick={createToken} disabled={creating}>
+          {creating ? '…' : '+ Token'}
+        </button>
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input ref={urlRef} readOnly value={webObjectUrl}
+          style={{ ...inputStyle, flex: 1, color: lltToken ? 'var(--text)' : 'var(--text3)' }}
+          onClick={e => (e.target as HTMLInputElement).select()} />
+        <button className="btn" style={{ fontSize: 11, padding: '4px 8px', whiteSpace: 'nowrap' }}
+          onClick={() => copy(webObjectUrl)}>
+          {copied ? '✓' : '📋'}
+        </button>
+      </div>
+      {lltToken && (
+        <div style={{ fontSize: 10, color: '#ff9f0a', marginTop: 4 }}>
+          ⚠ Copy this URL now — token cannot be retrieved again.
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DashboardYamlEditor({ token }: { token: string | null }) {
+  const [content, setContent] = useState('')
+  const [saved, setSaved] = useState(false)
+  const [err, setErr] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!token) return
+    fetch('/api/config/dashboard/text', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(d => { setContent(d.content || ''); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [token])
+
+  const save = async () => {
+    setErr('')
+    const r = await fetch('/api/config/dashboard/text', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    })
+    if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 2000) }
+    else { const d = await r.json().catch(() => ({})); setErr(d.message || 'Save failed') }
+  }
+
+  if (loading) return <div style={{ fontSize: 12, color: 'var(--text2)' }}>Loading…</div>
+
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 8 }}>
+        Controls which cards appear in each tab of the 2D panel. No restart needed — refresh the panel page after saving.
+      </div>
+      <textarea
+        value={content}
+        onChange={e => setContent(e.target.value)}
+        spellCheck={false}
+        style={{
+          width: '100%', minHeight: 320, padding: '10px 12px',
+          borderRadius: 8, border: '1px solid var(--border)',
+          background: 'var(--surface)', color: 'var(--text)',
+          fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6,
+          resize: 'vertical', boxSizing: 'border-box', outline: 'none',
+        }}
+      />
+      {err && <div style={{ fontSize: 11, color: '#ff453a', marginTop: 4 }}>{err}</div>}
+      <button className="btn btn-accent" onClick={save}
+        style={{ marginTop: 8, fontSize: 12, padding: '6px 16px' }}>
+        {saved ? '✓ Saved' : '💾 Save'}
+      </button>
     </div>
   )
 }

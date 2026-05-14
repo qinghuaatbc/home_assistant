@@ -7,8 +7,8 @@ const FW = 19, FD = 14, WH = 2.8, WT = 0.15, BR = 0.35, SR = 0.28
 
 function buildFallback(floor: FloorId): THREE.Group {
   const g = new THREE.Group()
-  const fM = new THREE.MeshStandardMaterial({ color: 0x888899, roughness: 0.7 })
-  const wM = new THREE.MeshStandardMaterial({ color: 0x9999aa, roughness: 0.7 })
+  const fM = new THREE.MeshStandardMaterial({ color: 0xa8b8cc, roughness: 0.6, metalness: 0.05 })
+  const wM = new THREE.MeshStandardMaterial({ color: 0xb8c8dc, roughness: 0.55, metalness: 0.05 })
   const box = (mat: THREE.Material, x: number, y: number, z: number, w: number, h: number, d: number) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat)
     m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; g.add(m)
@@ -17,8 +17,8 @@ function buildFallback(floor: FloorId): THREE.Group {
   const hy = WH / 2
   box(wM, 0, hy, -FD / 2, FW, WH, WT); box(wM, 0, hy, FD / 2, FW, WH, WT)
   box(wM, -FW / 2, hy, 0, WT, WH, FD); box(wM, FW / 2, hy, 0, WT, WH, FD)
-  if (floor === 1) box(new THREE.MeshStandardMaterial({ color: 0x48484e }), 0, hy, 0, WT, WH, FD)
-  const grid = new THREE.GridHelper(FW, 19, 0x666688, 0x555566)
+  if (floor === 1) box(new THREE.MeshStandardMaterial({ color: 0x7888a0, roughness: 0.55 }), 0, hy, 0, WT, WH, FD)
+  const grid = new THREE.GridHelper(FW, 19, 0x8899bb, 0x7788aa)
   grid.position.y = 0.01; g.add(grid)
   return g
 }

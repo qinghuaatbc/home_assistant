@@ -21,7 +21,7 @@ export function useThreeScene(
     const el = containerRef.current
     if (!el) return
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(Math.max(el.clientWidth, 100), Math.max(el.clientHeight, 100))
     renderer.shadowMap.enabled = true
@@ -32,9 +32,9 @@ export function useThreeScene(
     el.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x2a2a4e)
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6))
-    scene.add(new THREE.HemisphereLight(0xddeeff, 0x111122, 0.4))
+    // transparent background — theme layers show through the 3D canvas
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7))
+    scene.add(new THREE.HemisphereLight(0xddeeff, 0x111122, 0.5))
     const dir = new THREE.DirectionalLight(0xffffff, 1.2)
     dir.position.set(8, 18, 10)
     dir.castShadow = true

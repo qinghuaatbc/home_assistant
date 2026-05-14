@@ -39,6 +39,7 @@ sshpass -p "${SSH_PASSWORD}" rsync -az --delete \
   --exclude 'config/configuration.yaml' \
   --exclude 'config/3d-mappings.json' \
   --exclude 'config/floors.json' \
+  --exclude 'config/dashboard.yaml' \
   --exclude 'public/floors/' \
   --exclude 'data/floors/' \
   -e "sshpass -p \"${SSH_PASSWORD}\" ssh -p $PORT -o StrictHostKeyChecking=accept-new" \

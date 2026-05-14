@@ -80,17 +80,23 @@ export class DemoIntegration implements HaIntegration {
         open_cover: 'open', close_cover: 'closed', stop_cover: 'stopped',
         lock: 'locked', unlock: 'unlocked',
       }
-      const state = stateMap[call.service]
       for (const eid of ids) {
         const cur = this.stateMachine.getState(eid)
         if (!cur) continue
-        if (state) {
+        if (call.service === 'volume_set') {
           const attrs: Record<string, unknown> = { ...cur.attributes }
-          if (call.service_data?.brightness != null) attrs.brightness = call.service_data.brightness
           if (call.service_data?.volume_level != null) attrs.volume_level = call.service_data.volume_level
-          this.stateMachine.setState(eid, state, attrs, call.context)
+          this.stateMachine.setState(eid, cur.state, attrs, call.context)
         } else if (call.service === 'toggle') {
           this.stateMachine.setState(eid, cur.state === 'on' ? 'off' : 'on', cur.attributes as any, call.context)
+        } else {
+          const state = stateMap[call.service]
+          if (state) {
+            const attrs: Record<string, unknown> = { ...cur.attributes }
+            if (call.service_data?.brightness != null) attrs.brightness = call.service_data.brightness
+            if (call.service_data?.volume_level != null) attrs.volume_level = call.service_data.volume_level
+            this.stateMachine.setState(eid, state, attrs, call.context)
+          }
         }
       }
     }
@@ -105,7 +111,11 @@ export class DemoIntegration implements HaIntegration {
     this.serviceRegistry.register({
       domain: 'light', service: 'toggle', name: 'Toggle', description: 'Toggle', fields: {}, handler, target: { entity: true },
     })
-    this.logger.log('Demo: registered service handlers (light/switch/media_player/binary_sensor)')
+    this.serviceRegistry.register({
+      domain: 'media_player', service: 'volume_set', name: 'Set volume', description: 'Set volume level',
+      fields: { volume_level: { required: true, description: 'Volume 0.0-1.0' } }, handler, target: { entity: true },
+    })
+    this.logger.log('Demo: registered service handlers (light/switch/media_player/binary_sensor + volume_set)')
   }
 
   async teardown(): Promise<void> {}

@@ -11,16 +11,18 @@ import * as yaml from 'js-yaml';
 
 interface IntegrationStatus { domain: string; status: string; error?: string }
 
-const MAPPINGS_FILE = '3d-mappings.json';
-const FLOORS_FILE = 'floors.json';
+const MAPPINGS_FILE  = '3d-mappings.json';
+const FLOORS_FILE    = 'floors.json';
+const DASHBOARD_FILE = 'dashboard.yaml';
 
 function getConfigDir(): string {
   const configPath = process.env.HA_CONFIG_PATH
     ?? path.resolve(process.cwd(), 'config', 'configuration.yaml');
   return path.dirname(configPath);
 }
-function getMappingsPath(): string { return path.resolve(getConfigDir(), MAPPINGS_FILE); }
-function getFloorsPath(): string { return path.resolve(getConfigDir(), FLOORS_FILE); }
+function getMappingsPath():  string { return path.resolve(getConfigDir(), MAPPINGS_FILE); }
+function getFloorsPath():    string { return path.resolve(getConfigDir(), FLOORS_FILE); }
+function getDashboardPath(): string { return path.resolve(getConfigDir(), DASHBOARD_FILE); }
 
 @ApiTags('config')
 @ApiBearerAuth()
@@ -105,6 +107,40 @@ export class ConfigController {
     else floors.push(entry);
     fs.writeFileSync(fp, JSON.stringify(floors, null, 2), 'utf-8');
     return { ok: true, floors };
+  }
+
+  @Get('dashboard')
+  @ApiOperation({ summary: 'Get 2D panel dashboard card configuration (parsed JSON)' })
+  getDashboard() {
+    const dp = getDashboardPath();
+    if (!fs.existsSync(dp)) return { views: {} };
+    try { return yaml.load(fs.readFileSync(dp, 'utf-8')) ?? { views: {} }; }
+    catch { return { views: {} }; }
+  }
+
+  @Put('dashboard')
+  @ApiOperation({ summary: 'Save 2D panel dashboard card configuration (JSON body)' })
+  saveDashboard(@Body() body: any) {
+    const dp = getDashboardPath();
+    fs.writeFileSync(dp, yaml.dump(body, { indent: 2, lineWidth: 120, noRefs: true }), 'utf-8');
+    return { ok: true };
+  }
+
+  @Get('dashboard/text')
+  @ApiOperation({ summary: 'Get raw dashboard.yaml content for editing' })
+  getDashboardText() {
+    const dp = getDashboardPath();
+    if (!fs.existsSync(dp)) return { content: '' };
+    return { content: fs.readFileSync(dp, 'utf-8') };
+  }
+
+  @Put('dashboard/text')
+  @ApiOperation({ summary: 'Save raw dashboard.yaml content' })
+  saveDashboardText(@Body() body: { content: string }) {
+    const dp = getDashboardPath();
+    try { yaml.load(body.content); } catch (e: any) { throw new BadRequestException(`Invalid YAML: ${e.message}`); }
+    fs.writeFileSync(dp, body.content, 'utf-8');
+    return { ok: true };
   }
 
   @Post('apply')
