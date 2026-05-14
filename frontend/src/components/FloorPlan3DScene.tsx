@@ -4,7 +4,7 @@ import Hls from 'hls.js'
 import { useHa } from '../context/HaContext'
 import { useToast } from '../context/ToastContext'
 import { HaState, Mappings, MappingEntry, BehaviorMap, FloorId } from '../types'
-import { guessBehavior, BrightnessSlider, DevicePicker } from '../components/DevicePicker'
+import { guessBehavior, DevicePicker } from '../components/DevicePicker'
 import EditPanel from '../components/EditPanel'
 import { playLightToggle, playDoorToggle, playGarageToggle, playCurtainToggle, playMediaToggle, playSwitchToggle, playDing, speakState, speakText, Lang, getLang, setLang, startMusic, stopMusic } from '../utils/sounds'
 import { useThreeScene } from '../hooks/useThreeScene'
@@ -38,8 +38,47 @@ export interface FloorPlan3DSceneProps {
 
 const HARDCODED_TOKEN = 'f033260c0a8940ade499be72fd22be3955db72a2bee845214e64575ca73000af'
 
+function VerticalSlider({ value, onChange, onPreview, color }: {
+  value: number; onChange: (v: number) => void; onPreview?: (v: number) => void; color: string
+}) {
+  const [v, setV] = useState(value)
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { setV(value) }, [value])
+  const preview = (n: number) => { setV(n); onPreview?.(n) }
+  const commit  = () => onChange(Number(inputRef.current?.value ?? v))
+  return (
+    <div
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}
+      onPointerDown={e => e.stopPropagation()}
+      onPointerUp={e => { e.stopPropagation(); commit() }}
+      onClick={e => e.stopPropagation()}
+    >
+      <div style={{ width: 32, height: 80, position: 'relative' }}>
+        <div style={{ position: 'absolute', inset: 0, borderRadius: 16, background: 'rgba(255,255,255,0.09)', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${v}%`, background: `linear-gradient(to top, ${color}77, ${color})`, borderRadius: 16 }} />
+        </div>
+        <input
+          ref={inputRef}
+          type="range" min={1} max={100} value={v}
+          onChange={e => preview(Number(e.target.value))}
+          style={{
+            position: 'absolute',
+            width: 80, height: 32,
+            top: 24, left: -24,
+            transform: 'rotate(-90deg)',
+            opacity: 0,
+            cursor: 'pointer',
+            margin: 0, padding: 0,
+          }}
+        />
+      </div>
+      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)' }}>{v}%</span>
+    </div>
+  )
+}
+
 export function FloorPlan3DScene({ tokenOverride, soundMode: soundModeProp, embedded = false }: FloorPlan3DSceneProps) {
-  const { token: ctxToken, states, callService } = useHa()
+  const { token: ctxToken, states, callService, patchState } = useHa()
   const { toast } = useToast()
   const token = tokenOverride || ctxToken || HARDCODED_TOKEN
   const containerRef = useRef<HTMLDivElement>(null)
@@ -140,8 +179,8 @@ export function FloorPlan3DScene({ tokenOverride, soundMode: soundModeProp, embe
       if (entityId.startsWith('light.')) {
         if (meshName)                glb.push({ entityId, name, floor: f as 1|2|3, meshName })
         else if (Array.isArray(a.glb_pos)) sph.push({ entityId, name, floor: f as 1|2|3, x: (a.glb_pos as number[])[0], z: (a.glb_pos as number[])[1] })
-      } else if (entityId.startsWith('binary_sensor.')) {
-        const dc = (a.device_class as string) ?? 'door'
+      } else if (entityId.startsWith('binary_sensor.') || entityId.startsWith('cover.')) {
+        const dc = (a.device_class as string) ?? (entityId.startsWith('cover.') ? 'curtain' : 'door')
         if (meshName) {
           const pos = Array.isArray(a.glb_pos) ? [(a.glb_pos as number[])[0], (a.glb_pos as number[])[1]] as [number, number] : undefined
           senGlb.push({ entityId, name, floor: f as 1|2|3, meshName, deviceClass: dc, pos })
@@ -249,13 +288,17 @@ export function FloorPlan3DScene({ tokenOverride, soundMode: soundModeProp, embe
           const st = statesRef.current.get(result.entityId)
           if (result.entityId.startsWith('camera.')) { playBehaviorSound(result.entityId, true); setCameraViewer(result.entityId); return }
           const prevSt = st
-          const newState = st?.state === 'on' ? 'off' : 'on'
+          const isCoverEid = result.entityId.startsWith('cover.')
+          const curOpen = st?.state === 'on' || st?.state === 'open'
+          const newState = isCoverEid ? (curOpen ? 'closed' : 'open') : (curOpen ? 'off' : 'on')
           statesRef.current = new Map(statesRef.current).set(result.entityId, { ...st!, state: newState })
+          patchState(result.entityId, newState)
           setLocalRev(n => n + 1)
-          playBehaviorSound(result.entityId, newState === 'on')
-          haSetState(result.entityId, newState).then(ok => {
+          playBehaviorSound(result.entityId, !curOpen)
+          callToggle(result.entityId, !curOpen).then(ok => {
             if (!ok && prevSt) {
               statesRef.current = new Map(statesRef.current).set(result.entityId, prevSt)
+              patchState(result.entityId, prevSt.state, prevSt.attributes)
               setLocalRev(n => n + 1)
             }
           })
@@ -265,37 +308,37 @@ export function FloorPlan3DScene({ tokenOverride, soundMode: soundModeProp, embe
   )
 
   const selState    = selectedId ? getState(selectedId) : null
-  const selOn       = selState?.state === 'on'
-  const selName     = selState ? (selState.attributes.friendly_name as string) ?? selectedId : ''
   const selDomain   = selectedId?.split('.')[0] ?? ''
+  const isCover     = selDomain === 'cover'
+  const selOn       = selState?.state === 'on' || selState?.state === 'open'
+  const selName     = selState ? (selState.attributes.friendly_name as string) ?? selectedId : ''
   const selDevClass = selState?.attributes?.device_class as string | undefined
-  const isSensor    = selDomain === 'binary_sensor'
+  const isSensor    = selDomain === 'binary_sensor' || isCover
   const isCamera    = selectedId?.startsWith('camera.')
 
-  const haSetState = async (eid: string, state: string, attrs?: Record<string, unknown>): Promise<boolean> => {
-    const cur = getState(eid)
-    try {
-      const r = await fetch(`/api/states/${eid}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ state, attributes: { ...cur?.attributes, ...attrs } }),
-      })
-      if (!r.ok) { toast('Failed to set state', 'error'); return false }
-      return true
-    } catch { toast('Network error', 'error'); return false }
-  }
+  const callToggle = useCallback(async (eid: string, on: boolean): Promise<boolean> => {
+    const domain = eid.split('.')[0]
+    if (domain === 'cover') {
+      const { success } = await callService('cover', on ? 'open_cover' : 'close_cover', {}, eid)
+      return success
+    }
+    const { success } = await callService(domain, on ? 'turn_on' : 'turn_off', {}, eid)
+    return success
+  }, [callService])
 
   const playBehaviorSound = (eid: string, on: boolean) => {
     if (eid.startsWith('media_player.')) { if (on) startMusic(); else stopMusic() }
     if (soundMode === 0) return
     const name = states.get(eid)?.attributes?.friendly_name as string || eid
-    const stateLabel = eid.startsWith('binary_sensor.') ? (on ? 'open' : 'closed') : (on ? 'on' : 'off')
+    const isBinarySensor = eid.startsWith('binary_sensor.') || eid.startsWith('cover.')
+    const stateLabel = isBinarySensor ? (on ? 'open' : 'closed') : (on ? 'on' : 'off')
     if (soundMode === 1) { playDing() } else {
       if (eid.startsWith('light.')) playLightToggle(on)
       else if (eid.startsWith('media_player.')) playMediaToggle(on)
       else if (eid.startsWith('switch.')) playSwitchToggle(on)
-      else if (eid.startsWith('binary_sensor.')) {
+      else if (eid.startsWith('cover.') || eid.startsWith('binary_sensor.')) {
         const dc = states.get(eid)?.attributes?.device_class as string
-        if (dc === 'garage_door') playGarageToggle(on)
+        if (dc === 'garage' || dc === 'garage_door') playGarageToggle(on)
         else if (dc === 'curtain' || dc === 'blind') playCurtainToggle(on)
         else playDoorToggle(on)
       } else playSwitchToggle(on)
@@ -307,22 +350,35 @@ export function FloorPlan3DScene({ tokenOverride, soundMode: soundModeProp, embe
     ? Math.round(((selState.attributes.brightness as number) / 255) * 100) : 100
   const selVolPct = selState?.attributes?.volume_level != null
     ? Math.round((selState.attributes.volume_level as number) * 100) : 50
-  const setVolume = (pct: number) => { if (!selectedId) return; haSetState(selectedId, selState?.state ?? 'on', { volume_level: pct / 100 }) }
+  const setVolume = (pct: number) => {
+    if (!selectedId) return
+    patchState(selectedId, selState?.state ?? 'on', { volume_level: pct / 100 })
+    callService('media_player', 'volume_set', { volume_level: pct / 100 }, selectedId)
+  }
   const toggle = () => {
     if (!selectedId) return
     const prevState = statesRef.current.get(selectedId)
-    const newState = selOn ? 'off' : 'on'
+    const opening = !selOn
+    const newState = isCover ? (opening ? 'open' : 'closed') : (opening ? 'on' : 'off')
     statesRef.current = new Map(statesRef.current).set(selectedId, { ...selState!, state: newState })
+    patchState(selectedId, newState)
     setLocalRev(n => n + 1)
-    playBehaviorSound(selectedId, newState === 'on')
-    haSetState(selectedId, newState).then(ok => {
-      if (!ok && prevState) { statesRef.current = new Map(statesRef.current).set(selectedId, prevState); setLocalRev(n => n + 1) }
+    playBehaviorSound(selectedId, opening)
+    callToggle(selectedId, opening).then(ok => {
+      if (!ok && prevState) {
+        statesRef.current = new Map(statesRef.current).set(selectedId, prevState)
+        patchState(selectedId, prevState.state, prevState.attributes)
+        setLocalRev(n => n + 1)
+      }
     })
   }
-  const setBright = (pct: number) => { if (!selectedId) return; haSetState(selectedId, 'on', { brightness: Math.round(pct / 100 * 255) }) }
+  const setBright = (pct: number) => {
+    if (!selectedId) return
+    callService('light', 'turn_on', { brightness: Math.round(pct / 100 * 255) }, selectedId)
+  }
 
   const sensorIcon = (dc?: string) =>
-    dc === 'door' || dc === 'garage_door' ? '🚪' : dc === 'curtain' || dc === 'blind' ? '🪟' : dc === 'camera' ? '📷' : '🔲'
+    dc === 'door' || dc === 'garage_door' || dc === 'garage' ? '🚪' : dc === 'curtain' || dc === 'blind' ? '🪟' : dc === 'camera' ? '📷' : '🔲'
   const sensorLabel = (dc?: string, open?: boolean) => open ? 'Open' : 'Closed'
 
   const legendLights = useMemo(() => [
@@ -400,26 +456,45 @@ export function FloorPlan3DScene({ tokenOverride, soundMode: soundModeProp, embe
 
   const popup = selectedId ? (
     <div className="fp-panel" onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span className="fp-panel-icon">{panelIcon}</span>
-        <button className="fp-close" onClick={() => setSelectedId(null)}>✕</button>
+      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 22 }}>{panelIcon}</span>
+        <button className="fp-close" style={{ width: 22, height: 22, fontSize: 10 }} onClick={() => setSelectedId(null)}>✕</button>
       </div>
-      <div className="fp-panel-name" style={{ fontSize: 13, lineHeight: 1.3 }}>{selName}</div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div className={`fp-panel-state${selOn ? ' on' : ''}`}>
-          {isSensor ? sensorLabel(selDevClass, selOn) : (selOn ? 'On' : 'Off')}
-        </div>
-        {isCamera ? (
-          <a href={`/dashboard?camera=${selectedId}`} className="btn" style={{ fontSize: 11, padding: '4px 8px', textDecoration: 'none' }}>📷 View</a>
-        ) : (
-          <label className="ios-toggle" onClick={e => e.stopPropagation()}>
-            <input type="checkbox" checked={selOn ?? false} onChange={toggle} />
-            <span className="ios-slider" />
-          </label>
-        )}
+      <div style={{ fontSize: 11, fontWeight: 600, color: '#fff', textAlign: 'center', lineHeight: 1.3, wordBreak: 'break-word', width: '100%' }}>{selName}</div>
+      <div className={`fp-panel-state${selOn ? ' on' : ''}`} style={{ fontSize: 11 }}>
+        {isSensor ? sensorLabel(selDevClass, selOn) : (selOn ? 'On' : 'Off')}
       </div>
-      {selDomain === 'light'        && <BrightnessSlider value={selBrightPct} onChange={setBright} />}
-      {selDomain === 'media_player' && <BrightnessSlider value={selVolPct}    onChange={setVolume} />}
+      {isCamera ? (
+        <a href={`/dashboard?camera=${selectedId}`} className="btn" style={{ fontSize: 10, padding: '3px 7px', textDecoration: 'none' }}>📷 View</a>
+      ) : (
+        <label className="ios-toggle"
+          onPointerDown={e => e.stopPropagation()}
+          onPointerUp={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}>
+          <input type="checkbox" checked={selOn ?? false} onChange={toggle} />
+          <span className="ios-slider" />
+        </label>
+      )}
+      {selDomain === 'light' && (
+        <VerticalSlider
+          value={selBrightPct}
+          onPreview={pct => {
+            if (!selectedId) return
+            const cur = statesRef.current.get(selectedId)
+            if (!cur) return
+            const brightness = Math.round(pct / 100 * 255)
+            statesRef.current = new Map(statesRef.current).set(selectedId, {
+              ...cur, state: 'on',
+              attributes: { ...cur.attributes, brightness },
+            })
+            patchState(selectedId, 'on', { brightness })
+            setLocalRev(n => n + 1)
+          }}
+          onChange={setBright}
+          color="#f0c840"
+        />
+      )}
+      {selDomain === 'media_player' && <VerticalSlider value={selVolPct} onChange={setVolume} color="#30d158" />}
     </div>
   ) : null
 
@@ -513,12 +588,18 @@ export function FloorPlan3DScene({ tokenOverride, soundMode: soundModeProp, embe
       {!embedded && (
         <div className="fp-legend">
           {legendLights.map(({ entityId, name, isGlb, isSensor }) => {
-            const on = states.get(entityId)?.state === 'on'
-            const dc = states.get(entityId)?.attributes?.device_class as string | undefined
+            const st = states.get(entityId)
+            const on = st?.state === 'on' || st?.state === 'open'
+            const dc = st?.attributes?.device_class as string | undefined
             return (
               <button key={entityId}
                 className={`fp-legend-item${on ? ' on' : ''}${selectedId === entityId ? ' sel' : ''}${isSensor ? ' sensor' : ''}`}
-                onClick={() => { setSelectedId(p => p === entityId ? null : entityId); const st = states.get(entityId); haSetState(entityId, st?.state === 'on' ? 'off' : 'on') }}>
+                onClick={() => {
+                  setSelectedId(p => p === entityId ? null : entityId)
+                  const newSt = entityId.startsWith('cover.') ? (on ? 'closed' : 'open') : (on ? 'off' : 'on')
+                  patchState(entityId, newSt)
+                  callToggle(entityId, !on)
+                }}>
                 <span className={`fp-dot${on ? ' on' : ''}${isGlb ? ' glb' : ''}${isSensor ? (on ? ' open' : ' closed') : ''}`} />
                 <span className="fp-legend-name">{name}</span>
                 {isGlb && !isSensor && <span className="fp-legend-3d">3D</span>}

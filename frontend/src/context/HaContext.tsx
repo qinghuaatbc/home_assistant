@@ -31,6 +31,7 @@ interface HaCtx {
   states: Map<string, HaState>
   callService: (domain: string, service: string, data?: Record<string, unknown>, entityId?: string | string[]) => Promise<{ success: boolean; error?: string }>
   setEntityState: (entityId: string, state: string, attributes?: Record<string, unknown>) => Promise<boolean>
+  patchState: (entityId: string, state: string, attrs?: Record<string, unknown>) => void
 }
 
 const Ctx = createContext<HaCtx | null>(null)
@@ -113,13 +114,32 @@ export function HaProvider({ children }: { children: ReactNode }) {
     })
   }, [token])
 
+  const statesRef = useRef<Map<string, HaState>>(new Map())
+  statesRef.current = states
+
+  const patchState = useCallback((entityId: string, state: string, attrs?: Record<string, unknown>) => {
+    setStates(prev => {
+      const existing = prev.get(entityId)
+      if (!existing) return prev
+      const next = new Map(prev)
+      next.set(entityId, {
+        ...existing,
+        state,
+        attributes: attrs ? { ...existing.attributes, ...attrs } : existing.attributes,
+        last_updated: new Date().toISOString(),
+        last_changed: existing.state !== state ? new Date().toISOString() : existing.last_changed,
+      })
+      return next
+    })
+  }, [])
+
   const setEntityState = useCallback(async (
     entityId: string,
     state: string,
     attributes: Record<string, unknown> = {},
   ): Promise<boolean> => {
     if (!token) return false
-    const current = states.get(entityId)
+    const current = statesRef.current.get(entityId)
     try {
       const r = await fetch(`/api/states/${entityId}`, {
         method: 'POST',
@@ -130,7 +150,7 @@ export function HaProvider({ children }: { children: ReactNode }) {
     } catch {
       return false
     }
-  }, [token, states])
+  }, [token])
 
   // Poll health endpoint
   useEffect(() => {
@@ -213,7 +233,7 @@ export function HaProvider({ children }: { children: ReactNode }) {
   }, [token])
 
   return (
-    <Ctx.Provider value={{ token, login, logout, wsConnected, health, states, callService, setEntityState }}>
+    <Ctx.Provider value={{ token, login, logout, wsConnected, health, states, callService, setEntityState, patchState }}>
       {children}
     </Ctx.Provider>
   )

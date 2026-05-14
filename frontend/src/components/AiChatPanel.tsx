@@ -26,7 +26,7 @@ const T: Record<Lang, { placeholder: string; send: string; thinking: string; noR
 const LANG_LIST: Lang[] = ['en', 'zh', 'fa']
 const RECORDING_DURATION_MS = 5000
 
-export default function AiChatPanel({ onClose }: { onClose: () => void }) {
+export default function AiChatPanel({ onClose, rightEdge = 16 }: { onClose: () => void; rightEdge?: number }) {
   const { token } = useHa()
   const [prompt, setPrompt] = useState('')
   const [messages, setMessages] = useState<{ role: string; text: string }[]>([])
@@ -195,7 +195,7 @@ export default function AiChatPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div style={{
-      position: 'fixed', bottom: 70, right: 16, width: 280,
+      position: 'fixed', bottom: 70, right: rightEdge, width: 280,
       background: '#1c1c1e', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
       zIndex: 9999, display: 'flex', flexDirection: 'column', maxHeight: 260, overflow: 'hidden',
       border: '1px solid #333',

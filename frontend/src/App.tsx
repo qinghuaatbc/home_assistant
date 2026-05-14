@@ -26,7 +26,7 @@ function getToken(): string {
 
 // ─── Global AI button — persistent across all pages ───────────────────────────
 
-function FloatingAiButton() {
+function FloatingAiButton({ rightEdge = 6 }: { rightEdge?: number }) {
   const [open, setOpen] = useState(false)
   const l = (en: string, zh: string, fa: string) => {
     const lang = getLang()
@@ -37,10 +37,10 @@ function FloatingAiButton() {
       <button
         onClick={() => setOpen(o => !o)}
         style={{
-          position: 'fixed', bottom: 80, right: 6, zIndex: 9999,
+          position: 'fixed', bottom: 16, right: rightEdge, zIndex: 9999,
           width: 44, height: 44, borderRadius: 22, border: 'none',
-          background: open ? '#ff453a' : '#4d8fff', color: '#fff',
-          fontSize: 18, cursor: 'pointer', boxShadow: '0 4px 16px rgba(77,143,255,0.4)',
+          background: open ? '#ff453a' : 'rgba(210,140,0,0.88)', color: '#fff',
+          fontSize: 18, cursor: 'pointer', boxShadow: '0 4px 16px rgba(210,140,0,0.45)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'background 0.2s',
         }}
@@ -49,7 +49,7 @@ function FloatingAiButton() {
         {open ? '✕' : '✦'}
       </button>
       <div style={{ display: open ? 'block' : 'none', pointerEvents: open ? 'auto' : 'none' }}>
-        <AiChatPanel onClose={() => setOpen(false)} />
+        <AiChatPanel onClose={() => setOpen(false)} rightEdge={rightEdge + 10} />
       </div>
     </>,
     document.body,
@@ -98,7 +98,7 @@ function RtiPanel() {
         <Suspense fallback={<div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', color: '#666' }}>Loading…</div>}>
           <RtiPanelPage standaloneToken={t} />
         </Suspense>
-        <FloatingAiButton />
+        <FloatingAiButton rightEdge={60} />
       </ToastProvider>
     </HaProvider>
   )

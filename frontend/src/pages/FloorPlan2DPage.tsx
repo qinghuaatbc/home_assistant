@@ -37,6 +37,11 @@ function getBehavior(eid: string, dc?: string): string {
   if (eid.startsWith('weather.')) return 'weather'
   if (eid.startsWith('alarm_control_panel.')) return 'alarm'
   if (eid.startsWith('sensor.')) return 'sensor'
+  if (eid.startsWith('cover.')) {
+    if (dc === 'curtain' || dc === 'blind') return 'curtain'
+    if (dc === 'garage' || dc === 'garage_door') return 'garage_door'
+    return 'door_hinge'
+  }
   if (eid.startsWith('binary_sensor.')) {
     if (dc === 'garage_door') return 'garage_door'
     if (dc === 'curtain' || dc === 'blind') return 'curtain'
@@ -79,7 +84,7 @@ interface Props {
 }
 
 export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standaloneToken }: Props = {}) {
-  const { token: ctxToken, states } = useHa()
+  const { token: ctxToken, states, patchState } = useHa()
   const { toast } = useToast()
   const token = standaloneToken || ctxToken || HARDCODED
 
@@ -88,7 +93,6 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
   const [showAllFloors, setShowAllFloors] = useState(true)
   const [soundMode, setSoundMode] = useState(0)
   const [langIdx, setLangIdx] = useState(0)
-  const [localRev, setLocalRev] = useState(0)
   const statesRef = useRef(states)
   const LANG_LIST: Lang[] = ['en', 'zh', 'fa']
 
@@ -98,7 +102,7 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
   useEffect(() => { statesRef.current = states }, [states])
   useEffect(() => () => { document.body.style.overflow = '' }, [])
 
-  const getState = useCallback((eid: string) => statesRef.current.get(eid) || states.get(eid), [states])
+  const getState = useCallback((eid: string) => states.get(eid) || statesRef.current.get(eid), [states])
 
   useEffect(() => {
     if (!token) return
@@ -199,6 +203,16 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
     return m
   }, [allDevices, floor, showAllFloors])
 
+  const callService = useCallback(async (domain: string, service: string, entityId: string, data: Record<string, unknown> = {}) => {
+    try {
+      await fetch(`/api/services/${domain}/${service}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ entity_id: entityId, ...data }),
+      })
+    } catch { toast('Network error', 'error') }
+  }, [token, toast])
+
   const haSetState = useCallback(async (eid: string, state: string, attrs?: Record<string, unknown>) => {
     const cur = getState(eid)
     try {
@@ -216,16 +230,17 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
     }
     if (soundMode === 0) return
     const name = statesRef.current.get(eid)?.attributes?.friendly_name as string || eid
-    const stateLabel = eid.startsWith('binary_sensor.') ? (on ? 'open' : 'closed') : (on ? 'on' : 'off')
+    const isCover = eid.startsWith('cover.') || eid.startsWith('binary_sensor.')
+    const stateLabel = isCover ? (on ? 'open' : 'closed') : (on ? 'on' : 'off')
     if (soundMode === 1) {
       playDing()
     } else {
       if (eid.startsWith('light.')) playLightToggle(on)
       else if (eid.startsWith('media_player.')) playMediaToggle(on)
       else if (eid.startsWith('switch.')) playSwitchToggle(on)
-      else if (eid.startsWith('binary_sensor.')) {
+      else if (eid.startsWith('cover.') || eid.startsWith('binary_sensor.')) {
         const dc = statesRef.current.get(eid)?.attributes?.device_class as string
-        if (dc === 'garage_door') playGarageToggle(on)
+        if (dc === 'garage' || dc === 'garage_door') playGarageToggle(on)
         else if (dc === 'curtain' || dc === 'blind') playCurtainToggle(on)
         else playDoorToggle(on)
       } else playSwitchToggle(on)
@@ -236,32 +251,41 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
   const toggleDevice = useCallback((eid: string) => {
     const st = getState(eid)
     if (!st) return
+    if (eid.startsWith('cover.')) {
+      const isOpen = st.state === 'open'
+      const newState = isOpen ? 'closed' : 'open'
+      patchState(eid, newState)
+      playBehaviorSound(eid, !isOpen)
+      callService('cover', isOpen ? 'close_cover' : 'open_cover', eid)
+      return
+    }
     const newState = st.state === 'on' ? 'off' : 'on'
-    statesRef.current = new Map(statesRef.current).set(eid, { ...st, state: newState })
-    setLocalRev(n => n + 1)
+    patchState(eid, newState)
     playBehaviorSound(eid, newState === 'on')
     haSetState(eid, newState)
-  }, [getState, haSetState, playBehaviorSound])
+  }, [getState, haSetState, callService, patchState, playBehaviorSound])
 
   const onBrightness = useCallback((eid: string, pct: number) => {
-    haSetState(eid, 'on', { brightness: Math.round(pct / 100 * 255) })
-  }, [haSetState])
+    const brightness = Math.round(pct / 100 * 255)
+    patchState(eid, 'on', { brightness })
+    haSetState(eid, 'on', { brightness })
+  }, [haSetState, patchState])
 
   const renderCard = useCallback((d: GroupedDevice) => {
     const st = getState(d.entityId)
     if (!st) return null
-    const on = st.state === 'on'
+    const domain = d.entityId.split('.')[0]
+    const on = st.state === 'on' || st.state === 'open'
     const meta = BEHAVIOR_META[d.behavior] ?? { icon: '🔧', label: 'Other', color: '#888' }
     const brightness = st.attributes?.brightness as number | undefined
     const brightPct = brightness != null ? Math.round((brightness / 255) * 100) : undefined
     const dc = st.attributes?.device_class as string | undefined
     const volumeLevel = st.attributes?.volume_level as number | undefined
     const volPct = volumeLevel != null ? Math.round(volumeLevel * 100) : undefined
-    const domain = d.entityId.split('.')[0]
 
     const sensorStateLabel = () => {
-      if (domain !== 'binary_sensor') return ''
-      const isOn = st.state === 'on'
+      const isOn = domain === 'cover' ? st.state === 'open' : st.state === 'on'
+      if (domain !== 'binary_sensor' && domain !== 'cover') return ''
       if (dc === 'garage_door') return isOn ? 'Open' : 'Closed'
       if (dc === 'door' || dc === 'window') return isOn ? 'Open' : 'Closed'
       if (dc === 'curtain' || dc === 'blind') return isOn ? 'Open' : 'Closed'
@@ -343,7 +367,8 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
               value={volPct ?? 0}
               onChange={(e) => {
                 const v = Number(e.target.value)
-                haSetState(d.entityId, on ? 'on' : 'on', { volume_level: v / 100 })
+                patchState(d.entityId, 'on', { volume_level: v / 100 })
+                haSetState(d.entityId, 'on', { volume_level: v / 100 })
                 if (!on) toggleDevice(d.entityId)
               }} />
           </div>
@@ -367,7 +392,7 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
         )}
       </div>
     )
-  }, [getState, toggleDevice, onBrightness, haSetState])
+  }, [getState, toggleDevice, onBrightness, haSetState, patchState])
 
   const orderedBehaviors = useMemo(() => {
     return [...BEHAVIOR_ORDER.filter(b => grouped.has(b)), ...[...grouped.keys()].filter(b => !BEHAVIOR_ORDER.includes(b))]

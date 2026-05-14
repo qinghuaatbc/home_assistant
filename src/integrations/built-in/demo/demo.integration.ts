@@ -7,25 +7,25 @@ import { ContextService } from '../../../core/context/context.service';
 import { HaIntegration, IntegrationConfig, IntegrationManifest } from '../../interfaces/integration.interface';
 
 const DEMO_ENTITIES: Array<{ entity_id: string; name: string; type: string; attrs?: Record<string, unknown> }> = [
-  { entity_id: 'light.demo_living_room', name: 'Living Room Light', type: 'light' },
-  { entity_id: 'light.demo_bedroom', name: 'Bedroom Light', type: 'light' },
-  { entity_id: 'light.demo_kitchen', name: 'Kitchen Light', type: 'light' },
-  { entity_id: 'light.demo_kitchen_light', name: 'Kitchen Ceiling', type: 'light' },
-  { entity_id: 'light.demo_dining_light', name: 'Dining Room Light', type: 'light' },
-  { entity_id: 'light.demo_office_light', name: 'Office Light', type: 'light' },
+  { entity_id: 'light.demo_living_room', name: 'Living Room Light', type: 'light', attrs: { brightness: 255 } },
+  { entity_id: 'light.demo_bedroom', name: 'Bedroom Light', type: 'light', attrs: { brightness: 255 } },
+  { entity_id: 'light.demo_kitchen', name: 'Kitchen Light', type: 'light', attrs: { brightness: 255 } },
+  { entity_id: 'light.demo_kitchen_light', name: 'Kitchen Ceiling', type: 'light', attrs: { brightness: 255 } },
+  { entity_id: 'light.demo_dining_light', name: 'Dining Room Light', type: 'light', attrs: { brightness: 255 } },
+  { entity_id: 'light.demo_office_light', name: 'Office Light', type: 'light', attrs: { brightness: 255 } },
   { entity_id: 'switch.demo_fan', name: 'Living Room Fan', type: 'switch' },
   { entity_id: 'switch.demo_tv', name: 'TV Switch', type: 'switch' },
   { entity_id: 'switch.demo_alarm_siren', name: 'Alarm Siren', type: 'switch' },
   { entity_id: 'binary_sensor.demo_front_door', name: 'Front Door', type: 'binary_sensor', attrs: { device_class: 'door' } },
   { entity_id: 'binary_sensor.demo_back_door', name: 'Back Door', type: 'binary_sensor', attrs: { device_class: 'door' } },
   { entity_id: 'binary_sensor.demo_patio_door', name: 'Patio Door', type: 'binary_sensor', attrs: { device_class: 'door' } },
-  { entity_id: 'binary_sensor.demo_garage_door', name: 'Garage Door', type: 'binary_sensor', attrs: { device_class: 'garage_door', glb_floor: 1 } },
+  { entity_id: 'cover.demo_garage_door', name: 'Garage Door', type: 'cover', attrs: { device_class: 'garage', glb_floor: 1 } },
   { entity_id: 'binary_sensor.demo_motion', name: 'Motion Sensor', type: 'binary_sensor', attrs: { device_class: 'motion' } },
-  { entity_id: 'binary_sensor.demo_living_room_curtain', name: 'Living Room Curtain', type: 'binary_sensor', attrs: { device_class: 'curtain', glb_floor: 1, glb_pos: [5, -2] } },
+  { entity_id: 'cover.demo_living_room_curtain', name: 'Living Room Curtain', type: 'cover', attrs: { device_class: 'curtain', glb_floor: 1, glb_pos: [5, -2] } },
   { entity_id: 'sensor.demo_temperature', name: 'Temperature', type: 'sensor', attrs: { unit_of_measurement: '°C', device_class: 'temperature' } },
   { entity_id: 'sensor.demo_humidity', name: 'Humidity', type: 'sensor', attrs: { unit_of_measurement: '%', device_class: 'humidity' } },
-  { entity_id: 'media_player.demo_living_room_speaker', name: 'Living Room Speaker', type: 'media_player' },
-  { entity_id: 'media_player.demo_bedroom_speaker', name: 'Bedroom Speaker', type: 'media_player' },
+  { entity_id: 'media_player.demo_living_room_speaker', name: 'Living Room Speaker', type: 'media_player', attrs: { volume_level: 0.5 } },
+  { entity_id: 'media_player.demo_bedroom_speaker', name: 'Bedroom Speaker', type: 'media_player', attrs: { volume_level: 0.5 } },
 ];
 
 @Injectable()
@@ -56,7 +56,7 @@ export class DemoIntegration implements HaIntegration {
 
       await this.stateMachine.setState(
         full.entity_id,
-        full.type === 'binary_sensor' ? 'off' : 'off',
+        full.type === 'cover' ? 'closed' : 'off',
         {
           friendly_name: full.name,
           ...(full.attrs || {}),
@@ -94,7 +94,9 @@ export class DemoIntegration implements HaIntegration {
           if (state) {
             const attrs: Record<string, unknown> = { ...cur.attributes }
             if (call.service_data?.brightness != null) attrs.brightness = call.service_data.brightness
+            else if (call.service === 'turn_on' && eid.startsWith('light.') && attrs.brightness == null) attrs.brightness = 255
             if (call.service_data?.volume_level != null) attrs.volume_level = call.service_data.volume_level
+            else if (call.service === 'turn_on' && eid.startsWith('media_player.') && attrs.volume_level == null) attrs.volume_level = 0.5
             this.stateMachine.setState(eid, state, attrs, call.context)
           }
         }
@@ -108,6 +110,11 @@ export class DemoIntegration implements HaIntegration {
         domain, service: 'turn_off', name: 'Turn off', description: 'Turn off', fields: {}, handler, target: { entity: true },
       })
     }
+    for (const svc of ['open_cover', 'close_cover', 'stop_cover']) {
+      this.serviceRegistry.register({
+        domain: 'cover', service: svc, name: svc, description: svc, fields: {}, handler, target: { entity: true },
+      })
+    }
     this.serviceRegistry.register({
       domain: 'light', service: 'toggle', name: 'Toggle', description: 'Toggle', fields: {}, handler, target: { entity: true },
     })
@@ -115,7 +122,7 @@ export class DemoIntegration implements HaIntegration {
       domain: 'media_player', service: 'volume_set', name: 'Set volume', description: 'Set volume level',
       fields: { volume_level: { required: true, description: 'Volume 0.0-1.0' } }, handler, target: { entity: true },
     })
-    this.logger.log('Demo: registered service handlers (light/switch/media_player/binary_sensor + volume_set)')
+    this.logger.log('Demo: registered service handlers (light/switch/media_player/binary_sensor/cover + volume_set)')
   }
 
   async teardown(): Promise<void> {}

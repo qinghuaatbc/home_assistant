@@ -109,8 +109,15 @@ export class StateMachineService implements OnModuleInit {
       ctx,
     );
 
+    // Skip DB write when nothing actually changed (same state + same serialized attributes)
+    const attrsJson = JSON.stringify(attributes);
+    const prevAttrsJson = oldState ? JSON.stringify(oldState.attributes) : null;
+    if (oldState && oldState.state === state && prevAttrsJson === attrsJson) {
+      return newState;
+    }
+
     // Persist to history asynchronously (don't block)
-    this.persistState(newState).catch((err: Error) =>
+    this.persistState(newState, attrsJson).catch((err: Error) =>
       this.logger.error(
         `Failed to persist state for ${entityId}: ${err.message}`,
       ),
@@ -282,19 +289,18 @@ export class StateMachineService implements OnModuleInit {
   }
 
   /**
-   * Persist a state to the history table.
+   * Persist a state to the history table (append-only, uses insert not save).
    */
-  private async persistState(state: HaState): Promise<void> {
-    const record = new StateHistoryEntity();
-    record.entity_id = state.entity_id;
-    record.state = state.state;
-    record.attributes_json = JSON.stringify(state.attributes);
-    record.last_changed = state.last_changed;
-    record.last_updated = state.last_updated;
-    record.context_id = state.context.id;
-    record.context_user_id = state.context.user_id ?? '';
-    record.context_parent_id = state.context.parent_id ?? '';
-
-    await this.stateRepo.save(record);
+  private async persistState(state: HaState, attrsJson: string): Promise<void> {
+    await this.stateRepo.insert({
+      entity_id: state.entity_id,
+      state: state.state,
+      attributes_json: attrsJson,
+      last_changed: state.last_changed,
+      last_updated: state.last_updated,
+      context_id: state.context.id,
+      context_user_id: state.context.user_id ?? '',
+      context_parent_id: state.context.parent_id ?? '',
+    });
   }
 }

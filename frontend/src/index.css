@@ -602,13 +602,13 @@ input[type=range].ios-range::-webkit-slider-thumb {
   bottom: var(--tab-h);
   display: flex;
   flex-direction: column;
-  background: #111113;
+  background: transparent;
   overflow: hidden;
 }
 .fp-page.fp-fullscreen {
   bottom: 0;
   z-index: 999;
-  background: #334466;
+  background: transparent;
 }
 
 .fp-canvas {
@@ -633,7 +633,10 @@ input[type=range].ios-range::-webkit-slider-thumb {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px 10px;
-  background: linear-gradient(to bottom, rgba(17,17,19,0.92) 70%, transparent);
+  background: rgba(10,12,28,0.60);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-bottom: 1px solid rgba(255,255,255,0.10);
 }
 
 .fp-title {
@@ -706,14 +709,15 @@ input[type=range].ios-range::-webkit-slider-thumb {
   align-items: center;
   gap: 5px;
   padding: 4px 10px 4px 7px;
-  background: rgba(28,28,30,0.82);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(10,12,28,0.62);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.13);
   border-radius: 20px;
   cursor: pointer;
   font-size: 11px;
   font-weight: 500;
-  color: rgba(255,255,255,0.55);
+  color: rgba(255,255,255,0.60);
   transition: border-color 0.15s, color 0.15s;
   font-family: inherit;
 }
@@ -767,23 +771,27 @@ input[type=range].ios-range::-webkit-slider-thumb {
 /* Light control panel */
 .fp-panel {
   position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 32px);
-  max-width: 400px;
-  background: rgba(28,28,30,0.94);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 18px;
-  padding: 14px 16px 12px;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  width: 120px;
+  background: rgba(8,10,24,0.26);
+  backdrop-filter: blur(28px) saturate(1.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 20px;
+  padding: 12px 10px 14px;
   z-index: 20;
-  animation: fp-slide-up 0.22s ease;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  animation: fp-slide-in 0.22s ease;
 }
-@keyframes fp-slide-up {
-  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+@keyframes fp-slide-in {
+  from { opacity: 0; transform: translateY(-50%) translateX(-10px); }
+  to   { opacity: 1; transform: translateY(-50%) translateX(0); }
 }
 
 .fp-panel-row {
@@ -799,9 +807,11 @@ input[type=range].ios-range::-webkit-slider-thumb {
 .fp-panel-state.on { color: var(--yellow); }
 
 .fp-close {
-  background: rgba(255,255,255,0.1);
-  border: none;
-  color: rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.10);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.16);
+  color: rgba(255,255,255,0.65);
   width: 28px; height: 28px;
   border-radius: 50%;
   font-size: 12px;
@@ -825,11 +835,13 @@ input[type=range].ios-range::-webkit-slider-thumb {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: rgba(28,28,30,0.75);
-  backdrop-filter: blur(8px);
+  background: rgba(8,10,22,0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.10);
   border-radius: 20px;
   font-size: 11px;
-  color: rgba(255,255,255,0.45);
+  color: rgba(255,255,255,0.50);
   pointer-events: none;
   z-index: 10;
 }

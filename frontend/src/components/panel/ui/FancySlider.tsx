@@ -23,8 +23,6 @@ export function FancySlider({ value, min = 0, max = 100, onChange, color, unit =
     if (ref.current) ref.current.style.background = trackBg
   }, [trackBg])
 
-  const handle = (v: number) => { setLocal(v); onChange(v) }
-
   return (
     <div style={{ position: 'relative', paddingTop: dragging ? 22 : 0, transition: 'padding 0.1s' }}>
       {dragging && (
@@ -40,9 +38,9 @@ export function FancySlider({ value, min = 0, max = 100, onChange, color, unit =
       <input
         ref={ref} type="range" min={min} max={max} value={local}
         className="rti-slider"
-        onChange={e => handle(Number(e.target.value))}
+        onChange={e => setLocal(Number(e.target.value))}
         onPointerDown={e => { e.stopPropagation(); setDragging(true) }}
-        onPointerUp={e => { e.stopPropagation(); setDragging(false) }}
+        onPointerUp={e => { e.stopPropagation(); setDragging(false); onChange(Number((e.target as HTMLInputElement).value)) }}
         onClick={e => e.stopPropagation()}
         style={{ width: '100%' }}
       />

@@ -1,89 +1,22 @@
-import { useState, useEffect, useContext } from 'react'
+import { useState, useContext } from 'react'
 import { createPortal } from 'react-dom'
 import { useHa } from '../../../context/HaContext'
 import {
   type Mode, type Theme, type Lang, type CardSize,
   useTh, useClock, tc1, tc2,
-  NAV_BG, NAV_BORDER, CARD_BORDER, CARD_SIZE_ICON, TR, SIDE_W,
+  NAV_BG, NAV_BORDER, CARD_BORDER, CARD_SIZE_ICON, TR, SIDE_W, LangCtx,
 } from '../PanelContext'
+import { useWeather } from '../useWeather'
 
 // ─── Weather Widget ───────────────────────────────────────────────────────────
 
-const WMO_ICON: Record<number, string> = {
-  0: '☀️', 1: '🌤', 2: '⛅', 3: '☁️',
-  45: '🌫', 48: '🌫', 51: '🌦', 53: '🌧', 55: '🌧', 61: '🌧', 63: '🌧', 65: '🌧',
-  71: '❄️', 73: '❄️', 75: '❄️', 77: '🌨', 80: '🌦', 81: '🌧', 82: '⛈', 95: '⛈', 96: '⛈', 99: '⛈',
-}
-const HA_ICON: Record<string, string> = {
-  sunny: '☀️', 'clear-night': '🌙', cloudy: '☁️', fog: '🌫', hail: '🌨', lightning: '⚡',
-  'lightning-rainy': '⛈', partlycloudy: '⛅', pouring: '🌧', rainy: '🌦', snowy: '❄️',
-  'snowy-rainy': '🌨', windy: '💨', 'windy-variant': '💨', exceptional: '⚠️',
-}
-
-function getWmoIcon(code: number): string {
-  return WMO_ICON[code] ?? WMO_ICON[Math.floor(code / 10) * 10] ?? '🌡'
-}
-
-const DAY_SHORT: Record<Lang, string[]> = {
-  en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-  zh: ['日', '一', '二', '三', '四', '五', '六'],
-  fa: ['ی', 'د', 'س', 'چ', 'پ', 'ج', 'ش'],
-}
-
-interface WeatherData {
-  icon: string; temp: number | null
-  forecast?: { day: string; icon: string; hi: number; lo: number }[]
-}
-
-import { LangCtx } from '../PanelContext'
-
 function WeatherWidget() {
-  const { states } = useHa()
-  const lang = useContext(LangCtx); const th = useTh()
-  const [wx, setWx] = useState<WeatherData | null>(null)
+  const wx = useWeather()
+  const th = useTh()
+  const lang = useContext(LangCtx)
   const [showForecast, setShowForecast] = useState(false)
 
-  useEffect(() => {
-    // 1. Try HA weather entity
-    const haWx = Array.from(states.values()).find(s => s.entity_id.startsWith('weather.'))
-    if (haWx) {
-      const icon = HA_ICON[haWx.state] ?? '🌡'
-      const temp = Number(haWx.attributes.temperature) || null
-      const rawFc = (haWx.attributes.forecast as any[]) ?? []
-      const forecast = rawFc.slice(0, 7).map(f => ({
-        day: DAY_SHORT[lang][new Date(f.datetime).getDay()],
-        icon: HA_ICON[f.condition] ?? '🌡',
-        hi: Math.round(f.temperature ?? f.temperature_max ?? 0),
-        lo: Math.round(f.templow ?? f.temperature_min ?? 0),
-      }))
-      setWx({ icon, temp, forecast })
-      return
-    }
-
-    // 2. Fallback: Open-Meteo (free, no key)
-    let lat = 49.25, lon = -123.1
-    const tryFetch = (la: number, lo2: number) => {
-      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo2}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=7`)
-        .then(r => r.json()).then(d => {
-          const icon = getWmoIcon(d.current?.weather_code ?? 0)
-          const temp = Math.round(d.current?.temperature_2m ?? 0)
-          const fc = (d.daily?.time ?? []).slice(0, 7).map((time: string, i: number) => ({
-            day: DAY_SHORT[lang][new Date(time).getDay()],
-            icon: getWmoIcon((d.daily.weather_code ?? [])[i] ?? 0),
-            hi: Math.round((d.daily.temperature_2m_max ?? [])[i] ?? 0),
-            lo: Math.round((d.daily.temperature_2m_min ?? [])[i] ?? 0),
-          }))
-          setWx({ icon, temp, forecast: fc })
-        }).catch(() => {})
-    }
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(p => tryFetch(p.coords.latitude, p.coords.longitude), () => tryFetch(lat, lon), { timeout: 4000 })
-    } else {
-      tryFetch(lat, lon)
-    }
-  }, [states, lang])
-
-  if (!wx) return null
+  if (!wx) return <span style={{ fontSize: 18, opacity: 0.3 }}>🌡</span>
 
   return (
     <>
@@ -167,9 +100,14 @@ export function RightSidebar({ mode, onMode, theme, onTheme, lang, onLang, sound
       position: 'fixed', right: 0, top: 0, bottom: 0, width: SIDE_W,
       background: sideBg, backdropFilter: 'blur(28px) saturate(1.5)', WebkitBackdropFilter: 'blur(28px) saturate(1.5)',
       borderLeft: `1px solid ${sideBorder}`,
-      zIndex: 40, display: 'flex', flexDirection: 'column', alignItems: 'center',
-      padding: '10px 0 90px',  // bottom padding to clear the global AI button at bottom:80
-      gap: 2, overflowY: 'auto',
+      zIndex: 40, overflowY: 'auto',
+      WebkitOverflowScrolling: 'touch' as any,
+      scrollbarWidth: 'none' as any,
+    }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      padding: '10px 0 90px', gap: 2,
+      minHeight: '100%',
     }}>
       {/* WS status */}
       <div style={{ width: 7, height: 7, borderRadius: 4, background: wsConnected ? '#30d158' : '#ff453a', margin: '2px 0 4px' }} />
@@ -238,6 +176,7 @@ export function RightSidebar({ mode, onMode, theme, onTheme, lang, onLang, sound
       <button onClick={onSound} style={{ ...iconBtnStyle, fontSize: 18 }} title={['Silent', 'Sound effects', 'Voice'][soundMode]}>
         {soundMode === 0 ? '🔇' : soundMode === 1 ? '🔔' : '🗣'}
       </button>
+    </div>
     </div>
   )
 }

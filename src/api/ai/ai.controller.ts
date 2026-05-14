@@ -19,7 +19,14 @@ const CALL_SERVICE_TOOL = {
           { type: 'array', items: { type: 'string' }, description: 'Multiple entities like ["light.living_room","light.bedroom"]' },
         ],
       },
-      data: { type: 'object', description: 'Optional service data like brightness, volume_level, etc.' },
+      data: {
+        type: 'object',
+        description: 'Optional service data. For lights use brightness_pct (0-100, a percentage). For media_player use volume_level (0.0-1.0).',
+        properties: {
+          brightness_pct: { type: 'number', description: 'Light brightness 0-100 percent' },
+          volume_level: { type: 'number', description: 'Volume 0.0 to 1.0' },
+        },
+      },
     },
     required: ['domain', 'service', 'entity_id'],
   },
@@ -102,10 +109,10 @@ export class AiController {
     if (!apiKey) return { text: prompt, response: _t('AI 未配置，请在 .env 中设置 ANTHROPIC_API_KEY', 'AI not configured. Set ANTHROPIC_API_KEY in .env', 'AI پیکربندی نشده') };
 
     const langInstruction = lang === 'zh'
-      ? '请用中文回复。\n控制规则："开灯"=打开所有灯，"关灯"=关闭所有灯，"开客厅灯"=只开客厅灯。批量操作一次控制所有匹配设备。\n设备对照：客厅灯=light.demo_living_room, 卧室灯=light.demo_bedroom, 厨房灯=light.demo_kitchen, 餐厅灯=light.demo_dining_light, 办公室灯=light.demo_office_light, 厨房吊灯=light.demo_kitchen_light。\n"开门"=binary_sensor.turn_on front_door, "关门"=binary_sensor.turn_off front_door, "开窗帘"=binary_sensor.turn_on living_room_curtain, "关窗帘"=binary_sensor.turn_off living_room_curtain, "开车库门"=binary_sensor.turn_on garage_door, "关车库门"=binary_sensor.turn_off garage_door。'
+      ? '请用中文回复。\n控制规则："开灯"=打开所有灯，"关灯"=关闭所有灯，"开客厅灯"=只开客厅灯。批量操作一次控制所有匹配设备。\n设备对照：客厅灯=light.demo_living_room, 卧室灯=light.demo_bedroom, 厨房灯=light.demo_kitchen, 餐厅灯=light.demo_dining_light, 办公室灯=light.demo_office_light, 厨房吊灯=light.demo_kitchen_light。\n"开门"=binary_sensor.turn_on front_door, "关门"=binary_sensor.turn_off front_door, "开窗帘"=cover.open_cover demo_living_room_curtain, "关窗帘"=cover.close_cover demo_living_room_curtain, "开车库门"=cover.open_cover demo_garage_door, "关车库门"=cover.close_cover demo_garage_door。'
       : lang === 'fa'
       ? 'لطفاً به فارسی پاسخ دهید. اگر کاربر گفت "همه چراغ‌ها را روشن کن"، همه چراغ‌ها را یکجا کنترل کنید.'
-      : 'Respond in English. When the user asks to control multiple devices, call call_service once with entity_id as an array of all matching entities.\n"open the door" → binary_sensor.turn_on, "close the door" → binary_sensor.turn_off, "open the garage" → binary_sensor.turn_on garage_door, "close the curtains" → binary_sensor.turn_off curtain.';
+      : 'Respond in English. When the user asks to control multiple devices, call call_service once with entity_id as an array of all matching entities.\n"open the garage" → cover.open_cover cover.demo_garage_door, "close the garage" → cover.close_cover cover.demo_garage_door, "open the curtains" → cover.open_cover cover.demo_living_room_curtain, "close the curtains" → cover.close_cover cover.demo_living_room_curtain.';
 
     try {
       const allStates = this.stateMachine.getStates();
@@ -143,9 +150,15 @@ export class AiController {
       const toolUse = data.content?.find((c: any) => c.type === 'tool_use');
 
       if (toolUse) {
-        const { domain, service, entity_id, data: serviceData } = toolUse.input;
+        const { domain, service, entity_id, data: rawData } = toolUse.input;
+        // Convert brightness_pct (0-100) → brightness (0-255)
+        const serviceData = rawData ? { ...rawData } : undefined;
+        if (serviceData?.brightness_pct != null) {
+          serviceData.brightness = Math.round(Number(serviceData.brightness_pct) / 100 * 255);
+          delete serviceData.brightness_pct;
+        }
         const ids = Array.isArray(entity_id) ? entity_id : [entity_id];
-        this.logger.log(`AI: ${domain}.${service} ${ids.join(', ')}`);
+        this.logger.log(`AI: ${domain}.${service} ${ids.join(', ')} data=${JSON.stringify(serviceData)}`);
 
         let allFailed = true;
         for (const eid of ids) {

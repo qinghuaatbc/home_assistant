@@ -20,6 +20,21 @@ import {
   DEFAULT_QOS,
 } from './rti.constants';
 
+/** Per-entity custom topic/payload mapping */
+export interface RtiEntityMapping {
+  entity_id: string;
+  /** Topic RTI publishes to (HA subscribes for commands) */
+  subscribe_topic?: string;
+  /** Topic HA publishes state to (RTI subscribes for feedback) */
+  publish_topic?: string;
+  /** Payload meaning ON/open (default: "ON") */
+  payload_on?: string;
+  /** Payload meaning OFF/close (default: "OFF") */
+  payload_off?: string;
+  /** Payload meaning TOGGLE (default: "TOGGLE") */
+  payload_toggle?: string;
+}
+
 interface RtiConfig extends IntegrationConfig {
   broker: string;
   port?: number;
@@ -33,6 +48,8 @@ interface RtiConfig extends IntegrationConfig {
   state_domains?: string[];
   /** Retain flag on state topics (default: true so RTI gets last value on reconnect) */
   retain?: boolean;
+  /** Per-entity custom topic/payload overrides */
+  entities?: RtiEntityMapping[];
 }
 
 /**
@@ -79,6 +96,11 @@ export class RtiIntegration implements HaIntegration {
   private retain = true;
   private unsubscribeStateChanged: (() => void) | null = null;
 
+  /** subscribe_topic → entity mapping (custom per-entity topics) */
+  private readonly subTopicMap = new Map<string, RtiEntityMapping>();
+  /** entity_id → publish_topic (custom per-entity feedback topics) */
+  private readonly pubTopicMap = new Map<string, string>();
+
   constructor(
     private readonly serviceRegistry: ServiceRegistryService,
     private readonly eventBus: EventBusService,
@@ -99,6 +121,12 @@ export class RtiIntegration implements HaIntegration {
     this.statePrefix = cfg.state_prefix ?? RTI_STATE_PREFIX;
     this.stateDomains = new Set(cfg.state_domains ?? []);
     this.retain = cfg.retain ?? true;
+
+    // Build per-entity topic maps
+    for (const em of cfg.entities ?? []) {
+      if (em.subscribe_topic) this.subTopicMap.set(em.subscribe_topic, em);
+      if (em.publish_topic)   this.pubTopicMap.set(em.entity_id, em.publish_topic);
+    }
 
     const connected = await this.connectBroker();
     if (!connected) {
@@ -173,16 +201,30 @@ export class RtiIntegration implements HaIntegration {
 
   private subscribeCommands(): void {
     if (!this.client) return;
-    // Subscribe to all RTI command topics
+    // Wildcard subscription for convention-based topics
     this.client.subscribe(`${this.commandPrefix}/#`, { qos: DEFAULT_QOS }, (err) => {
       if (err) this.logger.error(`RTI subscribe error: ${err.message}`);
       else this.logger.log(`RTI subscribed to ${this.commandPrefix}/#`);
     });
+    // Subscribe to per-entity custom topics
+    for (const topic of this.subTopicMap.keys()) {
+      this.client.subscribe(topic, { qos: DEFAULT_QOS }, (err) => {
+        if (err) this.logger.error(`RTI entity sub error (${topic}): ${err.message}`);
+        else this.logger.log(`RTI subscribed entity topic: ${topic}`);
+      });
+    }
   }
 
   // ── Inbound: RTI → HA ────────────────────────────────────────────────────────
 
   private async handleCommand(topic: string, rawPayload: string): Promise<void> {
+    // Per-entity custom subscribe topic
+    const entityMapping = this.subTopicMap.get(topic);
+    if (entityMapping) {
+      await this.handleEntityMapping(entityMapping, rawPayload);
+      return;
+    }
+
     // Direct service call: rti/command/service
     if (topic === RTI_SERVICE_TOPIC || topic === `${this.commandPrefix}/service`) {
       await this.handleServiceCall(rawPayload);
@@ -245,6 +287,46 @@ export class RtiIntegration implements HaIntegration {
     }
   }
 
+  private async handleEntityMapping(em: RtiEntityMapping, rawPayload: string): Promise<void> {
+    const payload = rawPayload.trim();
+    const domain = em.entity_id.split('.')[0];
+    const payloadOn  = em.payload_on      ?? 'ON';
+    const payloadOff = em.payload_off     ?? 'OFF';
+    const payloadToggle = em.payload_toggle ?? 'TOGGLE';
+
+    this.logger.debug(`RTI entity ← ${em.entity_id}: ${payload}`);
+
+    if (payload.toUpperCase() === payloadToggle.toUpperCase()) {
+      await this.callService(domain, 'toggle', em.entity_id, {});
+      return;
+    }
+
+    let cmd: Record<string, unknown> = {};
+    try { cmd = JSON.parse(payload); } catch { cmd = { state: payload }; }
+    const stateStr = ((cmd.state as string | undefined) ?? payload).toUpperCase();
+
+    if (stateStr === payloadOn.toUpperCase() || stateStr === 'ON' || stateStr === '1' || stateStr === 'TRUE') {
+      const data: Record<string, unknown> = {};
+      if (cmd.brightness     != null) data.brightness = Number(cmd.brightness);
+      if (cmd.brightness_pct != null) data.brightness = Math.round(Number(cmd.brightness_pct) * 2.55);
+      if (domain === 'cover') {
+        await this.callService('cover', 'open_cover', em.entity_id, {});
+      } else {
+        await this.callService(domain, 'turn_on', em.entity_id, data);
+      }
+    } else if (stateStr === payloadOff.toUpperCase() || stateStr === 'OFF' || stateStr === '0' || stateStr === 'FALSE') {
+      if (domain === 'cover') {
+        await this.callService('cover', 'close_cover', em.entity_id, {});
+      } else {
+        await this.callService(domain, 'turn_off', em.entity_id, {});
+      }
+    } else if (cmd.volume != null) {
+      await this.callService('media_player', 'volume_set', em.entity_id, {
+        volume_level: Math.max(0, Math.min(100, Number(cmd.volume))) / 100,
+      });
+    }
+  }
+
   private async handleServiceCall(rawPayload: string): Promise<void> {
     let payload: Record<string, unknown>;
     try {
@@ -302,9 +384,9 @@ export class RtiIntegration implements HaIntegration {
     // Filter by domain if state_domains is configured
     if (this.stateDomains.size > 0 && !this.stateDomains.has(domain)) return;
 
-    // Build topic: rti/state/light/living_room
+    // Use custom publish topic if configured, else convention-based
     const topicSuffix = entity_id.replace('.', '/');
-    const topic = `${this.statePrefix}/${topicSuffix}`;
+    const topic = this.pubTopicMap.get(entity_id) ?? `${this.statePrefix}/${topicSuffix}`;
 
     // Build payload — state + key attributes flattened
     const attrs = new_state.attributes as Record<string, unknown>;

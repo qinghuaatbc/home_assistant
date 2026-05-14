@@ -1,9 +1,10 @@
+import { memo } from 'react'
 import { HaState } from '../../context/HaContext'
 import { useHa } from '../../context/HaContext'
 
 interface Props { state: HaState }
 
-export default function LightCard({ state }: Props) {
+function LightCard({ state }: Props) {
   const { callService } = useHa()
   const on = state.state === 'on'
   const name = (state.attributes.friendly_name as string) ?? state.entity_id
@@ -46,3 +47,5 @@ export default function LightCard({ state }: Props) {
     </div>
   )
 }
+
+export default memo(LightCard)

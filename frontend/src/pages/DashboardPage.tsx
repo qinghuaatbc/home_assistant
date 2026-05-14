@@ -47,18 +47,17 @@ export default function DashboardPage() {
     fetch('/api/entity_registry', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then((data: any) => {
         if (!Array.isArray(data)) return
-        const m = new Map<string, string>()
+        const areaMap = new Map<string, string>()
         const disabled = new Set<string>()
+        const platformMap = new Map<string, string>()
         data.forEach((e: any) => {
-          if (e.area_id) m.set(e.entity_id, e.area_id)
+          if (e.area_id) areaMap.set(e.entity_id, e.area_id)
           if (e.disabled) disabled.add(e.entity_id)
+          platformMap.set(e.entity_id, e.platform)
         })
-        setEntityAreas(m)
+        setEntityAreas(areaMap)
         setDisabledEntities(disabled)
-      }).catch(() => {})
-    fetch('/api/entity_registry', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then((data: any) => {
-        if (Array.isArray(data)) setPlatforms(new Map(data.map((e: any) => [e.entity_id, e.platform])))
+        setPlatforms(platformMap)
       }).catch(() => {}).finally(() => setLoading(false))
   }, [token])
 
@@ -89,8 +88,6 @@ export default function DashboardPage() {
 
     return { grouped, unassigned }
   }, [states, entityAreas, disabledEntities])
-
-  const areaMap = new Map(areas.map(a => [a.area_id, a.name]))
 
   const renderEntities = (entities: any[]) => {
     const first = entities[0]

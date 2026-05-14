@@ -14,6 +14,8 @@ interface IntegrationDef {
   domain: string; name: string; icon: string; desc: string
   fields: FieldDef[]
   dynamicFields?: { label: string; key: string; type?: string; placeholder?: string; options?: string[] }[]
+  devicesLabel?: string
+  addLabel?: string
 }
 
 const INTEGRATIONS: IntegrationDef[] = [
@@ -90,7 +92,17 @@ const INTEGRATIONS: IntegrationDef[] = [
       { key: 'password', label: 'Password (optional)', placeholder: '', default: '', type: 'password' },
       { key: 'command_prefix', label: 'Command prefix (RTI → HA)', placeholder: 'rti/command', default: 'rti/command' },
       { key: 'state_prefix', label: 'State prefix (HA → RTI)', placeholder: 'rti/state', default: 'rti/state' },
-    ]},
+    ],
+    dynamicFields: [
+      { label: 'Entity ID', key: 'entity_id', placeholder: 'light.demo_living_room' },
+      { label: 'Subscribe topic (RTI→HA)', key: 'subscribe_topic', placeholder: 'rti/cmd/light1' },
+      { label: 'Publish topic (HA→RTI)', key: 'publish_topic', placeholder: 'rti/fb/light1' },
+      { label: 'Payload ON', key: 'payload_on', placeholder: 'ON' },
+      { label: 'Payload OFF', key: 'payload_off', placeholder: 'OFF' },
+    ],
+    devicesLabel: 'Entity Mappings',
+    addLabel: '+ Add mapping',
+  },
   { domain: 'lutron_caseta', name: 'Lutron Caseta', icon: '💡', desc: 'Lutron Caseta Smart Bridge',
     fields: [
       { key: 'host', label: 'Bridge IP', placeholder: '192.168.1.167', default: '' },
@@ -162,6 +174,8 @@ export default function IntegrationsPage() {
                 name: cam.name || '',
                 rtsp_url: (cam.streams?.[0]?.rtsp_url) || '',
               }))
+            } else if (domain === 'rti' && k === 'entities') {
+              existing.devices = v as any[]
             } else {
               existing[k] = v
             }
@@ -353,6 +367,8 @@ export default function IntegrationsPage() {
                 streams: [{ label: 'Main', rtsp_url: d.rtsp_url }],
               }))
             }
+          } else if (k === 'devices' && int.domain === 'rti') {
+            if (Array.isArray(v) && v.length > 0) out.entities = v.filter((d: any) => d.entity_id)
           } else if (k === 'devices') { if (Array.isArray(v) && v.length > 0) out.devices = v }
           else if (v) { out[k] = v }
         }
@@ -533,33 +549,37 @@ export default function IntegrationsPage() {
                           style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
                       </div>
                     ))}
-                    {int.domain === 'rti' && (
-                      <RtiWebObjectPanel token={token} cfg={cfg} />
-                    )}
                     {int.dynamicFields && (
                       <div style={{ marginTop: 12 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>Devices</div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>{int.devicesLabel ?? 'Devices'}</div>
                         {(cfg.devices || []).map((dev: any, idx: number) => (
-                          <div key={idx} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+                          <div key={idx} style={{ marginBottom: 8, padding: '8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface2)' }}>
                             {int.dynamicFields!.map(f => (
-                              f.options
-                                ? <select key={f.key} value={dev[f.key] || ''}
-                                    onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
-                                    style={{ flex: 1, minWidth: 0, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 11 }}>
-                                    {f.options.map(o => <option key={o} value={o}>{o}</option>)}
-                                  </select>
-                                : <input key={f.key} type={f.type || 'text'} value={dev[f.key] || ''}
-                                    placeholder={f.placeholder || f.key}
-                                    onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
-                                    style={{ flex: 1, minWidth: 0, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 11 }} />
+                              <div key={f.key} style={{ marginBottom: 4 }}>
+                                <label style={{ fontSize: 10, color: 'var(--text2)', display: 'block', marginBottom: 2 }}>{f.placeholder || f.key}</label>
+                                {f.options
+                                  ? <select value={dev[f.key] || ''}
+                                      onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
+                                      style={{ width: '100%', padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 11 }}>
+                                      {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                                    </select>
+                                  : <input type={f.type || 'text'} value={dev[f.key] || ''}
+                                      placeholder={f.placeholder || f.key}
+                                      onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
+                                      style={{ width: '100%', padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 11 }} />
+                                }
+                              </div>
                             ))}
-                            <button className="btn" style={{ fontSize: 10, padding: '2px 6px', color: '#ff453a' }}
-                              onClick={() => removeDevice(int.domain, idx)}>✕</button>
+                            <button className="btn" style={{ fontSize: 10, padding: '2px 6px', color: '#ff453a', marginTop: 2 }}
+                              onClick={() => removeDevice(int.domain, idx)}>✕ Remove</button>
                           </div>
                         ))}
                         <button className="btn" style={{ fontSize: 10, padding: '4px 10px' }}
-                          onClick={() => addDevice(int.domain)}>+ Add device</button>
+                          onClick={() => addDevice(int.domain)}>{int.addLabel ?? '+ Add device'}</button>
                       </div>
+                    )}
+                    {int.domain === 'rti' && (
+                      <RtiWebObjectPanel token={token} cfg={cfg} />
                     )}
                     {/* Show existing devices from this integration */}
                     {reg.size > 0 && (
@@ -605,6 +625,13 @@ export default function IntegrationsPage() {
         {activeTab === 'integrations' && (
           <>
             <div className="section" style={{ marginTop: 24 }}>
+              <div className="section-title">⚙️ configuration.yaml</div>
+              <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 12px', paddingLeft: 4 }}>
+                直接编辑主配置文件，保存后自动重启服务。
+              </div>
+              <ConfigYamlEditor token={token} />
+            </div>
+            <div className="section" style={{ marginTop: 24 }}>
               <div className="section-title">📋 Dashboard Cards</div>
               <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 12px', paddingLeft: 4 }}>
                 Edit <code style={{ fontSize: 11, background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>dashboard.yaml</code> — assign card types to entities for each 2D panel tab.
@@ -626,6 +653,7 @@ export default function IntegrationsPage() {
 }
 
 function RtiWebObjectPanel({ token, cfg }: { token: string | null; cfg: any }) {
+  const devices: any[] = cfg.devices || []
   const [lltName, setLltName] = useState('RTI Panel')
   const [lltToken, setLltToken] = useState('')
   const [creating, setCreating] = useState(false)
@@ -695,6 +723,35 @@ function RtiWebObjectPanel({ token, cfg }: { token: string | null; cfg: any }) {
         <div><span style={{ color: '#ff9f0a' }}>{statePrefix}/light/living_room</span> → <span style={{ color: 'var(--text2)' }}>{`{"state":"on","brightness_pct":78}`}</span></div>
       </div>
 
+      {/* Per-entity topic table */}
+      {devices.filter((d: any) => d.entity_id).length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 6 }}><b style={{ color: 'var(--text)' }}>Entity topic map</b></div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, fontFamily: 'monospace' }}>
+              <thead>
+                <tr style={{ color: 'var(--text3)', textAlign: 'left' }}>
+                  <th style={{ padding: '2px 6px', whiteSpace: 'nowrap' }}>Entity</th>
+                  <th style={{ padding: '2px 6px', whiteSpace: 'nowrap', color: '#4d8fff' }}>Subscribe (RTI→HA)</th>
+                  <th style={{ padding: '2px 6px', whiteSpace: 'nowrap', color: '#ff9f0a' }}>Publish (HA→RTI)</th>
+                  <th style={{ padding: '2px 6px', whiteSpace: 'nowrap' }}>ON / OFF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {devices.filter((d: any) => d.entity_id).map((d: any, i: number) => (
+                  <tr key={i} style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                    <td style={{ padding: '3px 6px', color: 'var(--text)' }}>{d.entity_id}</td>
+                    <td style={{ padding: '3px 6px', color: '#4d8fff' }}>{d.subscribe_topic || '—'}</td>
+                    <td style={{ padding: '3px 6px', color: '#ff9f0a' }}>{d.publish_topic || '—'}</td>
+                    <td style={{ padding: '3px 6px', color: 'var(--text2)' }}>{d.payload_on || 'ON'} / {d.payload_off || 'OFF'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Web Object URL generator */}
       <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 6 }}><b style={{ color: 'var(--text)' }}>Web Object URL</b> (RTI touchpanel)</div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
@@ -719,6 +776,63 @@ function RtiWebObjectPanel({ token, cfg }: { token: string | null; cfg: any }) {
           ⚠ Copy this URL now — token cannot be retrieved again.
         </div>
       )}
+    </div>
+  )
+}
+
+function ConfigYamlEditor({ token }: { token: string | null }) {
+  const [content, setContent] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!token) return
+    fetch('/api/config/text', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(d => { setContent(d.content || ''); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [token])
+
+  const save = async () => {
+    setSaving(true); setMsg('')
+    try {
+      const r = await fetch('/api/config/text', {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      })
+      if (r.ok) {
+        setMsg('✅ Saved — server restarting…')
+        setTimeout(() => setMsg(''), 4000)
+      } else {
+        const d = await r.json().catch(() => ({}))
+        setMsg('❌ ' + (d.message || 'Save failed'))
+      }
+    } catch { setMsg('❌ Network error') }
+    setSaving(false)
+  }
+
+  if (loading) return <div style={{ fontSize: 12, color: 'var(--text2)' }}>Loading…</div>
+
+  return (
+    <div>
+      <textarea
+        value={content}
+        onChange={e => setContent(e.target.value)}
+        spellCheck={false}
+        style={{
+          width: '100%', minHeight: 420, padding: '10px 12px',
+          borderRadius: 8, border: '1px solid var(--border)',
+          background: 'var(--surface)', color: 'var(--text)',
+          fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6,
+          resize: 'vertical', boxSizing: 'border-box', outline: 'none',
+        }}
+      />
+      {msg && <div style={{ fontSize: 11, color: msg.startsWith('✅') ? '#30d158' : '#ff453a', marginTop: 4 }}>{msg}</div>}
+      <button className="btn btn-accent" onClick={save} disabled={saving}
+        style={{ marginTop: 8, fontSize: 12, padding: '6px 16px' }}>
+        {saving ? '…' : '💾 Save & Restart'}
+      </button>
     </div>
   )
 }

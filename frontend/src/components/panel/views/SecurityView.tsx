@@ -19,7 +19,7 @@ export function SecurityView({ states, cols }: { states: Map<string, HaState>; c
 
   const alarms = filterStates(states, s => s.entity_id.startsWith('alarm_control_panel.'), mapped)
   const locks = filterStates(states, s => s.entity_id.startsWith('lock.'), mapped)
-  const curtains = filterStates(states, s => s.entity_id.startsWith('binary_sensor.') && ['curtain', 'blind'].includes(String(s.attributes.device_class ?? '')), mapped)
+  const curtains = filterStates(states, s => (s.entity_id.startsWith('binary_sensor.') || s.entity_id.startsWith('cover.')) && ['curtain', 'blind'].includes(String(s.attributes.device_class ?? '')), mapped)
   const sensors = filterStates(states, s => s.entity_id.startsWith('binary_sensor.') && ['door', 'window', 'motion', 'garage_door'].includes(String(s.attributes.device_class ?? '')), mapped)
   const cameras = filterStates(states, s => s.entity_id.startsWith('camera.'), mapped)
   const alarmSwitches = filterStates(states, s => s.entity_id.startsWith('switch.') && (s.entity_id.includes('alarm') || s.entity_id.includes('siren')), mapped)

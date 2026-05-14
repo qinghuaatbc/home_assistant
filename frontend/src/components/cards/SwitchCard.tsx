@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { HaState, useHa } from '../../context/HaContext'
 
 interface Props { state: HaState }
@@ -7,7 +8,7 @@ const SWITCH_ICONS: Record<string, string> = {
   'switch.tv':  '📺',
 }
 
-export default function SwitchCard({ state }: Props) {
+function SwitchCard({ state }: Props) {
   const { callService } = useHa()
   const on = state.state === 'on'
   const name = (state.attributes.friendly_name as string) ?? state.entity_id
@@ -31,3 +32,5 @@ export default function SwitchCard({ state }: Props) {
     </div>
   )
 }
+
+export default memo(SwitchCard)

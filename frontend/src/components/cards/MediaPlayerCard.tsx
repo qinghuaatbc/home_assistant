@@ -1,8 +1,9 @@
+import { memo } from 'react'
 import { HaState, useHa } from '../../context/HaContext'
 
 interface Props { state: HaState }
 
-export default function MediaPlayerCard({ state }: Props) {
+function MediaPlayerCard({ state }: Props) {
   const { callService } = useHa()
   const a = state.attributes
   const on = state.state === 'on'
@@ -73,3 +74,5 @@ export default function MediaPlayerCard({ state }: Props) {
     </div>
   )
 }
+
+export default memo(MediaPlayerCard)

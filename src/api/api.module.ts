@@ -10,6 +10,7 @@ import { BackupController } from './backup/backup.controller';
 import { AiController } from './ai/ai.controller';
 import { GlbController } from './glb/glb.controller';
 import { PluginController } from './plugin/plugin.controller';
+import { WeatherController } from './weather/weather.controller';
 import { AuthModule } from '../auth/auth.module';
 import { RegistryModule } from '../registry/registry.module';
 import { ContextService } from '../core/context/context.service';
@@ -28,6 +29,7 @@ import { ContextService } from '../core/context/context.service';
     AiController,
     GlbController,
     PluginController,
+    WeatherController,
   ],
   providers: [ContextService],
 })

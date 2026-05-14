@@ -143,6 +143,31 @@ export class ConfigController {
     return { ok: true };
   }
 
+  @Get('text')
+  @ApiOperation({ summary: 'Get raw configuration.yaml for direct editing' })
+  getConfigText() {
+    const configPath = process.env.HA_CONFIG_PATH ?? path.resolve(process.cwd(), 'config', 'configuration.yaml');
+    if (!fs.existsSync(configPath)) return { content: '' };
+    return { content: fs.readFileSync(configPath, 'utf-8') };
+  }
+
+  @Put('text')
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: 'Save raw configuration.yaml and restart server' })
+  async saveConfigText(@Body() body: { content: string }) {
+    const logger = new Logger('ConfigText');
+    const configPath = process.env.HA_CONFIG_PATH ?? path.resolve(process.cwd(), 'config', 'configuration.yaml');
+    try { yaml.load(body.content); } catch (e: any) { throw new BadRequestException(`Invalid YAML: ${e.message}`); }
+    fs.writeFileSync(configPath, body.content, 'utf-8');
+    logger.log('configuration.yaml saved directly, restarting...');
+    setTimeout(() => {
+      exec('pm2 restart home-assistant', (err) => {
+        if (err) logger.error(`Restart failed: ${err.message}`);
+      });
+    }, 500);
+    return { ok: true, message: 'Saved. Server restarting…' };
+  }
+
   @Post('apply')
   @UseGuards(AdminGuard)
   @ApiOperation({ summary: 'Save integration config and restart server' })

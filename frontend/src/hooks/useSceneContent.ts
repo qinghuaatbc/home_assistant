@@ -393,7 +393,7 @@ export function useSceneContent(p: Props) {
         if (eid.startsWith('light.')) match = p.activeBehaviors!.has('light')
         else if (eid.startsWith('media_player.')) match = p.activeBehaviors!.has('media_player')
         else if (eid.startsWith('switch.')) match = p.activeBehaviors!.has('switch')
-        else if (dc === 'garage_door') match = p.activeBehaviors!.has('garage_door')
+        else if (dc === 'garage_door' || dc === 'garage') match = p.activeBehaviors!.has('garage_door')
         else if (dc === 'curtain' || dc === 'blind') match = p.activeBehaviors!.has('curtain')
         else if (dc === 'door' || dc === 'window') match = true
         else if (eid.startsWith('binary_sensor.') && dc === 'door') match = true // door_r/door_s always visible
@@ -415,7 +415,7 @@ export function useSceneContent(p: Props) {
       if (eid.startsWith('light.')) match = p.activeBehaviors!.has('light')
       else if (eid.startsWith('media_player.')) match = p.activeBehaviors!.has('media_player')
       else if (eid.startsWith('switch.')) match = p.activeBehaviors!.has('switch')
-      else if (dc === 'garage_door') match = p.activeBehaviors!.has('garage_door')
+      else if (dc === 'garage_door' || dc === 'garage') match = p.activeBehaviors!.has('garage_door')
       else if (dc === 'curtain' || dc === 'blind') match = p.activeBehaviors!.has('curtain')
       else if (dc === 'door') match = true // doors always clickable
       ring.visible = match
@@ -425,7 +425,7 @@ export function useSceneContent(p: Props) {
   // ── Per-frame: smooth door/curtain animation ──────────────────────────
   const onAnimate = useCallback((t: number) => {
     senGlbRefs.current.forEach(({ doorObj, deviceClass, behavior }, eid) => {
-      const open = p.statesRef.current.get(eid)?.state === 'on'
+      const s = p.statesRef.current.get(eid)?.state; const open = s === 'on' || s === 'open'
       if (deviceClass === 'garage_door' || deviceClass === 'curtain' || deviceClass === 'blind') {
         const cp = doorObj.userData.clipPlane as THREE.Plane | undefined
         if (cp) {

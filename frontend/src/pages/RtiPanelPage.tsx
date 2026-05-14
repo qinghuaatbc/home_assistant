@@ -23,7 +23,7 @@ const FloorPlan3D = lazy(() => import('../components/FloorPlan3DScene').then(m =
 export default function RtiPanelPage({ standaloneToken }: { standaloneToken?: string }) {
   const [mode, setMode] = useState<Mode>('3d')
   const [cat, setCat] = useState<Cat>('lights')
-  const [theme, setTheme] = useState<Theme>('day')
+  const [theme, setTheme] = useState<Theme>('galaxy')
   const [cardSize, setCardSize] = useState<CardSize>('md')
   const cycleSize = useCallback(() => setCardSize(s => CARD_SIZES[(CARD_SIZES.indexOf(s) + 1) % CARD_SIZES.length]), [])
   const [soundMode, setSoundMode] = useState(0)

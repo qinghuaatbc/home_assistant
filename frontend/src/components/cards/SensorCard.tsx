@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { HaState } from '../../context/HaContext'
 
 interface Props { state: HaState; binary?: boolean }
@@ -28,7 +29,7 @@ function binaryLabel(state: HaState): string {
   return on ? pair[0] : pair[1]
 }
 
-export default function SensorCard({ state, binary = false }: Props) {
+function SensorCard({ state, binary = false }: Props) {
   const name = (state.attributes.friendly_name as string) ?? state.entity_id
   const unit = (state.attributes.unit_of_measurement as string) ?? ''
   const icon = sensorIcon(state)
@@ -52,3 +53,5 @@ export default function SensorCard({ state, binary = false }: Props) {
     </div>
   )
 }
+
+export default memo(SensorCard)

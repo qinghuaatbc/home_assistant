@@ -103,6 +103,7 @@ export default function EntitiesPage() {
       if (!m.has(d)) m.set(d, [])
       m.get(d)!.push(s)
     }
+    for (const arr of m.values()) arr.sort((a, b) => a.entity_id.localeCompare(b.entity_id))
     return m
   }, [entities, reg])
 
@@ -129,7 +130,7 @@ export default function EntitiesPage() {
             <div className="section" key={domain} style={{ marginTop: 16 }}>
               <div className="section-title">{meta.icon} {meta.label} ({items.length})</div>
               <div className="ios-list">
-                {items.sort((a, b) => a.entity_id.localeCompare(b.entity_id)).map(s => {
+                {items.map(s => {
                   const name = reg.get(s.entity_id)?.name || (s.attributes.friendly_name as string) || s.entity_id
                   const on = s.state === 'on'
                   const isEditing = editing === s.entity_id

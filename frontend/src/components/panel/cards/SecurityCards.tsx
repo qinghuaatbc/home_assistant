@@ -125,14 +125,16 @@ export const LockTile = memo(({ s }: { s: HaState }) => {
 export const CurtainTile = memo(({ s }: { s: HaState }) => {
   const callService = useRestCall()
   const th = useTh(); const sound = useSound()
-  const open = s.state === 'on'
+  const open = s.state === 'on' || s.state === 'open'
   const name = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
   const glowColor = open ? 'rgb(48,209,88)' : undefined
+  const domain = s.entity_id.split('.')[0]
 
   const toggle = useCallback(() => {
-    callService('binary_sensor', open ? 'turn_off' : 'turn_on', {}, s.entity_id)
+    if (domain === 'cover') callService('cover', open ? 'close_cover' : 'open_cover', {}, s.entity_id)
+    else callService('binary_sensor', open ? 'turn_off' : 'turn_on', {}, s.entity_id)
     sound('switch', !open, name)
-  }, [open, s.entity_id, callService, sound, name])
+  }, [open, domain, s.entity_id, callService, sound, name])
 
   return (
     <IconTile

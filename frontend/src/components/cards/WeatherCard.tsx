@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { HaState } from '../../context/HaContext'
 
 interface Props { state: HaState }
@@ -12,7 +13,7 @@ function bearingToCompass(deg: number): string {
   return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(deg / 45) % 8]
 }
 
-export default function WeatherCard({ state }: Props) {
+function WeatherCard({ state }: Props) {
   const a = state.attributes
   const icon = CONDITION_ICON[state.state] ?? '🌡️'
   const tempUnit = (a.temperature_unit as string) ?? '°C'
@@ -75,3 +76,5 @@ export default function WeatherCard({ state }: Props) {
     </div>
   )
 }
+
+export default memo(WeatherCard)
