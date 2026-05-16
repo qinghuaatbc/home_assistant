@@ -108,7 +108,7 @@ function LongLivedTokensSection() {
           onKeyDown={e => e.key === 'Enter' && create()}
           placeholder="Token name (e.g. RTI Panel)"
           style={{
-            flex: 1, background: 'var(--bg2)', border: '1px solid var(--border)',
+            flex: 1, background: 'var(--bg2)', border: '1px solid var(--sep)',
             borderRadius: 8, padding: '7px 12px', color: 'var(--text1)', fontSize: 14,
           }}
         />
@@ -116,7 +116,7 @@ function LongLivedTokensSection() {
           onClick={create}
           disabled={creating || !newName.trim()}
           style={{
-            background: 'var(--accent)', color: '#fff', border: 'none',
+            background: 'var(--blue)', color: '#fff', border: 'none',
             borderRadius: 8, padding: '7px 14px', fontSize: 13, cursor: 'pointer',
             opacity: creating || !newName.trim() ? 0.5 : 1,
           }}
@@ -144,7 +144,7 @@ function LongLivedTokensSection() {
             <button
               onClick={() => copy(newToken)}
               style={{
-                background: copied ? 'rgba(48,209,88,0.2)' : 'var(--accent)',
+                background: copied ? 'rgba(48,209,88,0.2)' : 'var(--blue)',
                 color: copied ? '#30d158' : '#fff', border: 'none',
                 borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
               }}
@@ -154,7 +154,7 @@ function LongLivedTokensSection() {
             <button
               onClick={() => copy(`${window.location.origin}/panel?token=${newToken}`)}
               style={{
-                background: 'rgba(10,132,255,0.15)', color: 'var(--accent)',
+                background: 'rgba(10,132,255,0.15)', color: 'var(--blue)',
                 border: 'none', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
               }}
             >
@@ -178,7 +178,7 @@ function LongLivedTokensSection() {
         tokens.map(t => (
           <div key={t.id} style={{
             display: 'flex', alignItems: 'center', gap: 10,
-            padding: '8px 0', borderBottom: '1px solid var(--border)',
+            padding: '8px 0', borderBottom: '1px solid var(--sep)',
           }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, color: 'var(--text1)', fontWeight: 500 }}>{t.name}</div>
@@ -292,14 +292,14 @@ function DashboardEditorSection() {
           style={{
             width: '100%', minHeight: 260, fontFamily: 'monospace', fontSize: 12,
             padding: 12, borderRadius: 10, boxSizing: 'border-box',
-            background: 'var(--surface)', border: '1px solid var(--border)',
+            background: 'var(--surface)', border: '1px solid var(--sep)',
             color: 'var(--text)', resize: 'vertical', lineHeight: 1.55,
           }}
         />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={save} disabled={saving} style={{
             padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer',
-            background: 'var(--accent)', color: '#fff', fontWeight: 600, fontSize: 13,
+            background: 'var(--blue)', color: '#fff', fontWeight: 600, fontSize: 13,
           }}>{saving ? '保存中…' : '保存'}</button>
           {msg && <span style={{ fontSize: 12, color: msg.startsWith('✅') ? '#30d158' : '#ff453a' }}>{msg}</span>}
         </div>
@@ -314,9 +314,9 @@ function DashboardEditorSection() {
               display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px',
               borderRadius: 8, cursor: 'pointer', fontSize: 12,
               background: copied === c.type ? 'rgba(48,209,88,0.12)' : 'var(--surface)',
-              border: '1px solid var(--border)', transition: 'background 0.2s',
+              border: '1px solid var(--sep)', transition: 'background 0.2s',
             }}>
-              <code style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent)', minWidth: 100 }}>{c.type}</code>
+              <code style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--blue)', minWidth: 100 }}>{c.type}</code>
               <span style={{ color: 'var(--text)', flex: 1 }}>{c.desc}</span>
               <span style={{ color: 'var(--text2)', fontSize: 11 }}>{c.domain}</span>
               {copied === c.type && <span style={{ color: '#30d158', fontSize: 11 }}>✓ 已复制</span>}
@@ -335,12 +335,12 @@ function DashboardEditorSection() {
             onChange={e => setSearch(e.target.value)}
             style={{
               flex: 1, padding: '7px 10px', borderRadius: 8, fontSize: 12,
-              background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)',
+              background: 'var(--surface)', border: '1px solid var(--sep)', color: 'var(--text)',
             }}
           />
           <select value={domainFilter} onChange={e => setDomainFilter(e.target.value)} style={{
             padding: '7px 8px', borderRadius: 8, fontSize: 12,
-            background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)',
+            background: 'var(--surface)', border: '1px solid var(--sep)', color: 'var(--text)',
           }}>
             <option value="">全部 domain</option>
             {domains.map(d => <option key={d} value={d}>{d}</option>)}
@@ -352,9 +352,9 @@ function DashboardEditorSection() {
               display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px',
               borderRadius: 8, cursor: 'pointer', fontSize: 12,
               background: copied === e.id ? 'rgba(48,209,88,0.12)' : 'var(--surface)',
-              border: '1px solid var(--border)', transition: 'background 0.2s',
+              border: '1px solid var(--sep)', transition: 'background 0.2s',
             }}>
-              <code style={{ fontFamily: 'monospace', color: 'var(--accent)', flex: 1 }}>{e.id}</code>
+              <code style={{ fontFamily: 'monospace', color: 'var(--blue)', flex: 1 }}>{e.id}</code>
               <span style={{ color: 'var(--text2)', fontSize: 11, flexShrink: 0 }}>{e.name}</span>
               {copied === e.id && <span style={{ color: '#30d158', fontSize: 11, flexShrink: 0 }}>✓</span>}
             </div>
@@ -406,7 +406,7 @@ function PanelQrSection() {
         <button
           onClick={generate}
           disabled={loading}
-          style={{ fontSize: 12, color: 'var(--accent)', background: 'rgba(10,132,255,0.1)', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', opacity: loading ? 0.5 : 1 }}
+          style={{ fontSize: 12, color: 'var(--blue)', background: 'rgba(10,132,255,0.1)', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', opacity: loading ? 0.5 : 1 }}
         >
           {loading ? '…' : '📱 Generate QR Code for Panel'}
         </button>
@@ -414,7 +414,7 @@ function PanelQrSection() {
         <>
           <button
             onClick={() => setShow(s => !s)}
-            style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: show ? 10 : 0 }}
+            style={{ fontSize: 12, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: show ? 10 : 0 }}
           >
             {show ? '▲ Hide QR Code' : '▼ Show QR Code'}
           </button>
@@ -427,7 +427,7 @@ function PanelQrSection() {
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   onClick={() => navigator.clipboard.writeText(url!)}
-                  style={{ fontSize: 12, color: 'var(--accent)', background: 'rgba(10,132,255,0.1)', border: 'none', borderRadius: 8, padding: '5px 14px', cursor: 'pointer' }}
+                  style={{ fontSize: 12, color: 'var(--blue)', background: 'rgba(10,132,255,0.1)', border: 'none', borderRadius: 8, padding: '5px 14px', cursor: 'pointer' }}
                 >
                   Copy URL
                 </button>
@@ -620,23 +620,38 @@ function NotificationRulesSection() {
 
           {saveError && <div style={{ fontSize: 12, color: '#ff453a', marginBottom: 10, padding: '6px 8px', background: 'rgba(255,69,58,0.1)', borderRadius: 6 }}>{saveError}</div>}
 
-          <div style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 4 }}>Entity ID (e.g. cover.garage_door)</div>
+          <div style={{ marginBottom: 8, position: 'relative' }}>
+            <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 4 }}>Entity ID</div>
             <input value={form.entity_id}
               onChange={e => { setForm(f => ({ ...f, entity_id: e.target.value })); setSearch(e.target.value) }}
-              list="nrule-entities" placeholder="cover.garage_door" autoCapitalize="none" autoCorrect="off"
+              placeholder="cover.garage_door" autoCapitalize="none" autoCorrect="off" autoComplete="off"
               style={inputStyle} />
-            <datalist id="nrule-entities">
-              {entitySuggestions.map(e => <option key={e.id} value={e.id} label={e.name} />)}
-            </datalist>
+            {search && entitySuggestions.length > 0 && !entitySuggestions.find(e => e.id === form.entity_id) && (
+              <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 99, background: 'var(--surface)', border: '1px solid var(--sep)', borderRadius: 8, maxHeight: 160, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+                {entitySuggestions.map(e => (
+                  <div key={e.id} onMouseDown={ev => { ev.preventDefault(); setForm(f => ({ ...f, entity_id: e.id })); setSearch(e.id) }}
+                    style={{ padding: '7px 10px', cursor: 'pointer', borderBottom: '1px solid var(--sep)', display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: 'var(--blue)', fontFamily: 'monospace', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.id}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text2)', flexShrink: 0 }}>{e.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div style={{ marginBottom: 8 }}>
             <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 4 }}>State (e.g. open, on, unlocked)</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: suggestions.length ? 6 : 0 }}>
+              {suggestions.map(s => (
+                <button key={s} onMouseDown={() => setForm(f => ({ ...f, state: s }))}
+                  style={{ padding: '3px 10px', borderRadius: 6, border: `1px solid ${form.state === s ? 'var(--blue)' : 'var(--sep)'}`, background: form.state === s ? 'rgba(10,132,255,0.12)' : 'var(--surface2)', color: form.state === s ? 'var(--blue)' : 'var(--text)', fontSize: 12, cursor: 'pointer' }}>
+                  {s}
+                </button>
+              ))}
+            </div>
             <input value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))}
-              list="nrule-states" placeholder={suggestions[0] ?? 'on'} autoCapitalize="none" autoCorrect="off"
+              placeholder={suggestions[0] ?? 'on'} autoCapitalize="none" autoCorrect="off"
               style={inputStyle} />
-            <datalist id="nrule-states">{suggestions.map(s => <option key={s} value={s} />)}</datalist>
           </div>
 
           <div style={{ marginBottom: 8 }}>

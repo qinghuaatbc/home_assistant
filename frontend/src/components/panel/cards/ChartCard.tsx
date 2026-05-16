@@ -50,13 +50,14 @@ export const ChartCard = memo(({ s }: { s: HaState }) => {
   useEffect(() => {
     if (!token) return
     const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
-    fetch(`/api/history/${encodeURIComponent(s.entity_id)}?since=${since}`, {
+    fetch(`/api/history/period/${encodeURIComponent(since)}?filter_entity_id=${encodeURIComponent(s.entity_id)}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.ok ? r.json() : [])
-      .then((data: { state: string; last_changed: string }[]) => {
-        const pts = data
-          .map(d => ({ t: new Date(d.last_changed).getTime(), v: parseFloat(d.state) }))
+      .then((data: { state: string; last_changed: string }[][]) => {
+        const records = Array.isArray(data) ? (data[0] ?? []) : []
+        const pts = records
+          .map((d: { state: string; last_changed: string }) => ({ t: new Date(d.last_changed).getTime(), v: parseFloat(d.state) }))
           .filter(p => !isNaN(p.v))
         setPoints(pts)
       })

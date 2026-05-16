@@ -242,7 +242,7 @@ export default function IntegrationsPage() {
         setReg(new Map(list.map(e => [e.entity_id, e])))
       }).catch(() => {})
     load()
-    const iv = setInterval(load, 5000)
+    const iv = setInterval(load, 60000)
     return () => clearInterval(iv)
   }, [token])
 

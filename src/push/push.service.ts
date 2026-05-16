@@ -82,7 +82,7 @@ export class PushService implements OnModuleInit {
         await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload)
       } catch (err: any) {
         if (err.statusCode === 404 || err.statusCode === 410) dead.push(sub.endpoint)
-        else this.logger.warn(`Push failed for ${sub.endpoint}: ${err.message}`)
+        else this.logger.warn(`Push failed [${err.statusCode ?? '?'}] ${sub.endpoint.slice(0, 40)}: ${err.message} ${err.body ?? ''}`)
       }
     }))
 
