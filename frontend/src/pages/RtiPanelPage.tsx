@@ -58,16 +58,25 @@ export default function RtiPanelPage({ standaloneToken }: { standaloneToken?: st
     })
   }, [states, addToast])
   const [cat, setCat] = useState<Cat>('lights')
-  const [theme, setTheme] = useState<Theme>('day')
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem('ha_theme')
+    return saved === 'dark' ? 'dark' : 'day'
+  })
   const [cardSize, setCardSize] = useState<CardSize>('md')
   const cycleSize = useCallback(() => setCardSize(s => CARD_SIZES[(CARD_SIZES.indexOf(s) + 1) % CARD_SIZES.length]), [])
   const [soundMode, setSoundMode] = useState(2)
-  const [lang, setLangState] = useState<Lang>('en')
+  const [lang, setLangState] = useState<Lang>(() => (localStorage.getItem('ha_lang') as Lang) || 'en')
   const isLandscape = useIsLandscape()
   useRtiStyles()
 
   // Sync lang state → sounds module on mount and on change
   useEffect(() => { setLang(lang) }, [lang])
+
+  // Apply light/dark class on mount and theme change
+  useEffect(() => {
+    if (theme === 'day') document.documentElement.classList.add('light')
+    else document.documentElement.classList.remove('light')
+  }, [theme])
 
   // Load 3D mapped entity IDs — fallback filter when no dashboard.yaml view entry
   const [mappedEntityIds, setMappedEntityIds] = useState<Set<string> | null>(null)
@@ -103,9 +112,21 @@ export default function RtiPanelPage({ standaloneToken }: { standaloneToken?: st
   const cycleLang = useCallback(() => {
     const next = LANG_LIST[(LANG_LIST.indexOf(lang) + 1) % LANG_LIST.length]
     setLangState(next); setLang(next)
+    localStorage.setItem('ha_lang', next)
+    window.dispatchEvent(new CustomEvent('ha-lang', { detail: next }))
   }, [lang])
 
-  const toggleTheme = useCallback(() => setTheme(t => THEMES[(THEMES.indexOf(t) + 1) % THEMES.length]), [])
+  const toggleTheme = useCallback(() => setTheme(t => {
+    const next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length]
+    if (next === 'day') {
+      document.documentElement.classList.add('light')
+      localStorage.setItem('ha_theme', 'light')
+    } else {
+      document.documentElement.classList.remove('light')
+      localStorage.setItem('ha_theme', 'dark')
+    }
+    return next
+  }), [])
   const cycleSound = useCallback(() => setSoundMode(m => (m + 1) % 3), [])
 
   const BG_COLORS: Record<Theme, string> = {
@@ -203,7 +224,7 @@ export default function RtiPanelPage({ standaloneToken }: { standaloneToken?: st
               </div>
             )}
 
-            {/* Right sidebar — always visible */}
+            {/* Right sidebar */}
             <RightSidebar
               mode={mode} onMode={setMode}
               theme={theme} onTheme={toggleTheme}

@@ -31,4 +31,10 @@ export class PushController {
     await this.push.sendToAll('🔔 Test Notification', 'Push notifications are working!')
     return { ok: true }
   }
+
+  @Get('history')
+  @UseGuards(JwtAuthGuard)
+  async history() {
+    return this.push.getHistory(200)
+  }
 }

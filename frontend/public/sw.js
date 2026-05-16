@@ -4,16 +4,19 @@ self.addEventListener('activate', e => e.waitUntil(self.clients.claim()))
 
 self.addEventListener('push', e => {
   if (!e.data) return
-  let payload = { title: 'Home Assistant', body: '', icon: '/favicon.svg' }
+  let payload = { title: 'Home Assistant', body: '', icon: '/favicon.svg', data: {} }
   try { payload = { ...payload, ...e.data.json() } } catch {}
+  const isCall = payload.data && payload.data.type === 'call'
   e.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
       icon: payload.icon,
       badge: '/icon-192.svg',
-      vibrate: [200, 100, 200],
-      tag: 'ha-alert',
+      vibrate: isCall ? [500, 200, 500, 200, 500, 200, 500] : [200, 100, 200],
+      tag: isCall ? 'comm-call' : 'ha-alert',
       renotify: true,
+      requireInteraction: isCall,
+      data: payload.data,
     })
   )
 })

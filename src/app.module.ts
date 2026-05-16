@@ -17,6 +17,11 @@ import {
 import { ContextService } from './core/context/context.service';
 import { PushModule } from './push/push.module';
 import { CommModule } from './comm/comm.module';
+import { ScheduleModule } from './schedule/schedule.module';
+import { GeofenceModule } from './geofence/geofence.module';
+import { SunModule } from './sun/sun.module';
+import { VoiceLogModule } from './voice-log/voice-log.module';
+import { AnomalyModule } from './anomaly/anomaly.module';
 
 @Module({
   imports: [
@@ -64,6 +69,21 @@ import { CommModule } from './comm/comm.module';
 
     // Real-time comm (text chat + WebRTC signaling)
     CommModule,
+
+    // Thermostat scheduling
+    ScheduleModule,
+
+    // Geofencing / location-based triggers
+    GeofenceModule,
+
+    // Sun / sunrise / sunset
+    SunModule,
+
+    // Voice command history
+    VoiceLogModule,
+
+    // AI anomaly detection (power spikes + door left open)
+    AnomalyModule,
   ],
 })
 export class AppModule implements OnModuleInit {

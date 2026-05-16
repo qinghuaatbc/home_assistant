@@ -6,6 +6,7 @@ import { getLang, playDone, speakAndThen } from './utils/sounds'
 import { ToastProvider } from './context/ToastContext'
 import { CommProvider } from './context/CommContext'
 import { CommPanel } from './components/comm/CommPanel'
+import DoorbellOverlay from './components/DoorbellOverlay'
 import LoginPage from './pages/LoginPage'
 import TabBar from './components/TabBar'
 
@@ -19,7 +20,15 @@ const HistoryPage      = lazy(() => import('./pages/HistoryPage'))
 const AreasPage        = lazy(() => import('./pages/AreasPage'))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage'))
 const SettingsPage     = lazy(() => import('./pages/SettingsPage'))
-const RtiPanelPage     = lazy(() => import('./pages/RtiPanelPage'))
+const RtiPanelPage        = lazy(() => import('./pages/RtiPanelPage'))
+const NotificationsPage   = lazy(() => import('./pages/NotificationsPage'))
+const GeofencePage        = lazy(() => import('./pages/GeofencePage'))
+const OtaPage             = lazy(() => import('./pages/OtaPage'))
+const PersonsPage         = lazy(() => import('./pages/PersonsPage'))
+const EnergyPage          = lazy(() => import('./pages/EnergyPage'))
+const ThermostatPage      = lazy(() => import('./pages/ThermostatPage'))
+const ScenesPage          = lazy(() => import('./pages/ScenesPage'))
+const CameraGridPage      = lazy(() => import('./pages/CameraGridPage'))
 
 function getToken(): string {
   const stored = localStorage.getItem('ha_token')
@@ -276,6 +285,14 @@ function AuthLayout() {
             <Route path="areas" element={<AreasPage />} />
             <Route path="integrations" element={<IntegrationsPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="geofence" element={<GeofencePage />} />
+            <Route path="ota" element={<OtaPage />} />
+            <Route path="persons" element={<PersonsPage />} />
+            <Route path="energy" element={<EnergyPage />} />
+            <Route path="thermostat" element={<ThermostatPage />} />
+            <Route path="scenes" element={<ScenesPage />} />
+            <Route path="cameras" element={<CameraGridPage />} />
           </Routes>
         </Suspense>
       </div>
@@ -297,6 +314,7 @@ function RtiPanel() {
           </Suspense>
           <FloatingMic />
           <CommPanel />
+          <DoorbellOverlay />
         </CommProvider>
       </ToastProvider>
     </HaProvider>
@@ -317,6 +335,7 @@ export default function App() {
               <CommProvider>
                 <AuthLayout />
                 <CommPanel />
+                <DoorbellOverlay />
               </CommProvider>
             </ToastProvider>
           </HaProvider>

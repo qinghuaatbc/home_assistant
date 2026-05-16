@@ -1,5 +1,6 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { useHa } from '../context/HaContext'
+import ShortcutBar from '../components/ShortcutBar'
 import WeatherCard from '../components/cards/WeatherCard'
 import CameraCard from '../components/cards/CameraCard'
 import LightCard from '../components/cards/LightCard'
@@ -18,11 +19,42 @@ const DOMAIN_META: Record<string, { label: string; icon: string }> = {
   automation:    { label: 'Automations',     icon: '⚡' },
 }
 
+const ORDER_KEY = 'ha_section_order'
+function loadOrder(): string[] {
+  try { return JSON.parse(localStorage.getItem(ORDER_KEY) || '[]') } catch { return [] }
+}
+
 function usePinned() {
-  const [pinned, setPinned] = useState<Set<string>>(() => {
+  const [pinned] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('ha_pinned') || '[]')) } catch { return new Set<string>() }
   })
   return pinned
+}
+
+interface SunData { rise: string; set: string; elevation: number; isAboveHorizon: boolean }
+
+function SunWidget({ token }: { token: string }) {
+  const [sun, setSun] = useState<SunData | null>(null)
+  useEffect(() => {
+    fetch('/api/sun', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(setSun).catch(() => {})
+  }, [token])
+  if (!sun) return null
+  const fmt = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const above = sun.isAboveHorizon
+  return (
+    <div style={{ display: 'flex', gap: 12, padding: '8px 12px', background: 'var(--card)', borderRadius: 10, margin: '0 0 8px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 24 }}>{above ? '☀️' : '🌙'}</span>
+      <div style={{ fontSize: 12, color: 'var(--text2)' }}>
+        <span style={{ color: 'var(--text)', fontWeight: 600 }}>{above ? 'Sun is up' : 'Below horizon'}</span>
+        <span style={{ marginLeft: 6 }}>{sun.elevation > 0 ? '+' : ''}{sun.elevation}°</span>
+      </div>
+      <div style={{ display: 'flex', gap: 14, fontSize: 12 }}>
+        <span>🌅 <b>{fmt(sun.rise)}</b></span>
+        <span>🌇 <b>{fmt(sun.set)}</b></span>
+      </div>
+    </div>
+  )
 }
 
 export default function DashboardPage() {
@@ -33,6 +65,7 @@ export default function DashboardPage() {
     fetch('/api/config/3d-mappings', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then((d: any) => setMappingCount(Object.keys(d).filter(k => k !== 'mappings').length)).catch(() => {})
   }, [token])
+
   const pinned = usePinned()
   const [areas, setAreas] = useState<{ area_id: string; name: string }[]>([])
   const [entityAreas, setEntityAreas] = useState<Map<string, string>>(new Map())
@@ -67,11 +100,9 @@ export default function DashboardPage() {
     return n
   }, [states])
 
-  // Group by area, then by domain (skip disabled)
   const byArea = useMemo(() => {
     const unassigned: Record<string, unknown[]> = {}
     const grouped: Record<string, Record<string, unknown[]>> = {}
-
     for (const s of states.values()) {
       if (disabledEntities.has(s.entity_id)) continue
       const areaId = entityAreas.get(s.entity_id)
@@ -85,9 +116,107 @@ export default function DashboardPage() {
         unassigned[domain].push(s)
       }
     }
-
     return { grouped, unassigned }
   }, [states, entityAreas, disabledEntities])
+
+  // ─── Section ordering ─────────────────────────────────────────────────────
+
+  // Canonical section ids: 'pinned', area_ids, 'other'
+  const allSectionIds = useMemo(() => {
+    const ids: string[] = []
+    if (pinned.size > 0) ids.push('pinned')
+    areas.forEach(a => {
+      if (byArea.grouped[a.area_id] && Object.keys(byArea.grouped[a.area_id]).length > 0)
+        ids.push(a.area_id)
+    })
+    if (Object.keys(byArea.unassigned).length > 0) ids.push('other')
+    return ids
+  }, [pinned, areas, byArea])
+
+  const [sectionOrder, setSectionOrder] = useState<string[]>(loadOrder)
+
+  const orderedIds = useMemo(() => {
+    const saved = sectionOrder.filter(id => allSectionIds.includes(id))
+    const missing = allSectionIds.filter(id => !saved.includes(id))
+    return [...saved, ...missing]
+  }, [sectionOrder, allSectionIds])
+
+  function saveOrder(order: string[]) {
+    setSectionOrder(order)
+    localStorage.setItem(ORDER_KEY, JSON.stringify(order))
+  }
+
+  // ─── Drag state ────────────────────────────────────────────────────────────
+
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+
+  const onDragStart = useCallback((id: string, e: React.DragEvent) => {
+    setDragId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+  }, [])
+
+  const onDragOver = useCallback((id: string, e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverId(id)
+  }, [])
+
+  const onDrop = useCallback((targetId: string) => {
+    if (!dragId || dragId === targetId) { setDragId(null); setDragOverId(null); return }
+    const next = [...orderedIds]
+    const from = next.indexOf(dragId)
+    const to = next.indexOf(targetId)
+    if (from === -1 || to === -1) { setDragId(null); setDragOverId(null); return }
+    next.splice(from, 1)
+    next.splice(to, 0, dragId)
+    saveOrder(next)
+    setDragId(null)
+    setDragOverId(null)
+  }, [dragId, orderedIds])
+
+  const onDragEnd = useCallback(() => {
+    setDragId(null)
+    setDragOverId(null)
+  }, [])
+
+  // ─── Touch drag ────────────────────────────────────────────────────────────
+
+  const touchDragId = useRef<string | null>(null)
+  const touchScrollTop = useRef(0)
+  const sectionRefs = useRef<Map<string, HTMLElement>>(new Map())
+
+  function onTouchStart(id: string, e: React.TouchEvent) {
+    touchDragId.current = id
+    touchScrollTop.current = e.currentTarget.closest('.page')?.scrollTop ?? 0
+    setDragId(id)
+  }
+
+  function onTouchMove(e: React.TouchEvent) {
+    if (!touchDragId.current) return
+    const touch = e.touches[0]
+    for (const [id, el] of sectionRefs.current) {
+      if (id === touchDragId.current) continue
+      const rect = el.getBoundingClientRect()
+      if (touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+        setDragOverId(id)
+        return
+      }
+    }
+    setDragOverId(null)
+  }
+
+  function onTouchEnd() {
+    if (touchDragId.current && dragOverId) {
+      onDrop(dragOverId)
+    }
+    touchDragId.current = null
+    setDragId(null)
+    setDragOverId(null)
+  }
+
+  // ─── Render helpers ────────────────────────────────────────────────────────
 
   const renderEntities = (entities: any[]) => {
     const first = entities[0]
@@ -95,10 +224,9 @@ export default function DashboardPage() {
     const domain = first.entity_id.split('.')[0]
     const sorted = [...entities].sort((a, b) => a.entity_id.localeCompare(b.entity_id))
     const tag = (s: any) => {
-      let plat = platforms.get(s.entity_id) || ''
-      if (plat && plat !== domain) {
+      const plat = platforms.get(s.entity_id) || ''
+      if (plat && plat !== domain)
         return { ...s, attributes: { ...s.attributes, friendly_name: `${plat} · ${s.attributes?.friendly_name || s.entity_id}` } }
-      }
       return s
     }
     if (domain === 'weather') return sorted.map(s => <WeatherCard key={s.entity_id} state={tag(s)} />)
@@ -116,6 +244,59 @@ export default function DashboardPage() {
         </div>
       </div>
     ))}</div>
+  }
+
+  const renderSection = (id: string) => {
+    if (id === 'pinned') {
+      const pinnedEntities = Array.from(states.values()).filter(s => pinned.has(s.entity_id))
+      if (pinnedEntities.length === 0) return null
+      return (
+        <div key="pinned" style={{ marginTop: 16 }}>
+          <div className="section-title">⭐ Pinned</div>
+          {renderEntities(pinnedEntities)}
+        </div>
+      )
+    }
+    if (id === 'other') {
+      if (Object.keys(byArea.unassigned).length === 0) return null
+      return (
+        <div key="other" style={{ marginTop: 20 }}>
+          <div className="section-title" style={{ color: 'var(--text2)' }}>📦 Other</div>
+          {Object.entries(byArea.unassigned).map(([domain, entities]) => (
+            <div key={domain}>
+              <div style={{ fontSize: 11, color: 'var(--text2)', margin: '8px 0 4px', paddingLeft: 4 }}>
+                {DOMAIN_META[domain]?.icon} {DOMAIN_META[domain]?.label || domain}
+              </div>
+              {renderEntities(entities as any[])}
+            </div>
+          ))}
+        </div>
+      )
+    }
+    // area section
+    const area = areas.find(a => a.area_id === id)
+    if (!area) return null
+    const domains = byArea.grouped[area.area_id]
+    if (!domains || Object.keys(domains).length === 0) return null
+    return (
+      <div key={id} style={{ marginTop: 20 }}>
+        <div className="section-title">🏠 {area.name}</div>
+        {Object.entries(domains).map(([domain, entities]) => (
+          <div key={domain}>
+            <div style={{ fontSize: 11, color: 'var(--text2)', margin: '8px 0 4px', paddingLeft: 4 }}>
+              {DOMAIN_META[domain]?.icon} {DOMAIN_META[domain]?.label || domain}
+            </div>
+            {renderEntities(entities as any[])}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  const sectionLabel = (id: string) => {
+    if (id === 'pinned') return '⭐ Pinned'
+    if (id === 'other') return '📦 Other'
+    return '🏠 ' + (areas.find(a => a.area_id === id)?.name ?? id)
   }
 
   return (
@@ -145,6 +326,9 @@ export default function DashboardPage() {
           </div>
         )}
 
+        <ShortcutBar />
+        {token && <SunWidget token={token} />}
+
         <div className="section" style={{ marginTop: 12 }}>
           <div className="stat-row">
             <div className="stat-card">
@@ -160,9 +344,7 @@ export default function DashboardPage() {
               <div className="stat-label">Areas</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value" style={{ color: 'var(--purple)' }}>
-                {mappingCount}
-              </div>
+              <div className="stat-value" style={{ color: 'var(--purple)' }}>{mappingCount}</div>
               <div className="stat-label">3D Bound</div>
             </div>
           </div>
@@ -180,50 +362,51 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Pinned */}
-        {pinned.size > 0 && (
-          <div className="section" style={{ marginTop: 16 }}>
-            <div className="section-title">⭐ Pinned</div>
-            {(() => {
-              const pinnedEntities = Array.from(states.values()).filter(s => pinned.has(s.entity_id))
-              return pinnedEntities.length > 0 ? renderEntities(pinnedEntities) : null
-            })()}
-          </div>
-        )}
+        {/* Draggable sections */}
+        {orderedIds.map(id => {
+          const isDragging = dragId === id
+          const isOver = dragOverId === id
 
-        {/* Areas */}
-        {areas.map(area => {
-          const domains = byArea.grouped[area.area_id]
-          if (!domains || Object.keys(domains).length === 0) return null
           return (
-            <div className="section" key={area.area_id} style={{ marginTop: 20 }}>
-              <div className="section-title">🏠 {area.name}</div>
-              {Object.entries(domains).map(([domain, entities]) => (
-                <div key={domain}>
-                  <div style={{ fontSize: 11, color: 'var(--text2)', margin: '8px 0 4px', paddingLeft: 4 }}>
-                    {DOMAIN_META[domain]?.icon} {DOMAIN_META[domain]?.label || domain}
-                  </div>
-                  {renderEntities(entities)}
-                </div>
-              ))}
+            <div
+              key={id}
+              ref={el => { if (el) sectionRefs.current.set(id, el); else sectionRefs.current.delete(id) }}
+              draggable
+              onDragStart={e => onDragStart(id, e)}
+              onDragOver={e => onDragOver(id, e)}
+              onDrop={() => onDrop(id)}
+              onDragEnd={onDragEnd}
+              style={{
+                opacity: isDragging ? 0.35 : 1,
+                borderTop: isOver && !isDragging ? '2px solid var(--accent, #4d8fff)' : '2px solid transparent',
+                borderRadius: 6,
+                transition: 'opacity 0.15s, border-color 0.1s',
+                cursor: 'grab',
+                touchAction: 'none',
+              }}
+              onTouchStart={e => onTouchStart(id, e)}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
+            >
+              {/* Drag handle strip shown on long-press or hover */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                paddingLeft: 2, paddingTop: isDragging ? 0 : undefined,
+                userSelect: 'none',
+              }}>
+                <span style={{ fontSize: 14, color: 'var(--text2)', opacity: 0.5, letterSpacing: '-1px', cursor: 'grab' }}>⣿</span>
+                {isDragging && (
+                  <span style={{ fontSize: 12, color: 'var(--accent, #4d8fff)', fontWeight: 600 }}>
+                    {sectionLabel(id)}
+                  </span>
+                )}
+              </div>
+              <div className="section">
+                {renderSection(id)}
+              </div>
             </div>
           )
         })}
-
-        {/* Unassigned */}
-        {Object.keys(byArea.unassigned).length > 0 && (
-          <div className="section" style={{ marginTop: 20 }}>
-            <div className="section-title" style={{ color: 'var(--text2)' }}>📦 Other</div>
-            {Object.entries(byArea.unassigned).map(([domain, entities]) => (
-              <div key={domain}>
-                <div style={{ fontSize: 11, color: 'var(--text2)', margin: '8px 0 4px', paddingLeft: 4 }}>
-                  {DOMAIN_META[domain]?.icon} {DOMAIN_META[domain]?.label || domain}
-                </div>
-                {renderEntities(entities)}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )

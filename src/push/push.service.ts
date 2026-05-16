@@ -5,6 +5,7 @@ import * as webpush from 'web-push'
 import * as fs from 'fs'
 import * as path from 'path'
 import { PushSubscriptionEntity } from './push-subscription.entity'
+import { NotificationLogEntity } from './notification-log.entity'
 import { NotificationRulesService } from './notification-rules.service'
 import { EventBusService } from '../core/event-bus/event-bus.service'
 import { EVENT_STATE_CHANGED } from '../common/constants/events.constants'
@@ -26,6 +27,8 @@ export class PushService implements OnModuleInit {
   constructor(
     @InjectRepository(PushSubscriptionEntity)
     private readonly repo: Repository<PushSubscriptionEntity>,
+    @InjectRepository(NotificationLogEntity)
+    private readonly logRepo: Repository<NotificationLogEntity>,
     private readonly eventBus: EventBusService,
     private readonly rules: NotificationRulesService,
   ) {}
@@ -72,9 +75,30 @@ export class PushService implements OnModuleInit {
     await this.repo.delete({ endpoint })
   }
 
-  async sendToAll(title: string, body: string, icon = '/favicon.ico'): Promise<void> {
+  async sendToEndpoint(endpoint: string, title: string, body: string, data: Record<string, unknown> = {}): Promise<void> {
+    const sub = await this.repo.findOne({ where: { endpoint } })
+    if (!sub) return
+    await this.logNotification(title, body, '/favicon.svg')
+    const payload = JSON.stringify({ title, body, icon: '/favicon.svg', data })
+    try {
+      await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload)
+    } catch (err: any) {
+      if (err.statusCode === 404 || err.statusCode === 410) await this.repo.delete({ endpoint })
+    }
+  }
+
+  async getHistory(limit = 100): Promise<NotificationLogEntity[]> {
+    return this.logRepo.find({ order: { createdAt: 'DESC' }, take: limit })
+  }
+
+  private async logNotification(title: string, body: string, icon: string) {
+    await this.logRepo.save(this.logRepo.create({ title, body, icon })).catch(() => {})
+  }
+
+  async sendToAll(title: string, body: string, icon = '/favicon.ico', data: Record<string, unknown> = {}): Promise<void> {
+    await this.logNotification(title, body, icon)
     const subs = await this.repo.find()
-    const payload = JSON.stringify({ title, body, icon })
+    const payload = JSON.stringify({ title, body, icon, data })
     const dead: string[] = []
 
     await Promise.all(subs.map(async (sub) => {
@@ -111,7 +135,9 @@ export class PushService implements OnModuleInit {
       // Built-in rules (defaults, skipped if a custom rule already matched this entity+state)
       if (matched.length === 0) {
         if (domain === 'binary_sensor') {
-          if ((dc === 'door' || dc === 'window') && new_state.state === 'on')
+          if ((dc === 'doorbell' || entity_id.toLowerCase().includes('doorbell')) && new_state.state === 'on')
+            await this.sendToAll('🔔 Doorbell', `${name} is ringing`, '/favicon.ico', { type: 'call' })
+          else if ((dc === 'door' || dc === 'window') && new_state.state === 'on')
             await this.sendToAll('🚪 ' + name, `${name} opened`)
           else if (dc === 'motion' && new_state.state === 'on')
             await this.sendToAll('🏃 Motion', `${name} detected`)

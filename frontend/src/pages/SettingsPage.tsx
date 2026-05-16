@@ -1,6 +1,7 @@
 import { useHa } from '../context/HaContext'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { usePushSubscription } from '../hooks/usePushSubscription'
+import { SystemStats } from '../components/SystemStats'
 
 function BackupSection() {
   const { token } = useHa()
@@ -703,7 +704,7 @@ function NotificationRulesSection() {
 }
 
 export default function SettingsPage() {
-  const { logout, wsConnected } = useHa()
+  const { logout, wsConnected, token } = useHa()
 
   const isLight = document.documentElement.classList.contains('light')
 
@@ -720,6 +721,9 @@ export default function SettingsPage() {
         <div className="nav-header">
           <div className="nav-title">Settings</div>
         </div>
+
+        {/* System Health */}
+        {token && <div style={{ marginTop: 16 }}><SystemStats token={token} /></div>}
 
         {/* Appearance */}
         <div className="section" style={{ marginTop: 24 }}>
@@ -802,6 +806,14 @@ export default function SettingsPage() {
           <div className="section-title">📦 Maintenance</div>
           <div className="ios-list">
             <BackupSection />
+            <div className="ios-list-row" style={{ cursor: 'pointer' }} onClick={() => window.location.hash = '#/ota'}>
+              <div className="ios-list-icon" style={{ background: 'rgba(255,154,60,0.15)' }}>🔄</div>
+              <div className="ios-list-content">
+                <div className="ios-list-title">Firmware & Updates</div>
+                <div className="ios-list-subtitle">Check for server & device firmware updates</div>
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--text2)' }}>›</span>
+            </div>
           </div>
         </div>
 

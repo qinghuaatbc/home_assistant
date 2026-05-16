@@ -8,6 +8,13 @@ const TABS = [
   { id: 'history',      icon: '📊',  label: 'History' },
   { id: 'automations',  icon: '⚡',  label: 'Auto'    },
   { id: 'integrations', icon: '🔌',  label: 'Config'  },
+  { id: 'notifications', icon: '🔔',  label: 'Alerts'  },
+  { id: 'geofence',     icon: '📍',  label: 'Zones'   },
+  { id: 'persons',      icon: '👥',  label: 'People'  },
+  { id: 'energy',       icon: '⚡',  label: 'Energy'  },
+  { id: 'thermostat',   icon: '🌡️',  label: 'Climate' },
+  { id: 'scenes',       icon: '🎬',  label: 'Scenes'  },
+  { id: 'cameras',      icon: '📷',  label: 'Cams'    },
   { id: 'settings',     icon: '☰',  label: 'More'    },
 ]
 

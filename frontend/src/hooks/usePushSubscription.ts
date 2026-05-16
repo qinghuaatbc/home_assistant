@@ -71,6 +71,8 @@ export function usePushSubscription(token: string | null) {
         })
         if (!r.ok) throw new Error('Save failed')
         setSubscribed(true)
+        // Notify CommContext so it can register this endpoint for call notifications
+        window.dispatchEvent(new CustomEvent('push-subscribed', { detail: j.endpoint }))
       }
     } catch (e: any) {
       setError(e?.message ?? 'Failed')

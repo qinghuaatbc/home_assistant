@@ -11,12 +11,14 @@ import { AiController } from './ai/ai.controller';
 import { GlbController } from './glb/glb.controller';
 import { PluginController } from './plugin/plugin.controller';
 import { WeatherController } from './weather/weather.controller';
+import { OtaController } from './ota/ota.controller';
 import { AuthModule } from '../auth/auth.module';
 import { RegistryModule } from '../registry/registry.module';
 import { ContextService } from '../core/context/context.service';
+import { VoiceLogModule } from '../voice-log/voice-log.module';
 
 @Module({
-  imports: [AuthModule, RegistryModule],
+  imports: [AuthModule, RegistryModule, VoiceLogModule],
   controllers: [
     HealthController,
     StatesController,
@@ -30,6 +32,7 @@ import { ContextService } from '../core/context/context.service';
     GlbController,
     PluginController,
     WeatherController,
+    OtaController,
   ],
   providers: [ContextService],
 })

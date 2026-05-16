@@ -166,6 +166,130 @@ const DOMAIN_ICONS: Record<string, string> = {
   automation: '⚡', scene: '🎬', script: '📜',
 }
 
+// ── Plugin Marketplace ───────────────────────────────────────────────────────
+
+const MARKETPLACE = [
+  { domain: 'rtsp2hls', name: 'RTSP to HLS Camera', icon: '📹', category: 'Cameras', desc: 'Stream RTSP cameras in the browser via HLS transcoding. Requires ffmpeg.' },
+  { domain: 'zigbee2mqtt', name: 'Zigbee2MQTT Bridge', icon: '📡', category: 'Protocols', desc: 'Integrate all Zigbee devices via Zigbee2MQTT (MQTT bridge).' },
+  { domain: 'tasmota', name: 'Tasmota', icon: '💡', category: 'Smart Plugs', desc: 'Auto-discover and control Tasmota-flashed devices on the local network.' },
+  { domain: 'esphome', name: 'ESPHome', icon: '🔧', category: 'DIY', desc: 'Native integration for ESPHome-based sensors and actuators.' },
+  { domain: 'shelly', name: 'Shelly', icon: '🔌', category: 'Smart Plugs', desc: 'Control Shelly Gen1/Gen2 relays, dimmers, and energy meters.' },
+  { domain: 'tuya_local', name: 'Tuya Local', icon: '🏠', category: 'Smart Home', desc: 'Control Tuya/Smart Life devices locally without cloud dependency.' },
+  { domain: 'broadlink', name: 'Broadlink RM', icon: '📻', category: 'IR/RF', desc: 'Learn and send IR/RF codes via Broadlink RM mini/pro devices.' },
+  { domain: 'govee', name: 'Govee Lights', icon: '🌈', category: 'Lighting', desc: 'Control Govee RGB LED strips and bulbs via local LAN API.' },
+  { domain: 'modbus', name: 'Modbus', icon: '⚙️', category: 'Industrial', desc: 'Read/write Modbus TCP/RTU registers — useful for solar inverters and meters.' },
+  { domain: 'mqtt_sensor', name: 'MQTT Sensors', icon: '📡', category: 'MQTT', desc: 'Create sensors that subscribe to arbitrary MQTT topics.' },
+]
+
+function PluginsTab({ token }: { token: string }) {
+  const [installed, setInstalled] = useState<{ domain: string; name: string; version: string; description: string; loaded: boolean }[]>([])
+  const [installUrl, setInstallUrl] = useState('')
+  const [installName, setInstallName] = useState('')
+  const [installing, setInstalling] = useState(false)
+  const [uninstalling, setUninstalling] = useState<string | null>(null)
+  const [msg, setMsg] = useState('')
+  const [msgOk, setMsgOk] = useState(true)
+
+  const hdrs = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+  const flash = (t: string, ok = true) => { setMsg(t); setMsgOk(ok); setTimeout(() => setMsg(''), 4000) }
+
+  const load = () => {
+    fetch('/api/plugins', { headers: hdrs })
+      .then(r => r.json()).then(d => setInstalled(d.plugins ?? [])).catch(() => {})
+  }
+
+  useEffect(() => { load() }, [])
+
+  const install = async (url?: string, name?: string) => {
+    const u = url ?? installUrl
+    if (!u.trim()) return
+    setInstalling(true)
+    try {
+      const r = await fetch('/api/plugins/install', { method: 'POST', headers: hdrs, body: JSON.stringify({ url: u, name: (name ?? installName) || undefined }) })
+      const d = await r.json()
+      if (d.ok) { flash('✅ ' + d.message); setInstallUrl(''); setInstallName(''); load() }
+      else flash('❌ ' + (d.message ?? 'Failed'), false)
+    } catch { flash('❌ Network error', false) }
+    setInstalling(false)
+  }
+
+  const uninstall = async (domain: string) => {
+    setUninstalling(domain)
+    const r = await fetch(`/api/plugins/${domain}`, { method: 'DELETE', headers: hdrs })
+    const d = await r.json()
+    if (d.ok) { flash('Removed ' + domain); load() }
+    else flash('❌ ' + d.message, false)
+    setUninstalling(null)
+  }
+
+  const installedDomains = new Set(installed.map(p => p.domain))
+
+  return (
+    <div>
+      {/* Install from URL */}
+      <div style={{ background: 'var(--card)', borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>📦 Install from Git URL</div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          <input value={installUrl} onChange={e => setInstallUrl(e.target.value)}
+            placeholder="https://github.com/user/ha-plugin.git"
+            style={{ flex: 1, padding: '7px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 12 }} />
+          <input value={installName} onChange={e => setInstallName(e.target.value)}
+            placeholder="name (opt)"
+            style={{ width: 90, padding: '7px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 12 }} />
+          <button className="btn btn-accent" onClick={() => install()} disabled={installing || !installUrl} style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+            {installing ? '…' : 'Install'}
+          </button>
+        </div>
+        {msg && <div style={{ fontSize: 12, color: msgOk ? '#30d158' : '#ff453a', marginTop: 4 }}>{msg}</div>}
+      </div>
+
+      {/* Installed */}
+      {installed.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 8, letterSpacing: 0.5 }}>INSTALLED ({installed.length})</div>
+          {installed.map(p => (
+            <div key={p.domain} style={{ background: 'var(--card)', borderRadius: 10, padding: '10px 12px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 22 }}>{MARKETPLACE.find(m => m.domain === p.domain)?.icon ?? '🧩'}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--text2)' }}>v{p.version} · {p.loaded ? '✓ loaded' : 'not loaded'}</div>
+              </div>
+              <button onClick={() => uninstall(p.domain)} disabled={uninstalling === p.domain}
+                style={{ padding: '4px 10px', borderRadius: 7, border: 'none', background: '#ff453a22', color: '#ff453a', cursor: 'pointer', fontSize: 11 }}>
+                {uninstalling === p.domain ? '…' : 'Remove'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Marketplace */}
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 8, letterSpacing: 0.5 }}>MARKETPLACE</div>
+      {MARKETPLACE.map(p => {
+        const isInstalled = installedDomains.has(p.domain)
+        return (
+          <div key={p.domain} style={{ background: 'var(--card)', borderRadius: 10, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <span style={{ fontSize: 24, lineHeight: 1, paddingTop: 2, flexShrink: 0 }}>{p.icon}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</div>
+              <div style={{ fontSize: 10, color: '#4d8fff', background: '#4d8fff15', borderRadius: 4, padding: '1px 6px', display: 'inline-block', marginBottom: 4 }}>{p.category}</div>
+              <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.4 }}>{p.desc}</div>
+            </div>
+            {isInstalled
+              ? <span style={{ flexShrink: 0, fontSize: 11, color: '#30d158', background: '#30d15820', borderRadius: 6, padding: '4px 8px' }}>✓ Installed</span>
+              : <button onClick={() => install(`https://github.com/home-assistant-plugins/${p.domain}.git`, p.domain)}
+                  disabled={installing}
+                  style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 8, border: 'none', background: '#0a84ff', color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+                  Install
+                </button>
+            }
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function IntegrationsPage() {
   const { token, states } = useHa()
   const [configs, setConfigs] = useState<Record<string, any>>({})
@@ -175,7 +299,7 @@ export default function IntegrationsPage() {
   const [search, setSearch] = useState('')
   const [loadedStatuses, setLoadedStatuses] = useState<Record<string, string>>({})
   const [reg, setReg] = useState<Map<string, EntityRegItem>>(new Map())
-  const [subTab, setSubTab] = useState<'integrations' | 'yaml' | 'dashboard' | 'floors' | 'areas'>('integrations')
+  const [subTab, setSubTab] = useState<'integrations' | 'yaml' | 'dashboard' | 'floors' | 'areas' | 'plugins'>('integrations')
   const yamlRef  = useRef<{ save: () => Promise<{ok:boolean;msg:string}> }>(null)
   const dashRef  = useRef<{ save: () => Promise<{ok:boolean;msg:string}> }>(null)
   const [editorSaving, setEditorSaving] = useState(false)
@@ -640,6 +764,7 @@ export default function IntegrationsPage() {
 
   const SUB_TABS = [
     { key: 'integrations', label: '🔌 Integrations' },
+    { key: 'plugins',      label: '🧩 Plugins' },
     { key: 'yaml',         label: '⚙️ Config YAML' },
     { key: 'dashboard',    label: '📋 Dashboard' },
     { key: 'floors',       label: '🏗️ Floors' },
@@ -776,6 +901,8 @@ export default function IntegrationsPage() {
             </div>
           </>
         )}
+        {subTab === 'plugins' && <PluginsTab token={token ?? ''} />}
+
       </div>
 
       {/* ── Unified save bar ── */}

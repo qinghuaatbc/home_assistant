@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useHa } from '../context/HaContext'
+import ThermostatScheduler from '../components/ThermostatScheduler'
 
 const TRIGGER_TYPES = [
   { id: 'state',         label: '🔄 State Change',    fields: ['entity_id', 'from', 'to'] },
@@ -107,9 +108,103 @@ function VisualEditor({ onYaml }: { onYaml: (yaml: string) => void }) {
   )
 }
 
+interface AiSuggestion {
+  name: string
+  description: string
+  yaml: string
+}
+
+function AiSuggestTab({ onApply }: { onApply: (yaml: string) => void }) {
+  const { token } = useHa()
+  const [suggestions, setSuggestions] = useState<AiSuggestion[]>([])
+  const [loading, setLoading] = useState(false)
+  const [expanded, setExpanded] = useState<number | null>(null)
+  const [applied, setApplied] = useState<Set<number>>(new Set())
+
+  const generate = async () => {
+    if (!token) return
+    setLoading(true)
+    setSuggestions([])
+    setExpanded(null)
+    setApplied(new Set())
+    try {
+      const r = await fetch('/api/ai/suggest-automations', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await r.json()
+      setSuggestions(data.suggestions ?? [])
+    } catch {}
+    setLoading(false)
+  }
+
+  const apply = (i: number) => {
+    onApply(suggestions[i].yaml)
+    setApplied(prev => new Set([...prev, i]))
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button className="btn btn-accent" onClick={generate} disabled={loading} style={{ fontSize: 12, padding: '8px 16px' }}>
+          {loading ? '🤖 Thinking…' : '✨ Generate Suggestions'}
+        </button>
+        <span style={{ fontSize: 12, color: 'var(--text2)' }}>AI analyzes your devices and proposes automations</span>
+      </div>
+
+      {loading && (
+        <div style={{ textAlign: 'center', color: 'var(--text2)', padding: '2rem', fontSize: 13 }}>
+          Claude is analyzing your home…
+        </div>
+      )}
+
+      {suggestions.map((s, i) => (
+        <div key={i} style={{
+          background: 'var(--card)', borderRadius: 10, marginBottom: 10, overflow: 'hidden',
+          border: `1.5px solid ${applied.has(i) ? '#30d158' : 'var(--border)'}`,
+        }}>
+          <div
+            onClick={() => setExpanded(expanded === i ? null : i)}
+            style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', cursor: 'pointer', gap: 10 }}
+          >
+            <span style={{ fontSize: 18 }}>⚡</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{s.name}</div>
+              <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.description}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              {applied.has(i)
+                ? <span style={{ fontSize: 11, color: '#30d158' }}>✓ Applied</span>
+                : <button className="btn btn-accent" onClick={e => { e.stopPropagation(); apply(i) }} style={{ fontSize: 11, padding: '3px 10px' }}>Apply</button>
+              }
+              <span style={{ color: 'var(--text2)', fontSize: 12 }}>{expanded === i ? '▲' : '▼'}</span>
+            </div>
+          </div>
+          {expanded === i && (
+            <div style={{ padding: '0 14px 12px' }}>
+              <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 6 }}>{s.description}</div>
+              <pre style={{
+                background: 'var(--surface)', borderRadius: 7, padding: 10, fontSize: 11,
+                color: 'var(--text)', overflow: 'auto', maxHeight: 200, margin: 0,
+              }}>{s.yaml}</pre>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {!loading && suggestions.length === 0 && (
+        <div style={{ textAlign: 'center', color: 'var(--text2)', padding: '3rem 1rem', fontSize: 13 }}>
+          Click "Generate Suggestions" to let Claude analyze your home.
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AutomationsPage() {
   const { token, states, callService } = useHa()
-  const [tab, setTab] = useState<'list' | 'new' | 'edit'>('list')
+  const [tab, setTab] = useState<'list' | 'new' | 'edit' | 'thermostat' | 'ai'>('list')
   const [yaml, setYaml] = useState('')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
@@ -164,6 +259,8 @@ export default function AutomationsPage() {
             <button className={`btn${tab === 'list' ? ' active' : ''}`} style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => setTab('list')}>List</button>
             <button className={`btn${tab === 'new' ? ' active' : ''}`} style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => setTab('new')}>+ New</button>
             <button className={`btn${tab === 'edit' ? ' active' : ''}`} style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => setTab('edit')}>YAML</button>
+            <button className={`btn${tab === 'thermostat' ? ' active' : ''}`} style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => setTab('thermostat')}>🌡️ Schedule</button>
+            <button className={`btn${tab === 'ai' ? ' active' : ''}`} style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => setTab('ai')}>✨ AI</button>
           </div>
         </div>
 
@@ -224,6 +321,18 @@ export default function AutomationsPage() {
               {msg && <span style={{ fontSize: 12, color: msg.startsWith('✅') ? '#30d158' : '#ff453a' }}>{msg}</span>}
             </div>
           </>
+        )}
+
+        {tab === 'thermostat' && (
+          <div style={{ marginTop: 8 }}>
+            <ThermostatScheduler />
+          </div>
+        )}
+
+        {tab === 'ai' && (
+          <div style={{ marginTop: 8 }}>
+            <AiSuggestTab onApply={yaml => { appendYaml(yaml); setTab('edit') }} />
+          </div>
         )}
       </div>
     </div>

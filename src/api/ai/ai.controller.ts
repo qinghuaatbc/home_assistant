@@ -1,9 +1,11 @@
-import { Controller, Post, Body, Logger, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Post, Get, Body, Logger, UseInterceptors, UploadedFile, UseGuards } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { StateMachineService } from '../../core/state-machine/state-machine.service';
 import { ServiceRegistryService } from '../../core/service-registry/service-registry.service';
 import { ContextService } from '../../core/context/context.service';
+import { VoiceLogService } from '../../voice-log/voice-log.service';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 const CALL_SERVICE_TOOL = {
   name: 'call_service',
@@ -41,7 +43,63 @@ export class AiController {
     private readonly stateMachine: StateMachineService,
     private readonly serviceRegistry: ServiceRegistryService,
     private readonly contextService: ContextService,
+    private readonly voiceLog: VoiceLogService,
   ) {}
+
+  @Get('voice/history')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get voice command history' })
+  async voiceHistory() {
+    return this.voiceLog.getHistory();
+  }
+
+  @Post('suggest-automations')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Ask Claude to suggest automations based on current devices' })
+  async suggestAutomations() {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return { suggestions: [] };
+
+    const states = this.stateMachine.getStates();
+    const deviceList = states
+      .map(s => `${s.entity_id} [${s.state}]${s.attributes?.friendly_name ? ` (${s.attributes.friendly_name})` : ''}`)
+      .slice(0, 80)
+      .join('\n');
+
+    const prompt = `You are a Home Assistant expert. Based on these devices, suggest 5 useful automations.
+
+Devices:
+${deviceList}
+
+Return ONLY valid JSON — an array of exactly 5 objects, each with:
+- "name": short human-readable name (≤40 chars)
+- "description": one sentence explaining what it does and why it's useful
+- "yaml": complete Home Assistant YAML automation snippet (valid YAML, use 2-space indent)
+
+JSON only, no markdown, no explanation outside the array.`;
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 2048,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (!res.ok) return { suggestions: [] };
+      const data: any = await res.json();
+      const text = data.content?.[0]?.text ?? '[]';
+      // Strip any accidental markdown code fences
+      const clean = text.replace(/```[a-z]*\n?/g, '').trim();
+      const suggestions = JSON.parse(clean);
+      return { suggestions: Array.isArray(suggestions) ? suggestions : [] };
+    } catch (err: any) {
+      this.logger.error(`suggest-automations error: ${err.message}`);
+      return { suggestions: [] };
+    }
+  }
 
   private t(lang: string) {
     return (zh: string, en: string, fa: string) =>
@@ -54,7 +112,9 @@ export class AiController {
     const lang = body.lang || 'en';
     if (!body.prompt?.trim()) return { response: this.t(lang)('请输入提示内容', 'Please provide a prompt.', 'لطفاً یک پیام وارد کنید') };
     if (body.prompt.length > 4000) return { response: this.t(lang)('输入内容过长', 'Prompt too long (max 4000 chars)', 'پیام بیش از حد طولانی است') };
-    return this.processWithClaude(body.prompt, lang);
+    const result = await this.processWithClaude(body.prompt, lang);
+    await this.voiceLog.log(body.prompt, result.response, lang, result.action);
+    return result;
   }
 
   @Post('voice')
@@ -98,7 +158,9 @@ export class AiController {
       const text = raw.replace(/^(hello|hi|hey|please|okay|ok|yo|你好|嗨|哈喽|سلام|لطفاً)[,،.،\s]*/gi, '').trim() || raw;
 
       this.logger.log(`Transcribed: "${raw}" → "${text}"`);
-      return this.processWithClaude(text, lang);
+      const result = await this.processWithClaude(text, lang);
+      await this.voiceLog.log(text, result.response, lang, result.action);
+      return result;
     } catch (err: any) {
       this.logger.error(`Voice error: ${err.message}`);
       return { response: this.t(lang)('语音处理错误', `Voice error: ${err.message}`, `خطای صدا: ${err.message}`) };
