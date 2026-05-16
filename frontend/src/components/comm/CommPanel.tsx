@@ -8,7 +8,7 @@ if (typeof document !== 'undefined' && !document.getElementById('comm-panel-styl
   s.id = 'comm-panel-styles'
   s.textContent = `
     .comm-toggle-btn {
-      position: fixed; bottom: 24px; left: 24px; z-index: 9000;
+      position: fixed; bottom: 24px; left: 24px; z-index: 10100;
       width: 52px; height: 52px; border-radius: 50%; border: none;
       background: var(--blue, #007aff); color: #fff; font-size: 22px;
       cursor: pointer; display: flex; align-items: center; justify-content: center;
@@ -249,7 +249,7 @@ export function CommPanel() {
             left: 24,
             width: 420,
             height: 520,
-            zIndex: 9001,
+            zIndex: 10101,
             background: 'var(--surface)',
             border: '1px solid var(--sep)',
             borderRadius: 12,

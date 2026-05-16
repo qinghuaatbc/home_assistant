@@ -11,7 +11,7 @@ export function ScenesView({ states, cols }: { states: Map<string, HaState>; col
 
   const dbCards = dashboard?.views?.scenes
   if (dbCards !== undefined) {
-    const rendered = dbCards.map(e => { const s = states.get(e.entity); return s ? renderCard(s, e.card_type, e.icon) : null }).filter(Boolean)
+    const rendered = dbCards.map(e => { const s = states.get(e.entity); return s ? renderCard(s, e.card_type, e.icon, e.label) : null }).filter(Boolean)
     return rendered.length ? <CardGrid cols={cols}>{rendered}</CardGrid> : <EmptyState icon="🎭" cat="scenes" />
   }
 

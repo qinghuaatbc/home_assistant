@@ -291,10 +291,13 @@ function RtiPanel() {
   return (
     <HaProvider>
       <ToastProvider>
-        <Suspense fallback={<div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', color: '#666' }}>Loading…</div>}>
-          <RtiPanelPage standaloneToken={t} />
-        </Suspense>
-        <FloatingMic />
+        <CommProvider>
+          <Suspense fallback={<div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', color: '#666' }}>Loading…</div>}>
+            <RtiPanelPage standaloneToken={t} />
+          </Suspense>
+          <FloatingMic />
+          <CommPanel />
+        </CommProvider>
       </ToastProvider>
     </HaProvider>
   )

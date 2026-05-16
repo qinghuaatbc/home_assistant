@@ -1,6 +1,21 @@
 # 2D Panel Dashboard Configuration
 # Edit this file to control what cards appear in each tab
 #
+# Optional: override the display name or icon for any tab
+# view_labels:
+#   security: "My Security"
+#   lights: "灯光"
+# view_icons:
+#   security: "🛡️"
+#   lights: "🕯️"
+#
+# Tab key names must be one of: security, music, lights, theater, climate, garage, scenes
+#
+# Each entity card supports an optional label to override the display name:
+#   - entity: light.living_room
+#     card_type: light
+#     label: "客厅灯"
+#
 # card_type options:
 #   light        → light bulb card with brightness slider
 #   sensor       → door/window/motion/garage binary sensor
@@ -16,6 +31,9 @@
 #   fan          → fan entity
 #   scene        → scene tile
 #   automation   → automation tile
+#   button       → press to trigger (button.* or script.*)
+#   number       → numeric slider (number.*)
+#   select       → cycle through options (select.*)
 
 views:
   security:
