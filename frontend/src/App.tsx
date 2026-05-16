@@ -4,6 +4,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { HaProvider, useHa } from './context/HaContext'
 import { getLang, playDone, speakAndThen } from './utils/sounds'
 import { ToastProvider } from './context/ToastContext'
+import { CommProvider } from './context/CommContext'
+import { CommPanel } from './components/comm/CommPanel'
 import LoginPage from './pages/LoginPage'
 import TabBar from './components/TabBar'
 
@@ -309,7 +311,10 @@ export default function App() {
         <Route path="/*" element={
           <HaProvider>
             <ToastProvider>
-              <AuthLayout />
+              <CommProvider>
+                <AuthLayout />
+                <CommPanel />
+              </CommProvider>
             </ToastProvider>
           </HaProvider>
         } />

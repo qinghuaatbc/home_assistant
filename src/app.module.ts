@@ -16,6 +16,7 @@ import {
 } from './common/constants/events.constants';
 import { ContextService } from './core/context/context.service';
 import { PushModule } from './push/push.module';
+import { CommModule } from './comm/comm.module';
 
 @Module({
   imports: [
@@ -60,6 +61,9 @@ import { PushModule } from './push/push.module';
 
     // Web Push notifications
     PushModule,
+
+    // Real-time comm (text chat + WebRTC signaling)
+    CommModule,
   ],
 })
 export class AppModule implements OnModuleInit {
