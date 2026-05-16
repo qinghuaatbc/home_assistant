@@ -91,10 +91,13 @@ export class AiController {
       }
 
       const whisperData: any = await whisperRes.json();
-      const text = (whisperData.text || '').trim();
-      if (!text) return { response: this.t(lang)('未能识别语音', 'Could not recognize speech', 'امکان تشخیص صدا وجود نداشت') };
+      const raw = (whisperData.text || '').trim();
+      if (!raw) return { response: this.t(lang)('未能识别语音', 'Could not recognize speech', 'امکان تشخیص صدا وجود نداشت') };
 
-      this.logger.log(`Transcribed: "${text}"`);
+      // Strip leading wake-words (Hello / Hi / Hey / Please / 你好 / 嗨 / سلام)
+      const text = raw.replace(/^(hello|hi|hey|please|okay|ok|yo|你好|嗨|哈喽|سلام|لطفاً)[,،.،\s]*/gi, '').trim() || raw;
+
+      this.logger.log(`Transcribed: "${raw}" → "${text}"`);
       return this.processWithClaude(text, lang);
     } catch (err: any) {
       this.logger.error(`Voice error: ${err.message}`);
@@ -190,25 +193,8 @@ export class AiController {
           return { text: prompt, response: _t('无法控制任何设备，请检查设备名称。', 'Failed to control any devices. Check device names.', 'کنترل هیچ دستگاهی ممکن نشد. نام دستگاه‌ها را بررسی کنید.') };
         }
 
-        const res2 = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 256,
-            system: lang === 'zh' ? '用中文简洁确认。' : lang === 'fa' ? 'به طور خلاصه تأیید کنید.' : 'Confirm what you did concisely.',
-            messages: [
-              { role: 'user', content: prompt },
-              { role: 'assistant', content: data.content },
-              { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: 'Done' }] },
-            ],
-          }),
-        });
-
-        if (res2.ok) {
-          const d2 = await res2.json();
-          return { text: prompt, response: d2.content[0].text, action: { domain, service, entity_id } };
-        }
+        const doneMsg = lang === 'zh' ? '完成' : lang === 'fa' ? 'انجام شد' : 'Done'
+        return { text: prompt, response: doneMsg, action: { domain, service, entity_id } };
       }
 
       return { text: prompt, response: data.content?.[0]?.text ?? 'OK' };

@@ -39,6 +39,22 @@ export default function EntitiesPage() {
   const [reg, setReg] = useState<Map<string, EntityReg>>(new Map())
   const [editing, setEditing] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selectMode, setSelectMode] = useState(false)
+
+  const toggleSelect = (id: string) => setSelected(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+
+  const batchTurnOn  = () => { selected.forEach(id => { const d = id.split('.')[0]; callService(d, 'turn_on',  {}, id) }); setSelected(new Set()) }
+  const batchTurnOff = () => { selected.forEach(id => { const d = id.split('.')[0]; callService(d, 'turn_off', {}, id) }); setSelected(new Set()) }
+
+  const groupTurnAll = (items: HaState[], on: boolean) => {
+    const controllable = items.filter(s => { const d = s.entity_id.split('.')[0]; return d === 'light' || d === 'switch' })
+    controllable.forEach(s => { const d = s.entity_id.split('.')[0]; callService(d, on ? 'turn_on' : 'turn_off', {}, s.entity_id) })
+  }
 
   useEffect(() => {
     if (!token) return
@@ -116,7 +132,20 @@ export default function EntitiesPage() {
     <div className="page">
       <div className="page-inner">
         <div className="nav-header">
-          <div className="nav-title">Devices</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div className="nav-title" style={{ margin: 0 }}>Devices</div>
+            <button className={`btn${selectMode ? ' active' : ''}`} style={{ fontSize: 11, padding: '4px 10px' }}
+              onClick={() => { setSelectMode(m => !m); setSelected(new Set()) }}>
+              {selectMode ? 'Cancel' : 'Select'}
+            </button>
+          </div>
+          {selectMode && selected.size > 0 && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--text2)' }}>{selected.size} selected</span>
+              <button className="btn" style={{ fontSize: 11, padding: '4px 10px', background: 'rgba(48,209,88,0.15)', color: '#30d158' }} onClick={batchTurnOn}>All On</button>
+              <button className="btn" style={{ fontSize: 11, padding: '4px 10px', background: 'rgba(255,69,58,0.12)', color: '#ff453a' }} onClick={batchTurnOff}>All Off</button>
+            </div>
+          )}
           <div style={{ marginBottom: 10 }}>
             <input value={filter} onChange={e => setFilter(e.target.value)}
               placeholder="Search devices…" style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
@@ -128,18 +157,35 @@ export default function EntitiesPage() {
           const items = groups.get(domain)!
           return (
             <div className="section" key={domain} style={{ marginTop: 16 }}>
-              <div className="section-title">{meta.icon} {meta.label} ({items.length})</div>
+              <div className="section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>{meta.icon} {meta.label} ({items.length})</span>
+                {(domain === 'light' || domain === 'switch') && !selectMode && (
+                  <span style={{ display: 'flex', gap: 4 }}>
+                    <button className="btn" style={{ fontSize: 10, padding: '2px 8px', background: 'rgba(48,209,88,0.12)', color: '#30d158' }} onClick={() => groupTurnAll(items, true)}>All On</button>
+                    <button className="btn" style={{ fontSize: 10, padding: '2px 8px', background: 'rgba(255,69,58,0.08)', color: '#ff453a' }} onClick={() => groupTurnAll(items, false)}>All Off</button>
+                  </span>
+                )}
+              </div>
               <div className="ios-list">
                 {items.map(s => {
                   const name = reg.get(s.entity_id)?.name || (s.attributes.friendly_name as string) || s.entity_id
                   const on = s.state === 'on'
                   const isEditing = editing === s.entity_id
+                  const isSelected = selected.has(s.entity_id)
 
                   return (
-                    <div className="ios-list-row" key={s.entity_id} style={{ cursor: 'pointer' }} onClick={() => !isEditing && toggle(s)}>
-                      <div className="ios-list-icon" style={{ background: on ? 'rgba(48,209,88,0.15)' : 'rgba(255,255,255,0.06)' }}>
-                        {meta.icon}
-                      </div>
+                    <div className="ios-list-row" key={s.entity_id}
+                      style={{ cursor: 'pointer', background: isSelected ? 'rgba(10,132,255,0.10)' : undefined }}
+                      onClick={() => selectMode ? toggleSelect(s.entity_id) : (!isEditing && toggle(s))}>
+                      {selectMode ? (
+                        <div style={{ width: 22, height: 22, borderRadius: 11, border: `2px solid ${isSelected ? '#0a84ff' : 'var(--border)'}`, background: isSelected ? '#0a84ff' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {isSelected && <span style={{ color: '#fff', fontSize: 13, lineHeight: 1 }}>✓</span>}
+                        </div>
+                      ) : (
+                        <div className="ios-list-icon" style={{ background: on ? 'rgba(48,209,88,0.15)' : 'rgba(255,255,255,0.06)' }}>
+                          {meta.icon}
+                        </div>
+                      )}
                       <div className="ios-list-content" style={{ flex: 1, minWidth: 0 }} onClick={e => e.stopPropagation()}>
                         {isEditing ? (
                           <form onSubmit={e => { e.preventDefault(); submitRename(s.entity_id) }} style={{ display: 'flex', gap: 6 }}>
@@ -148,7 +194,7 @@ export default function EntitiesPage() {
                               onBlur={() => submitRename(s.entity_id)} autoFocus />
                           </form>
                         ) : (
-                          <div className="ios-list-title" onDoubleClick={() => startRename(s.entity_id, name)}
+                          <div className="ios-list-title" onDoubleClick={() => !selectMode && startRename(s.entity_id, name)}
                             title="Double-click to rename">{name}</div>
                         )}
                         <div className="ios-list-subtitle">
@@ -156,22 +202,24 @@ export default function EntitiesPage() {
                           <span style={{ marginLeft: 8 }}>{s.entity_id}</span>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-                        {!isEditing && (
-                          <>
-                            <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }}
-                              onClick={() => startRename(s.entity_id, name)} title="Rename">✎</button>
-                            <button className="btn" style={{ fontSize: 14, padding: '2px 6px', opacity: pinned.has(s.entity_id) ? 1 : 0.3 }}
-                              onClick={() => togglePin(s.entity_id)} title={pinned.has(s.entity_id) ? 'Unpin from Dashboard' : 'Pin to Dashboard'}>
-                              {pinned.has(s.entity_id) ? '★' : '☆'}
-                            </button>
-                          </>
-                        )}
-                        <label className="ios-toggle">
-                          <input type="checkbox" checked={on} onChange={() => toggle(s)} />
-                          <span className="ios-slider" />
-                        </label>
-                      </div>
+                      {!selectMode && (
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                          {!isEditing && (
+                            <>
+                              <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }}
+                                onClick={() => startRename(s.entity_id, name)} title="Rename">✎</button>
+                              <button className="btn" style={{ fontSize: 14, padding: '2px 6px', opacity: pinned.has(s.entity_id) ? 1 : 0.3 }}
+                                onClick={() => togglePin(s.entity_id)} title={pinned.has(s.entity_id) ? 'Unpin from Dashboard' : 'Pin to Dashboard'}>
+                                {pinned.has(s.entity_id) ? '★' : '☆'}
+                              </button>
+                            </>
+                          )}
+                          <label className="ios-toggle">
+                            <input type="checkbox" checked={on} onChange={() => toggle(s)} />
+                            <span className="ios-slider" />
+                          </label>
+                        </div>
+                      )}
                     </div>
                   )
                 })}

@@ -61,30 +61,71 @@ export function BrightnessSlider({ value, onChange }: { value: number; onChange:
   )
 }
 
+const DOMAIN_ICON: Record<string, string> = {
+  light: '💡', switch: '🔌', binary_sensor: '🔍', sensor: '📊',
+  camera: '📷', media_player: '🎵', cover: '🪟', lock: '🔒',
+  climate: '🌡️', fan: '💨', scene: '🎬', automation: '⚡',
+}
+
 export function DevicePicker({ meshName, states, onPick }: { meshName: string; states: Map<string, HaState>; onPick: (mesh: string, eid: string) => void }) {
   const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
   const [pos, setPos] = useState({ x: 0, y: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
   const devices: DeviceItem[] = Array.from(states.entries())
     .map(([id, s]) => ({ id, name: (s.attributes?.friendly_name as string) || id }))
-  const btnRef = useRef<HTMLButtonElement>(null)
+    .sort((a, b) => a.id.localeCompare(b.id))
+
+  const filtered = q
+    ? devices.filter(d => d.id.includes(q.toLowerCase()) || d.name.toLowerCase().includes(q.toLowerCase()))
+    : devices
+
+  const openPicker = () => {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      const x = Math.min(r.left, window.innerWidth - 290)
+      const y = r.bottom + 4 + window.scrollY
+      setPos({ x, y })
+    }
+    setOpen(v => !v)
+    setQ('')
+    setTimeout(() => inputRef.current?.focus(), 60)
+  }
+
   return (
     <>
-      <button ref={btnRef} className="btn" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => {
-        if (!open && btnRef.current) { const r = btnRef.current.getBoundingClientRect(); setPos({ x: r.left, y: r.bottom + 4 }) }
-        setOpen(!open)
-      }}>+</button>
+      <button ref={btnRef} className="btn" style={{ fontSize: 10, padding: '2px 6px' }} onClick={openPicker}>+</button>
       {open && (
-        <div style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 9999, width: 280, background: '#1c1c1e', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.5)', padding: 4, maxHeight: 350, overflowY: 'auto', fontSize: 14 }}>
-          {devices.length === 0 && <div style={{ padding: 8, color: '#888', fontSize: 13 }}>No devices</div>}
-          {devices.map(d => (
-            <div key={d.id} style={{ padding: '8px 12px', fontSize: 14, color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap', borderBottom: '1px solid #333' }}
-              onClick={() => { onPick(meshName, d.id); setOpen(false) }}
-              onMouseEnter={e => (e.target as HTMLElement).style.background = '#2c2c2e'}
-              onMouseLeave={e => (e.target as HTMLElement).style.background = 'transparent'}>
-              {d.name}
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onClick={() => setOpen(false)} />
+          <div style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 9999, width: 290, background: '#1c1c1e', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
+            <div style={{ padding: '8px 10px', borderBottom: '1px solid #333' }}>
+              <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)} placeholder="Search entity…"
+                style={{ width: '100%', padding: '5px 8px', borderRadius: 6, border: '1px solid #444', background: '#2c2c2e', color: '#fff', fontSize: 12, boxSizing: 'border-box' }} />
             </div>
-          ))}
-        </div>
+            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+              {filtered.length === 0 && <div style={{ padding: 12, color: '#888', fontSize: 12, textAlign: 'center' }}>No matches</div>}
+              {filtered.map(d => {
+                const domain = d.id.split('.')[0]
+                const icon = DOMAIN_ICON[domain] || '🔧'
+                return (
+                  <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', cursor: 'pointer', borderBottom: '1px solid #222' }}
+                    onClick={() => { onPick(meshName, d.id); setOpen(false) }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#2c2c2e'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}>
+                    <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</div>
+                      <div style={{ fontSize: 10, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.id}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </>
       )}
     </>
   )

@@ -8,23 +8,30 @@ import { ClimateRtiCard, ThermostatCard } from '../cards/ClimateCards'
 import { GarageCoverCard } from '../cards/GarageCards'
 import { SwitchTile, FanRtiCard } from '../cards/SwitchCards'
 import { SceneTile, AutomationTile } from '../cards/SceneCards'
+import { ButtonTile, NumberTile, SelectTile } from '../cards/ActionCards'
+import { ChartCard } from '../cards/ChartCard'
 
-export function renderCard(s: HaState, cardType: string, icon?: string): React.ReactNode | null {
+export function renderCard(s: HaState, cardType: string, icon?: string, label?: string): React.ReactNode | null {
+  const entity = label ? { ...s, attributes: { ...s.attributes, friendly_name: label } } : s
   switch (cardType) {
-    case 'light':        return <LightTile        key={s.entity_id} s={s} />
-    case 'sensor':       return <SensorRtiCard     key={s.entity_id} s={s} />
-    case 'curtain':      return <CurtainTile       key={s.entity_id} s={s} />
-    case 'camera':       return <CameraRtiCard     key={s.entity_id} s={s} />
-    case 'lock':         return <LockTile          key={s.entity_id} s={s} />
-    case 'alarm':        return <AlarmCard         key={s.entity_id} s={s} />
-    case 'switch':       return <SwitchTile        key={s.entity_id} s={s} icon={icon} />
-    case 'media-player': return <MediaRtiCard      key={s.entity_id} s={s} />
-    case 'climate':      return <ClimateRtiCard    key={s.entity_id} s={s} />
-    case 'thermostat':   return <ThermostatCard    key={s.entity_id} s={s} />
-    case 'cover':        return <GarageCoverCard   key={s.entity_id} s={s} />
-    case 'fan':          return <FanRtiCard        key={s.entity_id} s={s} />
-    case 'scene':        return <SceneTile         key={s.entity_id} s={s} />
-    case 'automation':   return <AutomationTile    key={s.entity_id} s={s} />
+    case 'light':        return <LightTile        key={entity.entity_id} s={entity} />
+    case 'sensor':       return <SensorRtiCard     key={entity.entity_id} s={entity} />
+    case 'curtain':      return <CurtainTile       key={entity.entity_id} s={entity} />
+    case 'camera':       return <CameraRtiCard     key={entity.entity_id} s={entity} />
+    case 'lock':         return <LockTile          key={entity.entity_id} s={entity} />
+    case 'alarm':        return <AlarmCard         key={entity.entity_id} s={entity} />
+    case 'switch':       return <SwitchTile        key={entity.entity_id} s={entity} icon={icon} />
+    case 'media-player': return <MediaRtiCard      key={entity.entity_id} s={entity} />
+    case 'climate':      return <ClimateRtiCard    key={entity.entity_id} s={entity} />
+    case 'thermostat':   return <ThermostatCard    key={entity.entity_id} s={entity} />
+    case 'cover':        return <GarageCoverCard   key={entity.entity_id} s={entity} />
+    case 'fan':          return <FanRtiCard        key={entity.entity_id} s={entity} />
+    case 'scene':        return <SceneTile         key={entity.entity_id} s={entity} />
+    case 'automation':   return <AutomationTile    key={entity.entity_id} s={entity} />
+    case 'button':       return <ButtonTile        key={entity.entity_id} s={entity} />
+    case 'number':       return <NumberTile        key={entity.entity_id} s={entity} />
+    case 'select':       return <SelectTile        key={entity.entity_id} s={entity} />
+    case 'chart':        return <ChartCard         key={entity.entity_id} s={entity} />
     default:             return null
   }
 }

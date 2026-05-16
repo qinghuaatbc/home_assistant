@@ -15,6 +15,7 @@ import {
   EVENT_HOMEASSISTANT_STARTED,
 } from './common/constants/events.constants';
 import { ContextService } from './core/context/context.service';
+import { PushModule } from './push/push.module';
 
 @Module({
   imports: [
@@ -56,6 +57,9 @@ import { ContextService } from './core/context/context.service';
 
     // Integration plugin system
     IntegrationsModule,
+
+    // Web Push notifications
+    PushModule,
   ],
 })
 export class AppModule implements OnModuleInit {

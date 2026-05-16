@@ -4,12 +4,10 @@ const TABS = [
   { id: 'dashboard',    icon: '⊞',  label: 'Home'    },
   { id: 'entities',     icon: '⚙️',  label: 'Devices' },
   { id: 'floorplan',    icon: '🏠',  label: '3D'      },
-  { id: 'floorplan2d',  icon: '🗺️',  label: '2D'      },
+  { id: 'userpanel',    icon: '🎛️',  label: 'Panel'   },
   { id: 'history',      icon: '📊',  label: 'History' },
-  { id: 'events',       icon: '📋',  label: 'Events'  },
   { id: 'automations',  icon: '⚡',  label: 'Auto'    },
-  { id: 'areas',        icon: '🏠',  label: 'Areas'   },
-  { id: 'integrations', icon: '🔌',  label: 'Integ'   },
+  { id: 'integrations', icon: '🔌',  label: 'Config'  },
   { id: 'settings',     icon: '☰',  label: 'More'    },
 ]
 
@@ -23,7 +21,7 @@ export default function TabBar() {
         <button
           key={t.id}
           className={`tab-item ${current === t.id || current.replace('/','') === t.id ? 'active' : ''}`}
-          onClick={() => navigate(t.id === 'floorplan' || t.id === 'floorplan2d' ? '/app/' + t.id : '/' + t.id)}
+          onClick={() => navigate('/' + t.id)}
           style={{ flex: '0 0 auto', padding: '6px 10px' }}
         >
           <span className="tab-icon">{t.icon}</span>

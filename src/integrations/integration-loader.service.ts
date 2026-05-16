@@ -26,6 +26,8 @@ import { EnvisalinkIntegration } from './built-in/envisalink/envisalink.integrat
 import { RtiIntegration } from './built-in/rti/rti.integration';
 import { FanIntegration } from './built-in/fan/fan.integration';
 import { SceneIntegration } from './built-in/scene/scene.integration';
+import { NestThermostatIntegration } from './built-in/nest-thermostat/nest-thermostat.integration';
+import { EcobeeIntegration } from './built-in/ecobee/ecobee.integration';
 import {
   EVENT_HOMEASSISTANT_START,
   EVENT_COMPONENT_LOADED,
@@ -84,6 +86,8 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     rtiIntegration: RtiIntegration,
     fanIntegration: FanIntegration,
     sceneIntegration: SceneIntegration,
+    nestThermostatIntegration: NestThermostatIntegration,
+    ecobeeIntegration: EcobeeIntegration,
   ) {
     this.builtInRegistry.set('light', lightIntegration);
     this.builtInRegistry.set('switch', switchIntegration);
@@ -101,6 +105,8 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     this.builtInRegistry.set('rti', rtiIntegration);
     this.builtInRegistry.set('fan', fanIntegration);
     this.builtInRegistry.set('scene', sceneIntegration);
+    this.builtInRegistry.set('nest_thermostat', nestThermostatIntegration);
+    this.builtInRegistry.set('ecobee', ecobeeIntegration);
   }
 
   /**

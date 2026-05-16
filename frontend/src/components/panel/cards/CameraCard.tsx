@@ -23,6 +23,7 @@ export const CameraRtiCard = memo(({ s }: { s: HaState }) => {
   const { token } = useHa(); const th = useTh()
   const [expanded, setExpanded] = useState(false)
   const [muted, setMuted] = useState(true)
+  const [streamError, setStreamError] = useState(false)
   const cardVideoRef = useRef<HTMLVideoElement>(null)
   const fullVideoRef  = useRef<HTMLVideoElement>(null)
   const cardHlsRef   = useRef<any>(null)
@@ -48,14 +49,21 @@ export const CameraRtiCard = memo(({ s }: { s: HaState }) => {
   return (
     <>
       <div style={{ ...cardSt(th, { padding: 0, overflow: 'hidden', cursor: 'pointer', gridColumn: 'span 2' }) }}
-        onClick={() => setExpanded(true)}>
+        onClick={() => { setStreamError(false); setExpanded(true) }}>
         <div style={{ background: '#111', borderRadius: 18, overflow: 'hidden', aspectRatio: '16/9', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {hlsUrl ? (
+          {streamError ? (
+            <div style={{ textAlign: 'center', padding: 12 }}>
+              <div style={{ fontSize: 28, opacity: 0.4 }}>📷</div>
+              <div style={{ fontSize: 11, color: '#ff453a', marginTop: 4 }}>Stream unavailable</div>
+              <button onClick={e => { e.stopPropagation(); setStreamError(false) }} style={{ fontSize: 10, marginTop: 6, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>Retry</button>
+            </div>
+          ) : hlsUrl ? (
             <video ref={cardVideoRef} autoPlay muted playsInline
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={() => setStreamError(true)} />
           ) : snapshotUrl ? (
             <img src={snapshotUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={name}
-              onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+              onError={() => setStreamError(true)} />
           ) : (
             <span style={{ fontSize: 28, opacity: 0.3 }}>📷</span>
           )}
@@ -75,6 +83,17 @@ export const CameraRtiCard = memo(({ s }: { s: HaState }) => {
             <button onClick={e => { e.stopPropagation(); setExpanded(false) }}
               style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }}>✕</button>
             <span style={{ color: '#fff', fontWeight: 600, fontSize: 14, flex: 1 }}>📷 {name}</span>
+            <button onClick={e => {
+                e.stopPropagation()
+                const video = fullVideoRef.current
+                if (!video) return
+                const canvas = document.createElement('canvas')
+                canvas.width = video.videoWidth; canvas.height = video.videoHeight
+                canvas.getContext('2d')?.drawImage(video, 0, 0)
+                const a = document.createElement('a')
+                a.download = `${name}-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.png`
+                a.href = canvas.toDataURL('image/png'); a.click()
+              }} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }}>📸</button>
             <button onClick={e => { e.stopPropagation(); setMuted(m => !m) }}
               style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }}>
               {muted ? '🔇' : '🔊'}

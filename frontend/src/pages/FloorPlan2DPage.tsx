@@ -408,7 +408,7 @@ export default function FloorPlan2DPage({ fullscreen, onFullscreenChange, standa
         {!fullscreen && (
           <div className="nav-header">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div className="nav-title">🏠 2D Floor Plan</div>
+              <div className="nav-title">🎛️ User Panel</div>
               <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
                 <button className="btn" style={{ fontSize: 14, padding: '4px 10px' }}
                   onClick={() => onFullscreenChange?.(true)}>⛶</button>

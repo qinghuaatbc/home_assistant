@@ -26,6 +26,10 @@ import { EnvisalinkIntegration } from './built-in/envisalink/envisalink.integrat
 import { RtiIntegration } from './built-in/rti/rti.integration';
 import { FanIntegration } from './built-in/fan/fan.integration';
 import { SceneIntegration } from './built-in/scene/scene.integration';
+import { NestThermostatIntegration } from './built-in/nest-thermostat/nest-thermostat.integration';
+import { NestThermostatClientService } from './built-in/nest-thermostat/nest-thermostat-client.service';
+import { EcobeeIntegration } from './built-in/ecobee/ecobee.integration';
+import { EcobeeClientService } from './built-in/ecobee/ecobee-client.service';
 
 @Module({
   imports: [RegistryModule, AutomationModule],
@@ -66,6 +70,12 @@ import { SceneIntegration } from './built-in/scene/scene.integration';
     FanIntegration,
     // Scene
     SceneIntegration,
+    // Google Nest Thermostat
+    NestThermostatIntegration,
+    NestThermostatClientService,
+    // Ecobee Thermostat
+    EcobeeIntegration,
+    EcobeeClientService,
   ],
   exports: [IntegrationLoaderService],
 })

@@ -1,10 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { useHa } from '../context/HaContext'
 
-function toggleTheme() {
-  const isLight = document.documentElement.classList.toggle('light')
-  localStorage.setItem('ha_theme', isLight ? 'light' : 'dark')
-}
 
 interface FieldDef {
   key: string; label: string; placeholder?: string; default?: string; type?: string; options?: string[]
@@ -12,29 +8,89 @@ interface FieldDef {
 
 interface IntegrationDef {
   domain: string; name: string; icon: string; desc: string
+  category: string
   fields: FieldDef[]
   dynamicFields?: { label: string; key: string; type?: string; placeholder?: string; options?: string[] }[]
   devicesLabel?: string
   addLabel?: string
 }
 
+const CATEGORIES = [
+  { key: 'climate',    label: '🌡️ Climate & Sensors' },
+  { key: 'lighting',   label: '💡 Lighting & Control' },
+  { key: 'security',   label: '🔒 Security' },
+  { key: 'media',      label: '🎛️ Media & AV' },
+  { key: 'camera',     label: '📷 Cameras' },
+  { key: 'protocol',   label: '📡 Protocols & Bridges' },
+  { key: 'developer',  label: '🧪 Developer' },
+]
+
 const INTEGRATIONS: IntegrationDef[] = [
-  { domain: 'demo', name: 'Demo', icon: '🧪', desc: 'Simulated test devices (lights, switches, sensors)',
-    fields: [{ key: 'enable', label: 'Enable demo devices', type: 'checkbox', default: 'true' }]},
-  { domain: 'mqtt', name: 'MQTT', icon: '📡', desc: 'MQTT broker connection (Tasmota, ESPHome, Sonoff...)',
+  { domain: 'nest_thermostat', name: 'Google Nest Thermostat', icon: '🌡️', category: 'climate',
+    desc: 'Google Nest Thermostat via Smart Device Management (SDM) API',
     fields: [
-      { key: 'broker', label: 'Broker', placeholder: 'localhost', default: 'localhost' },
-      { key: 'port', label: 'Port', placeholder: '1883', default: '1883', type: 'number' },
-      { key: 'username', label: 'Username (optional)', placeholder: '', default: '' },
-      { key: 'password', label: 'Password (optional)', placeholder: '', default: '', type: 'password' },
+      { key: 'project_id', label: 'SDM Project ID', placeholder: 'my-project-12345', default: '' },
+      { key: 'client_id', label: 'OAuth Client ID', placeholder: '123456789-abc.apps.googleusercontent.com', default: '' },
+      { key: 'client_secret', label: 'OAuth Client Secret', placeholder: '', default: '', type: 'password' },
+      { key: 'refresh_token', label: 'Refresh Token', placeholder: '', default: '', type: 'password' },
+      { key: 'poll_interval', label: 'Poll interval (s)', placeholder: '60', default: '60', type: 'number' },
+    ]},
+  { domain: 'ecobee', name: 'Ecobee Thermostat', icon: '🌿', category: 'climate',
+    desc: 'Ecobee smart thermostat via Ecobee API',
+    fields: [
+      { key: 'api_key', label: 'API Key', placeholder: 'From developer.ecobee.com', default: '' },
+      { key: 'refresh_token', label: 'Refresh Token', placeholder: '', default: '', type: 'password' },
+      { key: 'poll_interval', label: 'Poll interval (s)', placeholder: '180', default: '180', type: 'number' },
+    ]},
+  { domain: 'weather_station', name: 'Weather Station', icon: '🌤️', category: 'climate',
+    desc: 'HTTP-polled temperature, humidity, wind sensor',
+    fields: [
+      { key: 'name', label: 'Name', placeholder: 'Weather Station', default: 'Weather Station' },
+      { key: 'host', label: 'Host / IP', placeholder: '192.168.1.100', default: 'localhost' },
+      { key: 'port', label: 'Port', type: 'number', placeholder: '8080', default: '8080' },
+      { key: 'interval_seconds', label: 'Poll interval (s)', type: 'number', placeholder: '60', default: '60' },
+    ]},
+  { domain: 'http_sensor', name: 'HTTP Sensor', icon: '📊', category: 'climate',
+    desc: 'Poll any HTTP JSON endpoint for sensor values',
+    fields: [],
+    dynamicFields: [
+      { label: 'Name', key: 'name', placeholder: 'Living Room' },
+      { label: 'URL', key: 'url', placeholder: 'http://192.168.1.100/api' },
+      { label: 'Interval (s)', key: 'interval', type: 'number', placeholder: '60' },
+      { label: 'JSON path', key: 'path', placeholder: 'temperature' },
+      { label: 'Field label', key: 'label', placeholder: 'Temperature' },
+      { label: 'Field key', key: 'key', placeholder: 'temperature' },
+      { label: 'Unit', key: 'unit', placeholder: '°C' },
+    ]},
+  { domain: 'lutron_caseta', name: 'Lutron Caseta', icon: '💡', category: 'lighting',
+    desc: 'Lutron Caseta Smart Bridge',
+    fields: [
+      { key: 'host', label: 'Bridge IP', placeholder: '192.168.1.167', default: '' },
+      { key: 'port', label: 'Port', placeholder: '23', default: '23', type: 'number' },
+      { key: 'username', label: 'Username', placeholder: 'lutron', default: 'lutron' },
+      { key: 'password', label: 'Password', placeholder: 'integration', default: 'integration' },
     ],
     dynamicFields: [
-      { label: 'State Topic', key: 'topic', placeholder: 'stat/lamp1/POWER' },
-      { label: 'Cmd Topic', key: 'command_topic', placeholder: 'cmnd/lamp1/POWER' },
-      { label: 'Type', key: 'type', placeholder: 'light' },
-      { label: 'Name', key: 'name', placeholder: 'Living Room Lamp' },
+      { label: 'Integration ID', key: 'integrationId', type: 'number', placeholder: '1' },
+      { label: 'Entity ID', key: 'entity_id', placeholder: 'light.lutron_living_room' },
+      { label: 'Type', key: 'type', placeholder: 'dimmer' },
+      { label: 'Name', key: 'name', placeholder: 'Living Room' },
     ]},
-  { domain: 'envisalink', name: 'EnvisaLink (DSC/Honeywell)', icon: '🔒', desc: 'DSC/Honeywell alarm panels via EnvisaLink',
+  { domain: 'isy994', name: 'ISY994 / Insteon', icon: '🏗️', category: 'lighting',
+    desc: 'ISY994 home automation controller (Insteon, Z-Wave)',
+    fields: [
+      { key: 'host', label: 'ISY IP', placeholder: '192.168.1.100', default: '' },
+      { key: 'port', label: 'Port', placeholder: '80', default: '80', type: 'number' },
+      { key: 'username', label: 'Username', placeholder: 'admin', default: 'admin' },
+      { key: 'password', label: 'Password', placeholder: 'admin', default: 'admin', type: 'password' },
+    ],
+    dynamicFields: [
+      { label: 'Address (ID)', key: 'address', placeholder: '11 22 33 1' },
+      { label: 'Type', key: 'type', options: ['dimmer', 'switch', 'sensor'] },
+      { label: 'Name', key: 'name', placeholder: 'Living Room Dimmer' },
+    ]},
+  { domain: 'envisalink', name: 'EnvisaLink (DSC/Honeywell)', icon: '🔒', category: 'security',
+    desc: 'DSC/Honeywell alarm panels via EnvisaLink',
     fields: [
       { key: 'host', label: 'EnvisaLink IP', placeholder: '192.168.1.50', default: '' },
       { key: 'port', label: 'Port', placeholder: '4025', default: '4025', type: 'number' },
@@ -48,43 +104,8 @@ const INTEGRATIONS: IntegrationDef[] = [
       { label: 'Name', key: 'name', placeholder: 'Front Door' },
       { label: 'Type', key: 'type', placeholder: 'door' },
     ]},
-  { domain: 'isy994', name: 'ISY994 / Insteon', icon: '🏗️', desc: 'ISY994 home automation controller (Insteon, Z-Wave)',
-    fields: [
-      { key: 'host', label: 'ISY IP', placeholder: '192.168.1.100', default: '' },
-      { key: 'port', label: 'Port', placeholder: '80', default: '80', type: 'number' },
-      { key: 'username', label: 'Username', placeholder: 'admin', default: 'admin' },
-      { key: 'password', label: 'Password', placeholder: 'admin', default: 'admin', type: 'password' },
-    ],
-    dynamicFields: [
-      { label: 'Address (ID)', key: 'address', placeholder: '11 22 33 1' },
-      { label: 'Type', key: 'type', options: ['dimmer', 'switch', 'sensor'] },
-      { label: 'Name', key: 'name', placeholder: 'Living Room Dimmer' },
-    ]},
-  { domain: 'weather_station', name: 'Weather Station', icon: '🌤️', desc: 'HTTP-polled temperature, humidity, wind sensor',
-    fields: [
-      { key: 'name', label: 'Name', placeholder: 'Weather Station', default: 'Weather Station' },
-      { key: 'host', label: 'Host / IP', placeholder: '192.168.1.100', default: 'localhost' },
-      { key: 'port', label: 'Port', type: 'number', placeholder: '8080', default: '8080' },
-      { key: 'interval_seconds', label: 'Poll interval (s)', type: 'number', placeholder: '60', default: '60' },
-    ]},
-  { domain: 'http_sensor', name: 'HTTP Sensor', icon: '📡', desc: 'Poll any HTTP JSON endpoint for sensor values',
-    fields: [],
-    dynamicFields: [
-      { label: 'Name', key: 'name', placeholder: 'Living Room' },
-      { label: 'URL', key: 'url', placeholder: 'http://192.168.1.100/api' },
-      { label: 'Interval (s)', key: 'interval', type: 'number', placeholder: '60' },
-      { label: 'JSON path', key: 'path', placeholder: 'temperature' },
-      { label: 'Field label', key: 'label', placeholder: 'Temperature' },
-      { label: 'Field key', key: 'key', placeholder: 'temperature' },
-      { label: 'Unit', key: 'unit', placeholder: '°C' },
-    ]},
-  { domain: 'rtsp2hls', name: 'RTSP2HLS', icon: '📷', desc: 'IP cameras via RTSP (requires FFmpeg)',
-    fields: [],
-    dynamicFields: [
-      { label: 'Name', key: 'name', placeholder: 'Driveway' },
-      { label: 'RTSP URL', key: 'rtsp_url', placeholder: 'rtsp://user:pass@ip:554/stream' },
-    ]},
-  { domain: 'rti', name: 'RTI Control (MQTT Bridge)', icon: '🎛️', desc: 'RTI XP processor ↔ HA via MQTT. Bidirectional: RTI buttons control devices, HA state feeds back to RTI variables.',
+  { domain: 'rti', name: 'RTI Control (MQTT Bridge)', icon: '🎛️', category: 'media',
+    desc: 'RTI XP processor ↔ HA via MQTT. Bidirectional: RTI buttons control devices, HA state feeds back to RTI variables.',
     fields: [
       { key: 'broker', label: 'MQTT Broker IP', placeholder: '192.168.1.10', default: 'localhost' },
       { key: 'port', label: 'Port', placeholder: '1883', default: '1883', type: 'number' },
@@ -103,19 +124,30 @@ const INTEGRATIONS: IntegrationDef[] = [
     devicesLabel: 'Entity Mappings',
     addLabel: '+ Add mapping',
   },
-  { domain: 'lutron_caseta', name: 'Lutron Caseta', icon: '💡', desc: 'Lutron Caseta Smart Bridge',
+  { domain: 'rtsp2hls', name: 'RTSP2HLS', icon: '📷', category: 'camera',
+    desc: 'IP cameras via RTSP (requires FFmpeg)',
+    fields: [],
+    dynamicFields: [
+      { label: 'Name', key: 'name', placeholder: 'Driveway' },
+      { label: 'RTSP URL', key: 'rtsp_url', placeholder: 'rtsp://user:pass@ip:554/stream' },
+    ]},
+  { domain: 'mqtt', name: 'MQTT', icon: '📡', category: 'protocol',
+    desc: 'MQTT broker connection (Tasmota, ESPHome, Sonoff...)',
     fields: [
-      { key: 'host', label: 'Bridge IP', placeholder: '192.168.1.167', default: '' },
-      { key: 'port', label: 'Port', placeholder: '23', default: '23', type: 'number' },
-      { key: 'username', label: 'Username', placeholder: 'lutron', default: 'lutron' },
-      { key: 'password', label: 'Password', placeholder: 'integration', default: 'integration' },
+      { key: 'broker', label: 'Broker', placeholder: 'localhost', default: 'localhost' },
+      { key: 'port', label: 'Port', placeholder: '1883', default: '1883', type: 'number' },
+      { key: 'username', label: 'Username (optional)', placeholder: '', default: '' },
+      { key: 'password', label: 'Password (optional)', placeholder: '', default: '', type: 'password' },
     ],
     dynamicFields: [
-      { label: 'Integration ID', key: 'integrationId', type: 'number', placeholder: '1' },
-      { label: 'Entity ID', key: 'entity_id', placeholder: 'light.lutron_living_room' },
-      { label: 'Type', key: 'type', placeholder: 'dimmer' },
-      { label: 'Name', key: 'name', placeholder: 'Living Room' },
+      { label: 'State Topic', key: 'topic', placeholder: 'stat/lamp1/POWER' },
+      { label: 'Cmd Topic', key: 'command_topic', placeholder: 'cmnd/lamp1/POWER' },
+      { label: 'Type', key: 'type', placeholder: 'light' },
+      { label: 'Name', key: 'name', placeholder: 'Living Room Lamp' },
     ]},
+  { domain: 'demo', name: 'Demo', icon: '🧪', category: 'developer',
+    desc: 'Simulated test devices (lights, switches, sensors)',
+    fields: [{ key: 'enable', label: 'Enable demo devices', type: 'checkbox', default: 'true' }]},
 ]
 
 interface EntityRegItem {
@@ -143,9 +175,19 @@ export default function IntegrationsPage() {
   const [search, setSearch] = useState('')
   const [loadedStatuses, setLoadedStatuses] = useState<Record<string, string>>({})
   const [reg, setReg] = useState<Map<string, EntityRegItem>>(new Map())
-  const [editingName, setEditingName] = useState<string | null>(null)
-  const [editValue, setEditValue] = useState('')
-  const [activeTab, setActiveTab] = useState<'integrations' | 'devices'>('devices')
+  const [subTab, setSubTab] = useState<'integrations' | 'yaml' | 'dashboard' | 'floors' | 'areas'>('integrations')
+  const yamlRef  = useRef<{ save: () => Promise<{ok:boolean;msg:string}> }>(null)
+  const dashRef  = useRef<{ save: () => Promise<{ok:boolean;msg:string}> }>(null)
+  const [editorSaving, setEditorSaving] = useState(false)
+  const [editorMsg,    setEditorMsg]    = useState('')
+
+  const handleEditorSave = async (ref: React.RefObject<{ save: () => Promise<{ok:boolean;msg:string}> } | null>) => {
+    if (!ref.current) return
+    setEditorSaving(true); setEditorMsg('')
+    const { ok, msg } = await ref.current.save()
+    setEditorSaving(false); setEditorMsg(msg)
+    if (ok) setTimeout(() => setEditorMsg(''), 3000)
+  }
 
   useEffect(() => {
     if (!token) return
@@ -389,268 +431,380 @@ export default function IntegrationsPage() {
     setSaving(false)
   }
 
-  // ── Group registry by platform ──────────────────────────────────────────
-  const byPlatform = new Map<string, EntityRegItem[]>()
-  for (const [, item] of reg) {
-    const plat = item.platform || 'unknown'
-    if (!byPlatform.has(plat)) byPlatform.set(plat, [])
-    byPlatform.get(plat)!.push(item)
+  // ── Render a single integration card ───────────────────────────────────
+  const renderIntegration = (int: IntegrationDef) => {
+    const cfg = configs[int.domain] || {}
+    const isCollapsed = collapsed.has(int.domain)
+    const configured = enabledDomains.has(int.domain)
+    const status = loadedStatuses[int.domain]
+    const isLoaded = status === 'loaded'
+    const isFailed = status === 'failed'
+
+    const statusColor = isLoaded ? '#30d158' : isFailed ? '#ff453a' : configured ? '#ff9f0a' : 'var(--text3)'
+    const statusBg    = isLoaded ? 'rgba(48,209,88,0.14)' : isFailed ? 'rgba(255,69,58,0.14)' : configured ? 'rgba(255,159,10,0.14)' : 'rgba(255,255,255,0.07)'
+    const statusLabel = isLoaded ? '● Loaded' : isFailed ? '● Failed' : configured ? '● Pending' : '○ Off'
+
+    const registeredItems = [...reg.values()].filter(e => e.platform === int.domain)
+
+    return (
+      <div key={int.domain} style={{
+        marginTop: 10, borderRadius: 14,
+        border: '1px solid var(--border)',
+        background: 'var(--card)', overflow: 'hidden',
+      }}>
+        {/* ── Header ── */}
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '12px 14px', cursor: 'pointer',
+            borderBottom: isCollapsed ? 'none' : '1px solid var(--sep)',
+          }}
+          onClick={() => setCollapsed(prev => { const n = new Set(prev); if (n.has(int.domain)) n.delete(int.domain); else n.add(int.domain); return n })}>
+
+          <div style={{
+            width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+            background: 'rgba(255,255,255,0.08)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+          }}>{int.icon}</div>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', lineHeight: 1.2 }}>{int.name}</div>
+            {isCollapsed && (
+              <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{int.desc}</div>
+            )}
+          </div>
+
+          <span style={{
+            fontSize: 10, padding: '3px 9px', borderRadius: 20,
+            background: statusBg, color: statusColor,
+            fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap',
+          }}>{statusLabel}</span>
+
+          <span style={{
+            fontSize: 11, color: 'var(--text2)', flexShrink: 0,
+            display: 'inline-block',
+            transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s ease',
+          }}>▼</span>
+        </div>
+
+        {/* ── Body ── */}
+        {!isCollapsed && (
+          <div style={{ padding: '14px 14px 16px' }}>
+            <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 14, lineHeight: 1.55 }}>{int.desc}</div>
+
+            {/* Static fields */}
+            {int.fields.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {int.fields.map(field => (
+                  field.type === 'checkbox' ? (
+                    <label key={field.key} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                      <input type="checkbox"
+                        checked={cfg[field.key] !== 'false' && (cfg[field.key] === 'true' || field.default === 'true')}
+                        onChange={e => updateField(int.domain, field.key, e.target.checked ? 'true' : 'false')}
+                        style={{ width: 16, height: 16, accentColor: '#0a84ff', cursor: 'pointer' }} />
+                      <span style={{ fontSize: 13, color: 'var(--text)' }}>{field.label}</span>
+                    </label>
+                  ) : (
+                    <div key={field.key}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', display: 'block', marginBottom: 5 }}>{field.label}</label>
+                      <input
+                        type={field.type || 'text'}
+                        value={cfg[field.key] || ''}
+                        onChange={e => updateField(int.domain, field.key, e.target.value)}
+                        placeholder={field.placeholder || ''}
+                        style={{
+                          width: '100%', padding: '10px 12px',
+                          borderRadius: 10, border: '1px solid var(--border)',
+                          background: 'var(--surface)', color: 'var(--text)',
+                          fontSize: 13, boxSizing: 'border-box', outline: 'none',
+                        }}
+                      />
+                    </div>
+                  )
+                ))}
+              </div>
+            )}
+
+            {/* Dynamic device cards */}
+            {int.dynamicFields && (
+              <div style={{ marginTop: int.fields.length > 0 ? 18 : 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{int.devicesLabel ?? 'Devices'}</span>
+                  <button className="btn" style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20 }}
+                    onClick={() => addDevice(int.domain)}>{int.addLabel ?? '+ Add'}</button>
+                </div>
+
+                {(cfg.devices || []).length === 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: '16px 0', borderRadius: 10, border: '1px dashed var(--border)' }}>
+                    No devices yet
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(cfg.devices || []).map((dev: any, idx: number) => {
+                    const devLabel = dev.name || dev.entity_id || `#${idx + 1}`
+                    return (
+                      <div key={idx} style={{ borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', overflow: 'hidden' }}>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid var(--sep)',
+                        }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{devLabel}</span>
+                          <button className="btn" style={{ fontSize: 10, padding: '2px 8px', color: '#ff453a', borderRadius: 6 }}
+                            onClick={() => removeDevice(int.domain, idx)}>✕ Remove</button>
+                        </div>
+                        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {int.dynamicFields!.map(f => (
+                            <div key={f.key}>
+                              <label style={{ fontSize: 10, fontWeight: 600, color: 'var(--text2)', display: 'block', marginBottom: 4 }}>{f.label || f.key}</label>
+                              {f.options
+                                ? <select value={dev[f.key] || ''}
+                                    onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
+                                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 12, outline: 'none' }}>
+                                    {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                                  </select>
+                                : <input type={f.type || 'text'} value={dev[f.key] || ''}
+                                    placeholder={f.placeholder || ''}
+                                    onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
+                                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 12, boxSizing: 'border-box', outline: 'none' }} />
+                              }
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {int.domain === 'rti' && <RtiWebObjectPanel token={token} cfg={cfg} />}
+
+            {/* Registered entities */}
+            {registeredItems.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>
+                  Registered entities ({registeredItems.length})
+                </div>
+                <div style={{ borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                  {registeredItems.sort((a, b) => a.entity_id.localeCompare(b.entity_id)).map((item, i, arr) => (
+                    <div key={item.entity_id} style={{
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px',
+                      borderBottom: i < arr.length - 1 ? '1px solid var(--sep)' : 'none',
+                      background: 'var(--surface)', fontSize: 12,
+                    }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: states.get(item.entity_id)?.state === 'on' ? '#30d158' : 'rgba(255,255,255,0.2)' }} />
+                      <span style={{ fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text)' }}>{item.name || item.entity_id}</span>
+                      <span style={{ color: 'var(--text2)', fontSize: 10, flexShrink: 0 }}>{item.entity_id}</span>
+                      <button className="btn" style={{ fontSize: 9, padding: '1px 6px', color: '#ff453a', flexShrink: 0 }}
+                        onClick={() => removeEntity(item.entity_id)}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
   }
-  const platformOrder = [...INTEGRATIONS.map(i => i.domain), 'demo', 'mqtt', 'isy994', 'lutron_caseta', 'yamaha_avr', 'envisalink', 'weather']
-  const sortedPlatforms = [...platformOrder.filter(p => byPlatform.has(p)), ...[...byPlatform.keys()].filter(p => !platformOrder.includes(p))]
+
+  // ── Areas panel (inline) ────────────────────────────────────────────────────
+  const [areas, setAreas] = useState<{area_id:string;name:string}[]>([])
+  const [areaEntities, setAreaEntities] = useState<{entity_id:string;name:string|null;area_id:string|null}[]>([])
+  const [newAreaName, setNewAreaName] = useState('')
+  const [assigningId, setAssigningId] = useState<string|null>(null)
+
+  useEffect(() => {
+    if (subTab !== 'areas' || !token) return
+    const h = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    fetch('/api/area_registry',   { headers: h }).then(r => r.json()).then(setAreas).catch(() => {})
+    fetch('/api/entity_registry', { headers: h }).then(r => r.json()).then(setAreaEntities).catch(() => {})
+  }, [subTab, token])
+
+  const createArea = async () => {
+    if (!newAreaName.trim()) return
+    const r = await fetch('/api/area_registry', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newAreaName.trim() }) })
+    if (r.ok) { const a = await r.json(); setAreas(prev => [...prev, a]); setNewAreaName('') }
+  }
+  const deleteArea = async (id: string) => {
+    await fetch(`/api/area_registry/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    setAreas(prev => prev.filter(a => a.area_id !== id))
+  }
+  const assignArea = async (entityId: string, areaId: string | null) => {
+    const r = await fetch(`/api/entity_registry/${entityId}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ area_id: areaId }) })
+    if (r.ok) { setAreaEntities(prev => prev.map(e => e.entity_id === entityId ? { ...e, area_id: areaId } : e)); setAssigningId(null) }
+  }
+
+  const SUB_TABS = [
+    { key: 'integrations', label: '🔌 Integrations' },
+    { key: 'yaml',         label: '⚙️ Config YAML' },
+    { key: 'dashboard',    label: '📋 Dashboard' },
+    { key: 'floors',       label: '🏗️ Floors' },
+    { key: 'areas',        label: '🏠 Areas' },
+  ] as const
 
   return (
-    <div className="page">
-      <div className="page-inner">
-        <div className="nav-header">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div className="nav-title">🔌 Integrations</div>
-            <button className="btn" style={{ fontSize: 14, padding: '2px 8px', marginBottom: 10 }}
-              onClick={toggleTheme}>
-              {document.documentElement.classList.contains('light') ? '🌙' : '☀️'}
-            </button>
-          </div>
-          <div className="seg-ctrl" style={{ marginBottom: 10 }}>
-            <button className={`seg-btn ${activeTab === 'devices' ? 'active' : ''}`}
-              onClick={() => setActiveTab('devices')}>📋 Devices</button>
-            <button className={`seg-btn ${activeTab === 'integrations' ? 'active' : ''}`}
-              onClick={() => setActiveTab('integrations')}>⚙️ Config</button>
-          </div>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 'var(--tab-h, 0px)', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text)' }}>
+
+      {/* ── Header ── */}
+      <div style={{ flexShrink: 0, padding: '12px 16px 0', background: 'var(--bg)', borderBottom: '1px solid var(--sep)' }}>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>⚙️ Config</div>
         </div>
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 10 }}>
+          {SUB_TABS.map(t => (
+            <button key={t.key} onClick={() => setSubTab(t.key)} style={{
+              flexShrink: 0, fontSize: 12, padding: '6px 14px', borderRadius: 20,
+              border: '1px solid var(--border)',
+              background: subTab === t.key ? '#0a84ff' : 'var(--card)',
+              color: subTab === t.key ? '#fff' : 'var(--text)',
+              fontWeight: subTab === t.key ? 600 : 400,
+              cursor: 'pointer', outline: 'none',
+            }}>{t.label}</button>
+          ))}
+        </div>
+      </div>
 
-        {activeTab === 'devices' && (
+      {/* ── Scrollable content ── */}
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' as any, padding: '12px 16px' }}>
+
+        {/* Integrations */}
+        {subTab === 'integrations' && (
           <>
-            <div style={{
-              position: 'sticky', top: 108, zIndex: 10, background: 'var(--bg)', padding: '8px 0',
-            }}>
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search devices…"
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4, marginBottom: 8 }}>
-              {reg.size} devices · {byPlatform.size} integrations
-            </div>
-
-            {sortedPlatforms.map(platform => {
-              const items = byPlatform.get(platform)!.filter(item => {
-                if (!search) return true
-                const q = search.toLowerCase()
-                return item.entity_id.includes(q) || (item.name || '').toLowerCase().includes(q)
-              })
-              if (items.length === 0) return null
-              const meta = INTEGRATIONS.find(i => i.domain === platform)
-              const icon = meta?.icon ?? DOMAIN_ICONS[items[0]?.entity_id?.split('.')[0]] ?? '🔧'
-              return (
-                <div className="section" key={platform} style={{ marginTop: 12 }}>
-                  <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span>{icon} {meta?.name ?? platform}</span>
-                    <span style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 400 }}>({items.length})</span>
-                  </div>
-                  <div className="ios-list">
-                    {items.sort((a, b) => a.entity_id.localeCompare(b.entity_id)).map(item => {
-                      const st = states.get(item.entity_id)
-                      const on = st?.state === 'on'
-                      const domain = item.entity_id.split('.')[0]
-                      const domainIcon = DOMAIN_ICONS[domain] ?? '🔧'
-                      const isEditing = editingName === item.entity_id
-                      const name = item.name || (st?.attributes?.friendly_name as string) || item.entity_id
-                      return (
-                        <div className="ios-list-row" key={item.entity_id}>
-                          <div className="ios-list-icon" style={{
-                            background: on ? 'rgba(48,209,88,0.15)' : 'rgba(255,255,255,0.06)',
-                          }}>{domainIcon}</div>
-                          <div className="ios-list-content" style={{ flex: 1, minWidth: 0 }}>
-                            {isEditing ? (
-                              <form onSubmit={e => { e.preventDefault(); if (editValue.trim()) { updateReg(item.entity_id, { name: editValue.trim() }); setEditingName(null) } }}
-                                style={{ display: 'flex', gap: 4 }}>
-                                <input value={editValue} onChange={e => setEditValue(e.target.value)}
-                                  style={{ flex: 1, padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13 }}
-                                  onBlur={() => setEditingName(null)} autoFocus />
-                              </form>
-                            ) : (
-                              <div className="ios-list-title" style={{ cursor: 'pointer' }}
-                                onDoubleClick={() => { setEditingName(item.entity_id); setEditValue(name) }}>
-                                {name}
-                              </div>
-                            )}
-                            <div className="ios-list-subtitle">
-                              <span style={{ color: on ? 'var(--green)' : 'var(--text2)', fontWeight: on ? 600 : 400 }}>
-                                {st?.state ?? '—'}
-                              </span>
-                              <span style={{ marginLeft: 6 }}>{item.entity_id}</span>
-                              {item.disabled && <span style={{ marginLeft: 6, color: 'var(--orange)' }}>⏸ Disabled</span>}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                            <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }}
-                              onClick={() => { setEditingName(item.entity_id); setEditValue(name) }}>✎</button>
-                            {platform === 'demo' && (
-                              <button className="btn" style={{ fontSize: 10, padding: '2px 6px', color: '#ff453a' }}
-                                onClick={() => removeEntity(item.entity_id)}>✕</button>
-                            )}
-                            <label className="ios-toggle" style={{ transform: 'scale(0.8)' }}>
-                              <input type="checkbox" checked={!item.disabled}
-                                onChange={() => updateReg(item.entity_id, { disabled: !item.disabled })} />
-                              <span className="ios-slider" />
-                            </label>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </>
-        )}
-
-        {activeTab === 'integrations' && (
-          <>
-            <div style={{ position: 'sticky', top: 108, zIndex: 10, background: 'var(--bg)', padding: '8px 0' }}>
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search integrations…"
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
-            </div>
-
-            <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4, marginBottom: 8 }}>
-              Showing {filtered.length} of {INTEGRATIONS.length} integrations
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search integrations…"
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box', marginBottom: 8 }} />
+            <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 8 }}>
+              {filtered.length} of {INTEGRATIONS.length} integrations
               {enabledDomains.size > 0 && ` · ${enabledDomains.size} enabled`}
             </div>
-
-            {filtered.map(int => {
-              const cfg = configs[int.domain] || {}
-              const isCollapsed = collapsed.has(int.domain)
-              const configured = enabledDomains.has(int.domain)
-              const status = loadedStatuses[int.domain]
-              const isLoaded = status === 'loaded'
-              const isFailed = status === 'failed'
+            {CATEGORIES.map(cat => {
+              const catItems = filtered.filter(i => i.category === cat.key)
+              if (catItems.length === 0) return null
               return (
-                <div className="section" key={int.domain} style={{ marginTop: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                    onClick={() => setCollapsed(prev => { const n = new Set(prev); if (n.has(int.domain)) n.delete(int.domain); else n.add(int.domain); return n })}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span className="section-title">{int.icon} {int.name}</span>
-                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4,
-                        background: isLoaded ? 'rgba(48,209,88,0.2)' : isFailed ? 'rgba(255,69,58,0.2)' : configured ? 'rgba(255,159,10,0.2)' : 'rgba(255,255,255,0.08)',
-                        color: isLoaded ? '#30d158' : isFailed ? '#ff453a' : configured ? '#ff9f0a' : 'var(--text3)' }}>
-                        {isLoaded ? '✓ Loaded' : isFailed ? '✕ Failed' : configured ? '⏎ Pending' : '⚪'}
-                      </span>
-                    </div>
-                    <span style={{ fontSize: 12, color: 'var(--text2)' }}>{isCollapsed ? '▶' : '▼'}</span>
+                <div key={cat.key}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.08em', textTransform: 'uppercase', margin: '18px 0 6px', paddingLeft: 4 }}>
+                    {cat.label}
                   </div>
-                  {!isCollapsed && <>
-                    <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 8px', paddingLeft: 4 }}>{int.desc}</div>
-                    {int.fields.map(field => (
-                      <div key={field.key} style={{ marginBottom: 8 }}>
-                        <label style={{ fontSize: 11, color: 'var(--text2)', display: 'block', marginBottom: 2 }}>{field.label}</label>
-                        <input type={field.type || 'text'} value={cfg[field.key] || ''}
-                          onChange={e => updateField(int.domain, field.key, e.target.value)}
-                          placeholder={field.placeholder || ''}
-                          style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }} />
-                      </div>
-                    ))}
-                    {int.dynamicFields && (
-                      <div style={{ marginTop: 12 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>{int.devicesLabel ?? 'Devices'}</div>
-                        {(cfg.devices || []).map((dev: any, idx: number) => (
-                          <div key={idx} style={{ marginBottom: 8, padding: '8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface2)' }}>
-                            {int.dynamicFields!.map(f => (
-                              <div key={f.key} style={{ marginBottom: 4 }}>
-                                <label style={{ fontSize: 10, color: 'var(--text2)', display: 'block', marginBottom: 2 }}>{f.placeholder || f.key}</label>
-                                {f.options
-                                  ? <select value={dev[f.key] || ''}
-                                      onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
-                                      style={{ width: '100%', padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 11 }}>
-                                      {f.options.map(o => <option key={o} value={o}>{o}</option>)}
-                                    </select>
-                                  : <input type={f.type || 'text'} value={dev[f.key] || ''}
-                                      placeholder={f.placeholder || f.key}
-                                      onChange={e => updateDevice(int.domain, idx, f.key, e.target.value)}
-                                      style={{ width: '100%', padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 11 }} />
-                                }
-                              </div>
-                            ))}
-                            <button className="btn" style={{ fontSize: 10, padding: '2px 6px', color: '#ff453a', marginTop: 2 }}
-                              onClick={() => removeDevice(int.domain, idx)}>✕ Remove</button>
-                          </div>
-                        ))}
-                        <button className="btn" style={{ fontSize: 10, padding: '4px 10px' }}
-                          onClick={() => addDevice(int.domain)}>{int.addLabel ?? '+ Add device'}</button>
-                      </div>
-                    )}
-                    {int.domain === 'rti' && (
-                      <RtiWebObjectPanel token={token} cfg={cfg} />
-                    )}
-                    {/* Show existing devices from this integration */}
-                    {reg.size > 0 && (
-                      <div style={{ marginTop: 12 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>
-                          Existing devices ({[...reg.values()].filter(e => e.platform === int.domain).length})
-                        </div>
-                        {[...reg.values()].filter(e => e.platform === int.domain).sort((a, b) => a.entity_id.localeCompare(b.entity_id)).map(item => (
-                          <div key={item.entity_id} style={{
-                            display: 'flex', alignItems: 'center', gap: 6,
-                            padding: '4px 8px', borderRadius: 4, marginBottom: 2,
-                            background: 'var(--surface2)', fontSize: 12,
-                          }}>
-                            <span style={{ fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {item.name || item.entity_id}
-                            </span>
-                            <span style={{ color: 'var(--text2)', fontSize: 10 }}>{item.entity_id}</span>
-                            <button className="btn" style={{ fontSize: 9, padding: '1px 5px', color: '#ff453a' }}
-                              onClick={() => removeEntity(item.entity_id)}>✕</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>}
+                  {catItems.map(int => renderIntegration(int))}
                 </div>
               )
             })}
+            {filtered.filter(i => !CATEGORIES.find(c => c.key === i.category)).map(int => renderIntegration(int))}
+            <div style={{ height: 20 }} />
+          </>
+        )}
+
+        {/* Config YAML */}
+        {subTab === 'yaml' && (
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 10, lineHeight: 1.5 }}>直接编辑主配置文件，保存后自动重启服务。</div>
+            <ConfigYamlEditor ref={yamlRef} token={token} fullHeight />
+          </div>
+        )}
+
+        {/* Dashboard */}
+        {subTab === 'dashboard' && (
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 10, lineHeight: 1.5 }}>
+              编辑 <code style={{ fontSize: 11, background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>dashboard.yaml</code> — 为每个 2D 面板标签分配实体和卡片类型。
+            </div>
+            <DashboardYamlEditor ref={dashRef} token={token} fullHeight />
+          </div>
+        )}
+
+        {/* Floors */}
+        {subTab === 'floors' && (
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 10, lineHeight: 1.5 }}>管理楼层名称并上传 .glb 模型（SketchUp、Blender 导出）。</div>
+            <FloorsManager token={token} />
+          </div>
+        )}
+
+        {subTab === 'areas' && (
+          <>
+            {/* Create area */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <input value={newAreaName} onChange={e => setNewAreaName(e.target.value)}
+                placeholder="New area name…"
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', fontSize: 13 }}
+                onKeyDown={e => e.key === 'Enter' && createArea()} />
+              <button className="btn btn-accent" style={{ fontSize: 12 }} onClick={createArea}>Add</button>
+            </div>
+            {/* Area list */}
+            <div className="ios-list" style={{ marginBottom: 18 }}>
+              {areas.map(a => (
+                <div className="ios-list-row" key={a.area_id}>
+                  <div className="ios-list-icon" style={{ background: 'rgba(10,132,255,0.15)' }}>🏠</div>
+                  <div className="ios-list-content">
+                    <div className="ios-list-title">{a.name}</div>
+                    <div className="ios-list-subtitle">{a.area_id} · {areaEntities.filter(e => e.area_id === a.area_id).length} entities</div>
+                  </div>
+                  <button className="btn" style={{ fontSize: 11, padding: '4px 8px', color: '#ff453a' }} onClick={() => deleteArea(a.area_id)}>✕</button>
+                </div>
+              ))}
+              {areas.length === 0 && <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text2)', fontSize: 13 }}>No areas yet</div>}
+            </div>
+            {/* Assign entities */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 8 }}>Assign Entities to Areas</div>
+            <div className="ios-list">
+              {areaEntities.slice().sort((a,b) => (a.area_id||'zzz').localeCompare(b.area_id||'zzz') || a.entity_id.localeCompare(b.entity_id)).map(e => {
+                const areaName = areas.find(a => a.area_id === e.area_id)?.name
+                return (
+                  <div className="ios-list-row" key={e.entity_id}>
+                    <div className="ios-list-content" style={{ flex: 1, minWidth: 0 }}>
+                      <div className="ios-list-title">{e.name || e.entity_id}</div>
+                      <div className="ios-list-subtitle">{areaName ? `🏠 ${areaName}` : 'No area'}</div>
+                    </div>
+                    {assigningId === e.entity_id ? (
+                      <select value={e.area_id || ''} autoFocus
+                        onChange={ev => assignArea(e.entity_id, ev.target.value || null)}
+                        onBlur={() => setAssigningId(null)}
+                        style={{ fontSize: 12, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)' }}>
+                        <option value="">— None —</option>
+                        {areas.map(a => <option key={a.area_id} value={a.area_id}>{a.name}</option>)}
+                      </select>
+                    ) : (
+                      <button className="btn" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => setAssigningId(e.entity_id)}>Edit</button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </>
         )}
       </div>
 
-      {activeTab === 'integrations' && (
-        <div style={{ position: 'sticky', bottom: 0, zIndex: 20, background: 'var(--bg)', padding: '12px 16px calc(12px + var(--tab-h, 0px))', borderTop: '1px solid var(--sep)' }}>
-          <button className="btn btn-accent" onClick={save} disabled={saving}
-            style={{ width: '100%', fontSize: 13, padding: 12 }}>
-            {saving ? 'Saving & Restarting…' : '💾 Save & Restart'}
+      {/* ── Unified save bar ── */}
+      {(subTab === 'integrations' || subTab === 'yaml' || subTab === 'dashboard') && (
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px calc(8px + env(safe-area-inset-bottom, 0px))', borderTop: '1px solid var(--sep)', background: 'var(--bg)' }}>
+          <button className="btn btn-accent"
+            disabled={subTab === 'integrations' ? saving : editorSaving}
+            onClick={() => {
+              if (subTab === 'integrations') save()
+              else if (subTab === 'yaml') handleEditorSave(yamlRef)
+              else handleEditorSave(dashRef)
+            }}
+            style={{ fontSize: 12, padding: '6px 16px' }}>
+            {subTab === 'integrations'
+              ? (saving ? '…' : '💾 Save & Restart')
+              : subTab === 'yaml'
+                ? (editorSaving ? '…' : editorMsg.startsWith('✓') ? editorMsg : '💾 Save & Restart')
+                : (editorSaving ? '…' : editorMsg.startsWith('✓') ? editorMsg : '💾 Save')}
           </button>
-          {msg && <div style={{ marginTop: 8, fontSize: 12, color: msg.startsWith('✅') ? '#30d158' : '#ff453a', whiteSpace: 'pre-line', textAlign: 'center' }}>{msg}</div>}
+          {subTab === 'integrations' && msg && <div style={{ fontSize: 12, color: msg.startsWith('✅') ? '#30d158' : '#ff453a' }}>{msg}</div>}
+          {(subTab === 'yaml' || subTab === 'dashboard') && editorMsg && !editorMsg.startsWith('✓') && (
+            <div style={{ fontSize: 12, color: '#ff453a' }}>{editorMsg}</div>
+          )}
         </div>
       )}
-
-      <div className="page-inner" style={{ paddingBottom: '100px' }}>
-        {activeTab === 'integrations' && (
-          <>
-            <div className="section" style={{ marginTop: 24 }}>
-              <div className="section-title">⚙️ configuration.yaml</div>
-              <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 12px', paddingLeft: 4 }}>
-                直接编辑主配置文件，保存后自动重启服务。
-              </div>
-              <ConfigYamlEditor token={token} />
-            </div>
-            <div className="section" style={{ marginTop: 24 }}>
-              <div className="section-title">📋 Dashboard Cards</div>
-              <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 12px', paddingLeft: 4 }}>
-                Edit <code style={{ fontSize: 11, background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>dashboard.yaml</code> — assign card types to entities for each 2D panel tab.
-              </div>
-              <DashboardYamlEditor token={token} />
-            </div>
-            <div className="section" style={{ marginTop: 24 }}>
-              <div className="section-title">🏗️ 3D Floors</div>
-              <div style={{ fontSize: 12, color: 'var(--text2)', margin: '-4px 0 12px', paddingLeft: 4 }}>
-                Name floors and upload .glb models (SketchUp, Blender exports).
-              </div>
-              <FloorsManager token={token} />
-            </div>
-          </>
-        )}
-      </div>
     </div>
   )
 }
+
 
 function RtiWebObjectPanel({ token, cfg }: { token: string | null; cfg: any }) {
   const devices: any[] = cfg.devices || []
@@ -780,11 +934,30 @@ function RtiWebObjectPanel({ token, cfg }: { token: string | null; cfg: any }) {
   )
 }
 
-function ConfigYamlEditor({ token }: { token: string | null }) {
+type EditorHandle = { save: () => Promise<{ok:boolean;msg:string}> }
+
+function validateYaml(text: string): string | null {
+  const lines = text.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i]
+    if (raw.includes('\t')) return `Line ${i+1}: YAML does not allow tabs — use spaces`
+    const trimmed = raw.trimStart()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    // Detect duplicate colon in key (e.g. "key:: value")
+    if (/^[^:#\[\{'"]+::/.test(trimmed)) return `Line ${i+1}: Double colon detected`
+    // Detect unclosed bracket
+    const opens = (raw.match(/\[|\{/g) || []).length
+    const closes = (raw.match(/\]|\}/g) || []).length
+    if (opens !== closes) return `Line ${i+1}: Unclosed bracket`
+  }
+  return null
+}
+
+const ConfigYamlEditor = forwardRef<EditorHandle, { token: string | null; fullHeight?: boolean }>(
+  ({ token, fullHeight }, ref) => {
   const [content, setContent] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(true)
+  const [yamlError, setYamlError] = useState<string|null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -793,55 +966,53 @@ function ConfigYamlEditor({ token }: { token: string | null }) {
       .catch(() => setLoading(false))
   }, [token])
 
-  const save = async () => {
-    setSaving(true); setMsg('')
+  const onChange = (v: string) => { setContent(v); setYamlError(validateYaml(v)) }
+
+  const save = async (): Promise<{ok:boolean;msg:string}> => {
+    const err = validateYaml(content)
+    if (err) return { ok: false, msg: `⚠ ${err}` }
     try {
       const r = await fetch('/api/config/text', {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
       })
-      if (r.ok) {
-        setMsg('✅ Saved — server restarting…')
-        setTimeout(() => setMsg(''), 4000)
-      } else {
-        const d = await r.json().catch(() => ({}))
-        setMsg('❌ ' + (d.message || 'Save failed'))
-      }
-    } catch { setMsg('❌ Network error') }
-    setSaving(false)
+      if (r.ok) return { ok: true, msg: '✓ Saved — restarting' }
+      const d = await r.json().catch(() => ({}))
+      return { ok: false, msg: d.message || 'Save failed' }
+    } catch { return { ok: false, msg: 'Network error' } }
   }
+
+  useImperativeHandle(ref, () => ({ save }))
 
   if (loading) return <div style={{ fontSize: 12, color: 'var(--text2)' }}>Loading…</div>
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: fullHeight ? 1 : undefined, minHeight: 0, gap: 4 }}>
       <textarea
         value={content}
-        onChange={e => setContent(e.target.value)}
+        onChange={e => onChange(e.target.value)}
         spellCheck={false}
         style={{
-          width: '100%', minHeight: 420, padding: '10px 12px',
-          borderRadius: 8, border: '1px solid var(--border)',
+          width: '100%', flex: fullHeight ? 1 : undefined,
+          minHeight: fullHeight ? 0 : 580,
+          padding: '10px 12px',
+          borderRadius: 8, border: `1px solid ${yamlError ? '#ff453a' : 'var(--border)'}`,
           background: 'var(--surface)', color: 'var(--text)',
           fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6,
-          resize: 'vertical', boxSizing: 'border-box', outline: 'none',
+          resize: fullHeight ? 'none' : 'vertical', boxSizing: 'border-box', outline: 'none',
         }}
       />
-      {msg && <div style={{ fontSize: 11, color: msg.startsWith('✅') ? '#30d158' : '#ff453a', marginTop: 4 }}>{msg}</div>}
-      <button className="btn btn-accent" onClick={save} disabled={saving}
-        style={{ marginTop: 8, fontSize: 12, padding: '6px 16px' }}>
-        {saving ? '…' : '💾 Save & Restart'}
-      </button>
+      {yamlError && <div style={{ fontSize: 11, color: '#ff453a', padding: '2px 4px' }}>⚠ {yamlError}</div>}
     </div>
   )
-}
+})
 
-function DashboardYamlEditor({ token }: { token: string | null }) {
+const DashboardYamlEditor = forwardRef<EditorHandle, { token: string | null; fullHeight?: boolean }>(
+  ({ token, fullHeight }, ref) => {
   const [content, setContent] = useState('')
-  const [saved, setSaved] = useState(false)
-  const [err, setErr] = useState('')
   const [loading, setLoading] = useState(true)
+  const [yamlError, setYamlError] = useState<string|null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -850,44 +1021,45 @@ function DashboardYamlEditor({ token }: { token: string | null }) {
       .catch(() => setLoading(false))
   }, [token])
 
-  const save = async () => {
-    setErr('')
+  const onChange = (v: string) => { setContent(v); setYamlError(validateYaml(v)) }
+
+  const save = async (): Promise<{ok:boolean;msg:string}> => {
+    const err = validateYaml(content)
+    if (err) return { ok: false, msg: `⚠ ${err}` }
     const r = await fetch('/api/config/dashboard/text', {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),
     })
-    if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 2000) }
-    else { const d = await r.json().catch(() => ({})); setErr(d.message || 'Save failed') }
+    if (r.ok) return { ok: true, msg: '✓ Saved' }
+    const d = await r.json().catch(() => ({}))
+    return { ok: false, msg: d.message || 'Save failed' }
   }
+
+  useImperativeHandle(ref, () => ({ save }))
 
   if (loading) return <div style={{ fontSize: 12, color: 'var(--text2)' }}>Loading…</div>
 
   return (
-    <div>
-      <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 8 }}>
-        Controls which cards appear in each tab of the 2D panel. No restart needed — refresh the panel page after saving.
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: fullHeight ? 1 : undefined, minHeight: 0, gap: 4 }}>
       <textarea
         value={content}
-        onChange={e => setContent(e.target.value)}
+        onChange={e => onChange(e.target.value)}
         spellCheck={false}
         style={{
-          width: '100%', minHeight: 320, padding: '10px 12px',
-          borderRadius: 8, border: '1px solid var(--border)',
+          width: '100%', flex: fullHeight ? 1 : undefined,
+          minHeight: fullHeight ? 0 : 320,
+          padding: '10px 12px',
+          borderRadius: 8, border: `1px solid ${yamlError ? '#ff453a' : 'var(--border)'}`,
           background: 'var(--surface)', color: 'var(--text)',
           fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6,
-          resize: 'vertical', boxSizing: 'border-box', outline: 'none',
+          resize: fullHeight ? 'none' : 'vertical', boxSizing: 'border-box', outline: 'none',
         }}
       />
-      {err && <div style={{ fontSize: 11, color: '#ff453a', marginTop: 4 }}>{err}</div>}
-      <button className="btn btn-accent" onClick={save}
-        style={{ marginTop: 8, fontSize: 12, padding: '6px 16px' }}>
-        {saved ? '✓ Saved' : '💾 Save'}
-      </button>
+      {yamlError && <div style={{ fontSize: 11, color: '#ff453a', padding: '2px 4px' }}>⚠ {yamlError}</div>}
     </div>
   )
-}
+})
 
 function FloorsManager({ token }: { token: string | null }) {
   const [floors, setFloors] = useState<{ id: string; name: string; glb?: string }[]>([])

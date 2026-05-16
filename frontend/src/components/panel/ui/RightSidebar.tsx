@@ -1,6 +1,7 @@
 import { useState, useContext } from 'react'
 import { createPortal } from 'react-dom'
 import { useHa } from '../../../context/HaContext'
+import { usePushSubscription } from '../../../hooks/usePushSubscription'
 import {
   type Mode, type Theme, type Lang, type CardSize,
   useTh, useClock, tc1, tc2,
@@ -75,7 +76,8 @@ export function RightSidebar({ mode, onMode, theme, onTheme, lang, onLang, sound
   cardSize: CardSize; onSizeChange: () => void
 }) {
   const time = useClock()
-  const { wsConnected } = useHa()
+  const { wsConnected, token } = useHa()
+  const { supported: pushSupported, subscribed, loading: pushLoading, error: pushError, toggle: togglePush, test: testPush } = usePushSubscription(token)
   const th = theme
   const sideBg = NAV_BG[th]
   const sideBorder = NAV_BORDER[th]
@@ -97,12 +99,17 @@ export function RightSidebar({ mode, onMode, theme, onTheme, lang, onLang, sound
 
   return (
     <div style={{
-      position: 'fixed', right: 0, top: 0, bottom: 0, width: SIDE_W,
+      position: 'fixed', right: 0, top: 0, bottom: 0,
+      width: `calc(${SIDE_W}px + env(safe-area-inset-right, 0px))`,
       background: sideBg, backdropFilter: 'blur(28px) saturate(1.5)', WebkitBackdropFilter: 'blur(28px) saturate(1.5)',
       borderLeft: `1px solid ${sideBorder}`,
       zIndex: 40, overflowY: 'auto',
       WebkitOverflowScrolling: 'touch' as any,
       scrollbarWidth: 'none' as any,
+      boxSizing: 'border-box' as const,
+      paddingTop: 'env(safe-area-inset-top, 0px)',
+      paddingRight: 'env(safe-area-inset-right, 0px)',
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
     }}>
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -124,10 +131,22 @@ export function RightSidebar({ mode, onMode, theme, onTheme, lang, onLang, sound
       <div style={{ width: 28, height: 1, background: th === 'day' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.08)', margin: '4px 0' }} />
 
       {/* 3D / 2D toggle */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, width: '80%' }}>
-        <button onClick={() => onMode('3d')} style={btnStyle(mode === '3d')}>3D</button>
-        <button onClick={() => onMode('2d')} style={btnStyle(mode === '2d')}>2D</button>
-      </div>
+      <button onClick={() => onMode(mode === '3d' ? '2d' : '3d')} style={{
+        ...iconBtnStyle,
+        width: 36, margin: '2px auto',
+        borderRadius: 10,
+        background: mode === '3d'
+          ? 'linear-gradient(145deg,rgba(60,20,120,0.55),rgba(20,5,60,0.65))'
+          : 'linear-gradient(145deg,rgba(30,60,120,0.55),rgba(10,25,70,0.65))',
+        backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+        border: CARD_BORDER[th],
+        boxShadow: th === 'day'
+          ? '0 3px 10px rgba(0,0,0,0.13), inset 0 1px 1px rgba(255,255,255,1)'
+          : '0 3px 10px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12)',
+        fontSize: 11, fontWeight: 800, color: '#a78bfa',
+      }} title={mode === '3d' ? 'Switch to 2D' : 'Switch to 3D'}>
+        {mode === '3d' ? '3D' : '2D'}
+      </button>
 
       {/* Divider */}
       <div style={{ width: 28, height: 1, background: th === 'day' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.08)', margin: '4px 0' }} />
@@ -174,8 +193,24 @@ export function RightSidebar({ mode, onMode, theme, onTheme, lang, onLang, sound
 
       {/* Sound mode */}
       <button onClick={onSound} style={{ ...iconBtnStyle, fontSize: 18 }} title={['Silent', 'Sound effects', 'Voice'][soundMode]}>
-        {soundMode === 0 ? '🔇' : soundMode === 1 ? '🔔' : '🗣'}
+        {soundMode === 0 ? '🔇' : soundMode === 1 ? '🎵' : '🗣'}
       </button>
+
+      {/* Push notifications */}
+      {pushSupported && (
+        <>
+          <button onClick={togglePush} disabled={pushLoading}
+            style={{ ...iconBtnStyle, fontSize: 18, opacity: pushLoading ? 0.5 : 1 }}
+            title={subscribed ? 'Tap to disable push' : 'Tap to enable push'}>
+            {pushLoading ? '⏳' : subscribed ? '🔔' : '🔕'}
+          </button>
+          {pushError && (
+            <span style={{ fontSize: 8, color: '#ff453a', textAlign: 'center', lineHeight: 1.2, padding: '0 2px' }}>
+              {pushError.slice(0, 12)}
+            </span>
+          )}
+        </>
+      )}
     </div>
     </div>
   )

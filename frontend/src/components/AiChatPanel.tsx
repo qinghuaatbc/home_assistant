@@ -24,9 +24,17 @@ const T: Record<Lang, { placeholder: string; send: string; thinking: string; noR
 }
 
 const LANG_LIST: Lang[] = ['en', 'zh', 'fa']
-const RECORDING_DURATION_MS = 5000
+const RECORDING_DURATION_MS = 8000
 
-export default function AiChatPanel({ onClose, rightEdge = 16 }: { onClose: () => void; rightEdge?: number }) {
+// Inject keyframe animation once
+if (typeof document !== 'undefined' && !document.getElementById('ai-mic-styles')) {
+  const s = document.createElement('style')
+  s.id = 'ai-mic-styles'
+  s.textContent = `@keyframes micPulse{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(255,59,48,0.6)}60%{transform:scale(1.18);box-shadow:0 0 0 10px rgba(255,59,48,0)}}`
+  document.head.appendChild(s)
+}
+
+export default function AiChatPanel({ onClose }: { onClose: () => void }) {
   const { token } = useHa()
   const [prompt, setPrompt] = useState('')
   const [messages, setMessages] = useState<{ role: string; text: string }[]>([])
@@ -40,6 +48,9 @@ export default function AiChatPanel({ onClose, rightEdge = 16 }: { onClose: () =
   const timerRef = useRef<any>(null)
   const autoSendTimerRef = useRef<any>(null)
   const startTimeRef = useRef(0)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const cancelSilenceRef = useRef<(() => void) | null>(null)
+  const silenceStartRef = useRef<number | null>(null)
   const lang = getLang() as Lang
   const t = T[lang]
 
@@ -74,7 +85,6 @@ export default function AiChatPanel({ onClose, rightEdge = 16 }: { onClose: () =
     setLoading(false)
   }, [prompt, loading, token, lang, t])
 
-  // Auto-send 5s after user stops typing (for iOS dictation)
   useEffect(() => {
     if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current)
     if (prompt.trim() && !loading && !recording) {
@@ -83,7 +93,6 @@ export default function AiChatPanel({ onClose, rightEdge = 16 }: { onClose: () =
     return () => { if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current) }
   }, [prompt, loading, recording, send])
 
-  // Cancel auto-send timer on manual send
   const wrappedSend = useCallback((text?: string) => {
     if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current)
     send(text)
@@ -94,8 +103,7 @@ export default function AiChatPanel({ onClose, rightEdge = 16 }: { onClose: () =
     setLoading(true)
     try {
       const form = new FormData()
-      const name = fileName || 'audio.webm'
-      form.append('audio', blob, name)
+      form.append('audio', blob, fileName || 'audio.webm')
       form.append('lang', lang)
       const r = await fetch('/api/ai/voice', {
         method: 'POST',
@@ -119,18 +127,18 @@ export default function AiChatPanel({ onClose, rightEdge = 16 }: { onClose: () =
 
   const stopRecording = useCallback(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+    if (cancelSilenceRef.current) { cancelSilenceRef.current(); cancelSilenceRef.current = null }
+    silenceStartRef.current = null
+    if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null }
     const mr = mediaRecorderRef.current
-    if (mr && mr.state === 'recording') {
-      mr.stop()
-    }
+    if (mr && mr.state === 'recording') mr.stop()
     setRecording(false)
   }, [])
 
   const startRecording = useCallback(async () => {
     if (recording || loading) return
     if (!navigator.mediaDevices?.getUserMedia) {
-      const isSecure = window.isSecureContext
-      setMessages(prev => [...prev, { role: 'assistant', text: isSecure ? 'Mic API not available in this browser' : 'Mic requires HTTPS. Use the Cloudflare tunnel URL.' }])
+      setMessages(prev => [...prev, { role: 'assistant', text: window.isSecureContext ? 'Mic not available' : 'Mic requires HTTPS' }])
       return
     }
     try {
@@ -138,28 +146,21 @@ export default function AiChatPanel({ onClose, rightEdge = 16 }: { onClose: () =
       chunksRef.current = []
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/mp4')
-          ? 'audio/mp4'
-          : ''
+        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''
       const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {})
       mediaRecorderRef.current = mr
 
-      mr.ondataavailable = (e: BlobEvent) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data)
-      }
+      mr.ondataavailable = (e: BlobEvent) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
 
       mr.onstop = () => {
-        stream.getTracks().forEach(t => t.stop())
+        stream.getTracks().forEach(tk => tk.stop())
         const blob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' })
-        if (blob.size > 200) {
-          sendAudio(blob)
-        } else {
-          setMessages(prev => [...prev, { role: 'assistant', text: t.noMic + ': too short' }])
-        }
+        if (blob.size > 200) sendAudio(blob)
+        else setMessages(prev => [...prev, { role: 'assistant', text: t.noMic + ': too short' }])
       }
 
       mr.onerror = () => {
-        stream.getTracks().forEach(t => t.stop())
+        stream.getTracks().forEach(tk => tk.stop())
         setRecording(false)
         setMessages(prev => [...prev, { role: 'assistant', text: t.error + ': recording failed' }])
       }
@@ -169,50 +170,102 @@ export default function AiChatPanel({ onClose, rightEdge = 16 }: { onClose: () =
       setRecording(true)
       setRecordingTime(0)
 
+      // Silence detection using Float32 time domain — threshold 0.015 (~1.5% amplitude)
+      try {
+        const audioCtx = new AudioContext()
+        audioCtxRef.current = audioCtx
+        await audioCtx.resume()
+        const source = audioCtx.createMediaStreamSource(stream)
+        const analyser = audioCtx.createAnalyser()
+        analyser.fftSize = 512
+        analyser.smoothingTimeConstant = 0
+        source.connect(analyser)
+        const floatBuf = new Float32Array(analyser.fftSize)
+        let cancelled = false
+        cancelSilenceRef.current = () => { cancelled = true }
+
+        const check = () => {
+          if (cancelled) return
+          analyser.getFloatTimeDomainData(floatBuf)
+          let sum = 0
+          for (let i = 0; i < floatBuf.length; i++) sum += floatBuf[i] * floatBuf[i]
+          const rms = Math.sqrt(sum / floatBuf.length)
+          if (Date.now() - startTimeRef.current > 800) {
+            if (rms < 0.015) {
+              if (silenceStartRef.current === null) silenceStartRef.current = Date.now()
+              else if (Date.now() - silenceStartRef.current > 1500) { stopRecording(); return }
+            } else {
+              silenceStartRef.current = null
+            }
+          }
+          setTimeout(check, 80)
+        }
+        setTimeout(check, 80)
+      } catch { /* AudioContext not available */ }
+
       timerRef.current = setInterval(() => {
         const elapsed = Date.now() - startTimeRef.current
         setRecordingTime(elapsed)
-        if (elapsed >= RECORDING_DURATION_MS) {
-          stopRecording()
-        }
+        if (elapsed >= RECORDING_DURATION_MS) stopRecording()
       }, 200)
     } catch (err: any) {
-      const name = err?.name || 'unknown'
-      const msg = name === 'NotAllowedError' || name === 'PermissionDeniedError'
-        ? 'Microphone permission denied'
-        : name === 'TypeError'
-          ? 'Microphone not available (HTTP or unsupported browser)'
-          : `Mic error: ${name}`
-      setMessages(prev => [...prev, { role: 'assistant', text: msg }])
+      const name = err?.name || ''
+      setMessages(prev => [...prev, { role: 'assistant', text:
+        name === 'NotAllowedError' || name === 'PermissionDeniedError' ? 'Microphone permission denied' :
+        name === 'TypeError' ? 'Microphone not available' : `Mic error: ${name}` }])
     }
   }, [recording, loading, stopRecording, sendAudio, t])
 
+  // Auto-start mic when panel opens
+  const autoStartedRef = useRef(false)
+  useEffect(() => {
+    if (!autoStartedRef.current) {
+      autoStartedRef.current = true
+      startRecording()
+    }
+  }, [startRecording])
+
   const cycleLang = useCallback(() => {
-    const idx = LANG_LIST.indexOf(lang)
-    const next = LANG_LIST[(idx + 1) % LANG_LIST.length]
+    const next = LANG_LIST[(LANG_LIST.indexOf(lang) + 1) % LANG_LIST.length]
     setLang(next)
   }, [lang])
 
+  const micBtnStyle: React.CSSProperties = {
+    background: '#ff3b30',
+    border: 'none', borderRadius: 10, cursor: 'pointer',
+    color: '#fff', fontSize: 22,
+    padding: '6px 9px', lineHeight: 1,
+    minWidth: 40, minHeight: 36,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    animation: recording ? 'micPulse 0.9s ease-in-out infinite' : 'none',
+    transition: 'opacity 0.15s',
+  }
+
   return (
     <div style={{
-      position: 'fixed', bottom: 70, right: rightEdge, width: 280,
-      background: '#1c1c1e', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
-      zIndex: 9999, display: 'flex', flexDirection: 'column', maxHeight: 260, overflow: 'hidden',
-      border: '1px solid #333',
+      position: 'fixed', bottom: 86, left: 16, width: 290,
+      background: 'rgba(220,240,255,0.97)',
+      borderRadius: 14, boxShadow: '0 8px 32px rgba(0,100,200,0.22)',
+      zIndex: 9999, display: 'flex', flexDirection: 'column', maxHeight: 280, overflow: 'hidden',
+      border: '1px solid rgba(100,180,255,0.45)',
     }} onClick={e => e.stopPropagation()}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid #333' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', borderBottom: '1px solid rgba(100,180,255,0.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontWeight: 600, fontSize: 12, color: '#fff' }}>✦ AI</span>
+          <span style={{ fontWeight: 700, fontSize: 13, color: '#1a6fb3' }}>✦ AI</span>
           <button onClick={cycleLang} style={{
-            background: '#2c2c2e', border: '1px solid #444', borderRadius: 4, color: '#aaa',
-            fontSize: 10, cursor: 'pointer', padding: '2px 5px', lineHeight: 1,
+            background: 'rgba(100,180,255,0.2)', border: '1px solid rgba(100,180,255,0.4)',
+            borderRadius: 4, color: '#1a6fb3', fontSize: 10, cursor: 'pointer', padding: '2px 5px', lineHeight: 1,
           }}>{t.langLabel}</button>
         </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#5a8ab0', fontSize: 14, cursor: 'pointer', padding: 0 }}>✕</button>
       </div>
+
+      {/* Messages */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 100 }}>
         {messages.length === 0 && (
-          <div style={{ textAlign: 'center', color: '#888', padding: '1.5rem 0', fontSize: 12 }}>
+          <div style={{ textAlign: 'center', color: '#5a8ab0', padding: '1.5rem 0', fontSize: 12 }}>
             {t.hint}<br/>"turn on lights"
           </div>
         )}
@@ -220,39 +273,29 @@ export default function AiChatPanel({ onClose, rightEdge = 16 }: { onClose: () =
           <div key={i} style={{
             alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '90%',
             padding: '6px 10px', borderRadius: 8, fontSize: 12, lineHeight: 1.4,
-            background: m.role === 'user' ? '#4d8fff' : '#2c2c2e',
-            color: '#fff',
+            background: m.role === 'user' ? '#2680eb' : 'rgba(180,220,255,0.75)',
+            color: m.role === 'user' ? '#fff' : '#0a2540',
           }}>{m.text}</div>
         ))}
-        {loading && <div style={{ alignSelf: 'flex-start', padding: '6px 10px', fontSize: 12, color: '#888' }}>{t.processing}</div>}
+        {loading && <div style={{ alignSelf: 'flex-start', padding: '6px 10px', fontSize: 12, color: '#5a8ab0' }}>{t.processing}</div>}
         <div ref={bottomRef} />
       </div>
-      <div style={{ display: 'flex', gap: 4, padding: '4px 6px', borderTop: '1px solid #333', alignItems: 'center' }}>
+
+      {/* Input row */}
+      <div style={{ display: 'flex', gap: 4, padding: '5px 7px', borderTop: '1px solid rgba(100,180,255,0.3)', alignItems: 'center' }}>
         <input ref={inputRef} value={prompt} onChange={e => setPrompt(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && wrappedSend()}
-          placeholder={t.placeholder} style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #555', background: '#222', color: '#fff', fontSize: 16, minWidth: 0 }}
+          placeholder={t.placeholder}
+          style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid rgba(100,180,255,0.4)', background: 'rgba(255,255,255,0.85)', color: '#0a2540', fontSize: 16, minWidth: 0 }}
           disabled={loading || recording || !token} />
-        {recording ? (
-          <button onClick={stopRecording}
-            style={{
-              background: '#ff453a', border: 'none', borderRadius: 6,
-              color: '#fff', fontSize: 11, cursor: 'pointer',
-              padding: '6px 7px', lineHeight: 1, minWidth: 28, fontWeight: 600,
-            }}
-            title={t.recording}>
-            {Math.max(0, Math.ceil((RECORDING_DURATION_MS - recordingTime) / 1000))}s
-          </button>
-        ) : (
-          <button onClick={startRecording} disabled={loading || !token}
-            style={{
-              background: '#2c2c2e', border: 'none', borderRadius: 6,
-              color: '#aaa', fontSize: 14, cursor: loading || !token ? 'not-allowed' : 'pointer',
-              padding: '6px 7px', lineHeight: 1, minWidth: 28, opacity: loading || !token ? 0.4 : 1,
-            }}
-            title={t.noMic}>
-            🎤
-          </button>
-        )}
+        <button
+          onClick={recording ? stopRecording : startRecording}
+          disabled={!recording && (loading || !token)}
+          style={{ ...micBtnStyle, opacity: !recording && (loading || !token) ? 0.4 : 1 }}
+          title={recording ? t.recording : t.noMic}
+        >
+          🎤
+        </button>
         <button className="btn" style={{ fontSize: 12, padding: '4px 10px' }}
           onClick={() => wrappedSend()} disabled={loading || recording || !prompt.trim()}>{t.send}</button>
       </div>

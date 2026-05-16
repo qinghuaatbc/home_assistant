@@ -167,10 +167,25 @@ export function HaProvider({ children }: { children: ReactNode }) {
 
     const socket = io('/', {
       path: '/api/websocket',
-      transports: ['websocket'],
-      reconnectionDelay: 2000,
+      transports: ['polling', 'websocket'],
+      reconnectionDelay: 1000,
+      reconnectionAttempts: Infinity,
     })
     wsRef.current = socket
+
+    // iOS PWA: force reconnect when app comes back to foreground
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && !socket.connected) {
+        socket.disconnect()
+        socket.connect()
+      }
+    }
+    // iOS bfcache: page was restored from back-forward cache
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) { socket.disconnect(); socket.connect() }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('pageshow', onPageShow)
 
     socket.on('message', (msg: any) => {
       // Dispatch pending call_service responses
@@ -222,6 +237,8 @@ export function HaProvider({ children }: { children: ReactNode }) {
     socket.on('connect_error', () => setWsConnected(false))
 
     return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('pageshow', onPageShow)
       socket.disconnect()
       wsRef.current = null
       setWsConnected(false)

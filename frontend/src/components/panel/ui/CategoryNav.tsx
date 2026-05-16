@@ -1,11 +1,24 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useHa } from '../../../context/HaContext'
 import {
-  type Cat, type Theme,
-  useT, useTh, useSoundMode,
+  type Cat, type CardSize,
+  useT, useTh, useSoundMode, useDashboard,
   CATS, NAV_BG, NAV_BORDER, SIDE_W, TAB_H, TAB_W,
   playDing, playSwitchToggle, speakText,
 } from '../PanelContext'
+
+const NAV_SCALE: Record<CardSize, { icon: number; label: number; boxW: number; boxH: number }> = {
+  sm: { icon: 15, label: 10, boxW: 28, boxH: 22 },
+  md: { icon: 18, label: 13, boxW: 36, boxH: 28 },
+  lg: { icon: 22, label: 15, boxW: 44, boxH: 34 },
+  xl: { icon: 26, label: 17, boxW: 52, boxH: 40 },
+}
+const NAV_SCALE_V: Record<CardSize, { icon: number; label: number; boxS: number }> = {
+  sm: { icon: 16, label:  9, boxS: 30 },
+  md: { icon: 20, label: 11, boxS: 36 },
+  lg: { icon: 24, label: 13, boxS: 42 },
+  xl: { icon: 28, label: 15, boxS: 48 },
+}
 
 export function WsStatusDot() {
   const { wsConnected } = useHa()
@@ -25,13 +38,33 @@ export function WsStatusDot() {
   )
 }
 
-export function CategoryNav({ cat, onChange, vertical }: {
-  cat: Cat; onChange: (c: Cat) => void; vertical: boolean
+export function CategoryNav({ cat, onChange, vertical, cardSize = 'md' }: {
+  cat: Cat; onChange: (c: Cat) => void; vertical: boolean; cardSize?: CardSize
 }) {
   const t = useT(); const th = useTh()
   const soundMode = useSoundMode()
+  const dashboard = useDashboard()
   const navBg = NAV_BG[th]
   const navBorder = NAV_BORDER[th]
+
+  const sc = NAV_SCALE[cardSize]
+  const sv = NAV_SCALE_V[cardSize]
+
+  // Derive active tabs from dashboard.yaml: show only views that exist, in yaml order
+  const activeCats = useMemo(() => {
+    if (!dashboard?.views) return CATS
+    const yamlKeys = Object.keys(dashboard.views)
+    const mapped = yamlKeys.map(id => CATS.find(c => c.id === id)).filter(Boolean) as typeof CATS
+    return mapped.length > 0 ? mapped : CATS
+  }, [dashboard])
+
+  // Resolve display label: view_labels override → i18n default
+  const catLabel = useCallback((id: Cat) =>
+    dashboard?.view_labels?.[id] ?? t.cats[id], [dashboard, t])
+
+  // Resolve display icon: view_icons override → CATS default
+  const catIcon = useCallback((id: Cat, defaultIcon: string) =>
+    dashboard?.view_icons?.[id] ?? defaultIcon, [dashboard])
 
   const handleClick = useCallback((c: Cat) => {
     if (c === cat) return
@@ -42,40 +75,46 @@ export function CategoryNav({ cat, onChange, vertical }: {
 
   if (vertical) {
     return (
-      <nav style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: TAB_W, display: 'flex', flexDirection: 'column', background: navBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderRight: `1px solid ${navBorder}`, zIndex: 30, overflowY: 'auto' }}>
+      <nav style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: `calc(${TAB_W}px + env(safe-area-inset-left, 0px))`, display: 'flex', flexDirection: 'column', background: navBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderRight: `1px solid ${navBorder}`, zIndex: 30, boxSizing: 'border-box', paddingTop: 'env(safe-area-inset-top, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)' }}>
         <WsStatusDot />
-        {CATS.map(c => {
-          const active = cat === c.id
-          return (
-            <button key={c.id} onClick={() => handleClick(c.id)} style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: '5px 4px',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-              transition: 'opacity 0.15s',
-            }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: active ? 'rgba(240,168,0,0.22)' : 'transparent',
-                boxShadow: active ? '0 2px 10px rgba(240,168,0,0.25), inset 0 1px 0 rgba(255,220,80,0.30)' : 'none',
-                border: active ? '1px solid rgba(240,168,0,0.40)' : '1px solid transparent',
-                transition: 'background 0.2s, box-shadow 0.2s',
+        {/* Scrollable button list — inner div so iOS momentum scroll works */}
+        <div style={{ flex: 1, overflowY: 'scroll', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' as any, display: 'flex', flexDirection: 'column', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}>
+          {activeCats.map(c => {
+            const active = cat === c.id
+            return (
+              <button key={c.id} onClick={() => handleClick(c.id)} style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: '5px 4px',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                flexShrink: 0,
+                transition: 'opacity 0.15s',
               }}>
-                <span style={{ fontSize: 20 }}>{c.icon}</span>
-              </div>
-              <span style={{ fontSize: 11, fontWeight: active ? 700 : 500, color: active ? '#d4880a' : th === 'day' ? 'rgba(140,90,0,0.80)' : 'rgba(240,168,0,0.70)', letterSpacing: 0.2 }}>{t.cats[c.id]}</span>
-            </button>
-          )
-        })}
+                <div style={{
+                  width: sv.boxS, height: sv.boxS, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: active ? 'rgba(240,168,0,0.22)' : 'transparent',
+                  boxShadow: active ? '0 2px 10px rgba(240,168,0,0.25), inset 0 1px 0 rgba(255,220,80,0.30)' : 'none',
+                  border: active ? '1px solid rgba(240,168,0,0.40)' : '1px solid transparent',
+                  transition: 'background 0.2s, box-shadow 0.2s',
+                }}>
+                  <span style={{ fontSize: sv.icon }}>{catIcon(c.id, c.icon)}</span>
+                </div>
+                <span style={{ fontSize: sv.label, fontWeight: active ? 700 : 500, color: active ? '#d4880a' : th === 'day' ? 'rgba(140,90,0,0.80)' : 'rgba(240,168,0,0.70)', letterSpacing: 0.2 }}>{catLabel(c.id)}</span>
+              </button>
+            )
+          })}
+        </div>
       </nav>
     )
   }
 
   return (
     <nav style={{
-      position: 'fixed', bottom: 0, left: 0, right: SIDE_W, height: TAB_H,
+      position: 'fixed', bottom: 0, left: 0, right: `calc(${SIDE_W}px + env(safe-area-inset-right, 0px))`, height: TAB_H,
       display: 'flex', background: navBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-      borderTop: `1px solid ${navBorder}`, zIndex: 30, paddingBottom: 'env(safe-area-inset-bottom)',
+      borderTop: `1px solid ${navBorder}`, zIndex: 30, boxSizing: 'border-box' as const,
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      paddingLeft: 'env(safe-area-inset-left, 0px)',
     }}>
-      {CATS.map(c => {
+      {activeCats.map(c => {
         const active = cat === c.id
         return (
           <button key={c.id} onClick={() => handleClick(c.id)} style={{
@@ -84,15 +123,15 @@ export function CategoryNav({ cat, onChange, vertical }: {
             gap: 2, padding: '6px 4px', transition: 'opacity 0.15s',
           }}>
             <div style={{
-              width: 36, height: 28, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: sc.boxW, height: sc.boxH, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: active ? 'rgba(240,168,0,0.22)' : 'transparent',
               boxShadow: active ? '0 1px 8px rgba(240,168,0,0.25), inset 0 1px 0 rgba(255,220,80,0.30)' : 'none',
               border: active ? '1px solid rgba(240,168,0,0.40)' : '1px solid transparent',
               transition: 'background 0.2s, box-shadow 0.2s',
             }}>
-              <span style={{ fontSize: 18 }}>{c.icon}</span>
+              <span style={{ fontSize: sc.icon }}>{catIcon(c.id, c.icon)}</span>
             </div>
-            <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? '#d4880a' : th === 'day' ? 'rgba(140,90,0,0.80)' : 'rgba(240,168,0,0.70)' }}>{t.cats[c.id]}</span>
+            <span style={{ fontSize: sc.label, fontWeight: active ? 700 : 500, color: active ? '#d4880a' : th === 'day' ? 'rgba(140,90,0,0.80)' : 'rgba(240,168,0,0.70)' }}>{catLabel(c.id)}</span>
           </button>
         )
       })}

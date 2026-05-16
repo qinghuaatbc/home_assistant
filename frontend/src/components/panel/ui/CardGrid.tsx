@@ -3,10 +3,9 @@ import { type Cat, useT, useTh, tc2 } from '../PanelContext'
 
 export function CardGrid({ children, cols }: { children: React.ReactNode; cols: number }) {
   return (
-    <div className="rti-scroll" style={{
-      display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8,
-      padding: '8px 8px', overflowY: 'auto', height: '100%',
-      alignContent: 'start', WebkitOverflowScrolling: 'touch',
+    <div style={{
+      display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 8,
+      padding: '8px 8px', alignContent: 'start', minHeight: '100%',
     }}>{children}</div>
   )
 }

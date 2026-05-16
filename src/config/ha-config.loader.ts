@@ -45,7 +45,7 @@ export default (): Record<string, unknown> => {
     },
     auth: {
       jwt_secret: process.env.HA_JWT_SECRET ?? (fileConfig.auth as Record<string, unknown>)?.jwt_secret ?? 'CHANGE_THIS_SECRET',
-      jwt_expiry: process.env.HA_JWT_EXPIRY ?? (fileConfig.auth as Record<string, unknown>)?.jwt_expiry ?? '30m',
+      jwt_expiry: process.env.HA_JWT_EXPIRY ?? (fileConfig.auth as Record<string, unknown>)?.jwt_expiry ?? '30d',
     },
     database: {
       type: process.env.HA_DB_TYPE ?? (fileConfig.database as Record<string, unknown>)?.type ?? 'better-sqlite3',

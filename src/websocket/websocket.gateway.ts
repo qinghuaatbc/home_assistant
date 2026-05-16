@@ -44,7 +44,7 @@ import { GetConfigHandler } from './handlers/get-config.handler';
  * - ping: Keepalive
  */
 @WebSocketGateway({
-  transports: ['websocket'],
+  transports: ['polling', 'websocket'],
   path: '/api/websocket',
 })
 export class WebSocketGateway_

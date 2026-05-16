@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback, memo, useRef } from 'react'
 import type { HaState } from '../../../context/HaContext'
-import { useT, useTh, useSound, useRestCall, cardSt, tc1, tc2 } from '../PanelContext'
+import { useT, useTh, useSound, useRestCall, useCardSize, cardSt, tc1, tc2 } from '../PanelContext'
+
+const TILE_SCALE = {
+  sm: { nameFs: 10, briFs:  9, minH: 80  },
+  md: { nameFs: 11, briFs: 10, minH: 92  },
+  lg: { nameFs: 13, briFs: 11, minH: 110 },
+  xl: { nameFs: 15, briFs: 13, minH: 130 },
+}
 import { FancySlider } from '../ui/FancySlider'
 
 // ─── Bulb ─────────────────────────────────────────────────────────────────────
@@ -36,14 +43,23 @@ export const LightRtiCard = memo(({ s }: { s: HaState }) => {
   const b = bPct / 100
   const warmG = Math.round(160 + b * 75)
   const sliderColor = on ? `rgb(255,${warmG},50)` : '#888'
+  const slidedToZeroRef = useRef(false)
+
+  useEffect(() => { if (on) slidedToZeroRef.current = false }, [on])
 
   const toggle = useCallback(() => {
-    callService('light', on ? 'turn_off' : 'turn_on', {}, s.entity_id)
+    if (on) {
+      callService('light', 'turn_off', {}, s.entity_id)
+    } else {
+      const brightness = slidedToZeroRef.current ? { brightness: 255 } : {}
+      callService('light', 'turn_on', brightness, s.entity_id)
+    }
     sound('light', !on, name)
   }, [on, s.entity_id, callService, sound, name])
 
   const setBrightness = useCallback((v: number) => {
-    callService('light', 'turn_on', { brightness: Math.round(v * 255 / 100) }, s.entity_id)
+    if (v === 0) { slidedToZeroRef.current = true; callService('light', 'turn_off', {}, s.entity_id) }
+    else callService('light', 'turn_on', { brightness: Math.round(v * 255 / 100) }, s.entity_id)
   }, [s.entity_id, callService])
 
   return (
@@ -61,7 +77,7 @@ export const LightRtiCard = memo(({ s }: { s: HaState }) => {
     >
       {/* Name — centered */}
       <div style={{ textAlign: 'center', marginBottom: 4 }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: on ? `rgb(255,${warmG},50)` : tc1(th), transition: 'color 0.3s' }}>{name}</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: on ? (th === 'day' ? '#7a3d00' : `rgb(255,${warmG},50)`) : tc1(th), transition: 'color 0.3s' }}>{name}</span>
         <span style={{ fontSize: 12, color: tc2(th), marginLeft: 6 }}>{t.bri} {bPct}%</span>
       </div>
       {/* Bulb */}
@@ -81,6 +97,7 @@ export const LightRtiCard = memo(({ s }: { s: HaState }) => {
 export const LightTile = memo(({ s }: { s: HaState }) => {
   const callService = useRestCall()
   const th = useTh(); const sound = useSound()
+  const sc = TILE_SCALE[useCardSize()]
   const on = s.state === 'on'
   const bPct = Math.round(Number(s.attributes.brightness ?? 0) / 255 * 100)
   const name = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
@@ -88,8 +105,16 @@ export const LightTile = memo(({ s }: { s: HaState }) => {
   const dragRef = useRef<{ startY: number; startBri: number; moved: boolean; lastCall: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [localBri, setLocalBri] = useState(bPct)
+  // true when turned off by dragging slider to 0 — next turn-on should be 100%
+  const slidedToZeroRef = useRef(false)
 
-  useEffect(() => { if (!dragging) setLocalBri(bPct) }, [bPct, dragging])
+  useEffect(() => {
+    if (!dragging) {
+      setLocalBri(bPct)
+      // once the server confirms it's on again, clear the flag
+      if (on) slidedToZeroRef.current = false
+    }
+  }, [bPct, dragging, on])
 
   const displayBri = dragging ? localBri : bPct
   const displayOn  = on || (dragging && localBri > 0)
@@ -125,12 +150,21 @@ export const LightTile = memo(({ s }: { s: HaState }) => {
   const onPointerUp = () => {
     if (!dragRef.current) return
     if (!dragRef.current.moved) {
-      callService('light', on ? 'turn_off' : 'turn_on', {}, s.entity_id)
+      if (on) {
+        callService('light', 'turn_off', {}, s.entity_id)
+      } else {
+        const brightness = slidedToZeroRef.current ? { brightness: 255 } : {}
+        callService('light', 'turn_on', brightness, s.entity_id)
+      }
       sound('light', !on, name)
     } else {
       const fb = localBri
-      if (fb > 0) callService('light', 'turn_on', { brightness: Math.round(fb * 255 / 100) }, s.entity_id)
-      else callService('light', 'turn_off', {}, s.entity_id)
+      if (fb > 0) {
+        callService('light', 'turn_on', { brightness: Math.round(fb * 255 / 100) }, s.entity_id)
+      } else {
+        slidedToZeroRef.current = true
+        callService('light', 'turn_off', {}, s.entity_id)
+      }
     }
     dragRef.current = null
     setDragging(false)
@@ -149,7 +183,7 @@ export const LightTile = memo(({ s }: { s: HaState }) => {
         boxShadow: displayOn && glow
           ? `0 4px 20px ${glow}30, inset 0 1px 0 rgba(255,255,255,0.30)`
           : `inset 0 1px 0 ${th === 'day' ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.06)'}`,
-        padding: '10px 6px 8px', width: '100%', minHeight: 92,
+        padding: '10px 6px 8px', width: '100%', minHeight: sc.minH,
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
         cursor: dragging ? 'ns-resize' : 'pointer',
         userSelect: 'none', touchAction: 'none', position: 'relative',
@@ -160,15 +194,15 @@ export const LightTile = memo(({ s }: { s: HaState }) => {
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
         <BulbImg on={displayOn} bPct={displayBri} />
       </div>
-      <div style={{ fontSize: 11, fontWeight: 600, color: displayOn && glow ? glow : tc2(th), textAlign: 'center', lineHeight: 1.2, width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 4px' }}>
+      <div style={{ fontSize: sc.nameFs, fontWeight: 600, color: displayOn && glow ? (th === 'day' ? '#7a3d00' : glow) : tc2(th), textAlign: 'center', lineHeight: 1.2, width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 4px' }}>
         {name}
       </div>
-      <div style={{ fontSize: 10, fontWeight: 700, color: displayOn && glow ? glow : tc2(th), opacity: displayOn ? 1 : 0.4 }}>
+      <div style={{ fontSize: sc.briFs, fontWeight: 700, color: displayOn && glow ? (th === 'day' ? '#7a3d00' : glow) : tc2(th), opacity: displayOn ? 1 : 0.4 }}>
         {displayOn ? `${displayBri}%` : '—'}
       </div>
       <div style={{ width: '100%', paddingTop: 2 }} onPointerDown={e => e.stopPropagation()}>
         {displayOn
-          ? <FancySlider value={displayBri} color={glow ?? '#888'} onChange={v => { setLocalBri(v); callService('light', 'turn_on', { brightness: Math.round(v * 255 / 100) }, s.entity_id) }} />
+          ? <FancySlider value={displayBri} color={glow ?? '#888'} onChange={v => { setLocalBri(v); if (v === 0) callService('light', 'turn_off', {}, s.entity_id); else callService('light', 'turn_on', { brightness: Math.round(v * 255 / 100) }, s.entity_id) }} />
           : <div style={{ height: 10, borderRadius: 8, background: th === 'day' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)' }} />
         }
       </div>

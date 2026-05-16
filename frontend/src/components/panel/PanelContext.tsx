@@ -90,8 +90,12 @@ export const SoundCtx  = createContext<number>(0) // 0=mute 1=ding 2=voice
 // null = not yet loaded (show all); Set = only show mapped entities
 export const MappedCtx = createContext<Set<string> | null>(null)
 
-export interface DashboardCard { entity: string; card_type: string; icon?: string }
-export interface DashboardConfig { views: Partial<Record<string, DashboardCard[]>> }
+export interface DashboardCard { entity: string; card_type: string; icon?: string; label?: string }
+export interface DashboardConfig {
+  views: Partial<Record<string, DashboardCard[]>>
+  view_labels?: Record<string, string>
+  view_icons?: Record<string, string>
+}
 export const DashboardCtx = createContext<DashboardConfig | null>(null)
 
 export const useT         = () => TR[useContext(LangCtx)]
@@ -100,13 +104,14 @@ export const useSoundMode = () => useContext(SoundCtx)
 export const useMapped    = () => useContext(MappedCtx)
 export const useDashboard = () => useContext(DashboardCtx)
 
-export type CardSize = 'sm' | 'md' | 'lg'
-export const CARD_SIZES: CardSize[] = ['sm', 'md', 'lg']
-export const CARD_SIZE_ICON: Record<CardSize, string> = { sm: '⊟', md: '⊡', lg: '⊞' }
+export type CardSize = 'sm' | 'md' | 'lg' | 'xl'
+export const CARD_SIZES: CardSize[] = ['sm', 'md', 'lg', 'xl']
+export const CARD_SIZE_ICON: Record<CardSize, string> = { sm: '⊟', md: '⊡', lg: '⊞', xl: '▣' }
 export const CARD_SIZE_COLS: Record<CardSize, { portrait: number; landscape: number }> = {
   sm: { portrait: 5, landscape: 6 },
   md: { portrait: 4, landscape: 5 },
   lg: { portrait: 2, landscape: 3 },
+  xl: { portrait: 1, landscape: 2 },
 }
 export const SizeCtx = createContext<CardSize>('md')
 export const useCardSize = () => useContext(SizeCtx)

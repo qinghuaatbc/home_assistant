@@ -618,13 +618,25 @@ export function FloorPlan3DScene({ tokenOverride, soundMode: soundModeProp, embe
         return (
           <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: '#000', display: 'flex', flexDirection: 'column' }}
             onClick={() => setCameraViewer(null)}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: '#1c1c1e' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: 'rgba(15,18,30,0.75)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
+              <span style={{ color: '#fff', fontWeight: 600, fontSize: 14, flex: 1 }}>📷 {camName} {LANG_LIST[langIdx] === 'en' ? '' : LANG_LIST[langIdx] === 'zh' ? '直播' : 'زنده'}</span>
               <button onClick={e => { e.stopPropagation(); setCamMuted(m => !m) }}
-                style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', flexShrink: 0 }}>
+                style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }}>
                 {camMuted ? '🔇' : '🔊'}
               </button>
-              <button onClick={() => setCameraViewer(null)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', flexShrink: 0 }}>✕</button>
-              <span style={{ color: '#fff', fontWeight: 600, fontSize: 14, marginLeft: 8 }}>📷 {camName} {LANG_LIST[langIdx] === 'en' ? '' : LANG_LIST[langIdx] === 'zh' ? '直播' : 'زنده'}</span>
+              <button onClick={e => {
+                e.stopPropagation()
+                const video = camVideoRef.current
+                if (!video) return
+                const canvas = document.createElement('canvas')
+                canvas.width = video.videoWidth; canvas.height = video.videoHeight
+                canvas.getContext('2d')?.drawImage(video, 0, 0)
+                const a = document.createElement('a')
+                a.download = `${camName}-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.png`
+                a.href = canvas.toDataURL('image/png')
+                a.click()
+              }} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }}>📸</button>
+              <button onClick={e => { e.stopPropagation(); setCameraViewer(null) }} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 20, cursor: 'pointer', flexShrink: 0, lineHeight: 1 }}>✕</button>
             </div>
             <video ref={camVideoRef} autoPlay muted={camMuted} playsInline
               style={{ flex: 1, width: '100%', objectFit: 'contain' }}

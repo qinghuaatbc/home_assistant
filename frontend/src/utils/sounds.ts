@@ -212,6 +212,26 @@ export function speakText(text: string) {
   say(text, LANG_VOICES[currentLang].lang)
 }
 
+export function speakAndThen(text: string, onDone: () => void) {
+  if (!('speechSynthesis' in window)) { onDone(); return }
+  window.speechSynthesis.cancel()
+  const msg = new SpeechSynthesisUtterance(text)
+  const voice = pickVoice(LANG_VOICES[currentLang].lang)
+  if (voice) msg.voice = voice
+  msg.lang = LANG_VOICES[currentLang].lang
+  msg.rate = 1.0
+  msg.pitch = 1.0
+  msg.volume = 0.9
+  msg.onend = () => onDone()
+  msg.onerror = () => onDone()
+  window.speechSynthesis.speak(msg)
+}
+
+export function playDone() {
+  playTone(880,  0.08, 'sine', 0.12)
+  setTimeout(() => playTone(1320, 0.14, 'sine', 0.10), 90)
+}
+
 export function speakState(entityName: string, state: string) {
   if (!voiceEnabled) return
   const lang = LANG_VOICES[currentLang].lang
