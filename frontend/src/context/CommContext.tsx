@@ -50,7 +50,7 @@ interface CommContextValue {
   messages: ChatMessage[]
   sendMessage: (text: string, to?: string) => void
   sendVoiceMessage: (blob: Blob, durationMs: number, to?: string) => Promise<void>
-  sendMedia: (file: File, to?: string) => Promise<void>
+  sendMedia: (file: File, to?: string) => Promise<string | null>
   markRead: (msgId: string) => void
   callState: CallState
   callPeer: CommUser | null
@@ -379,9 +379,9 @@ export function CommProvider({ children }: { children: ReactNode }) {
 
   // ── sendMedia ──────────────────────────────────────────────────────────────
 
-  const sendMedia = useCallback(async (file: File, to?: string) => {
+  const sendMedia = useCallback(async (file: File, to?: string): Promise<string | null> => {
     const id = selfIdRef.current
-    if (!id) return
+    if (!id) return 'Not connected'
     const savedName = localStorage.getItem('comm_display_name') ?? displayName
     const form = new FormData()
     form.append('file', file, file.name)
@@ -390,19 +390,29 @@ export function CommProvider({ children }: { children: ReactNode }) {
     if (to) form.append('recipientId', to)
     try {
       const res = await fetch('/api/comm/media', { method: 'POST', body: form })
+      if (!res.ok) return `Upload failed (${res.status})`
       const data = await res.json()
-      if (!data.url) return
+      if (!data.url) return 'Server error'
       const msgId = Math.random().toString(36).slice(2) + Date.now().toString(36)
-      // Emit via socket — the gateway echoes it back to the sender, same as sendMessage
-      socketRef.current?.emit('chat_message', {
-        to: to ?? null,
-        text: '',
-        msgId,
-        mediaUrl: data.url,
-        mediaType: data.mediaType,
-        mediaName: data.mediaName,
+      // Inject into local state immediately so sender always sees it
+      const localMsg: ChatMessage = {
+        from: id, fromName: savedName, to: to ?? null, text: '',
+        msgId, mediaUrl: data.url, mediaType: data.mediaType, mediaName: data.mediaName,
+        timestamp: Date.now(),
+      }
+      setMessages(prev => {
+        if (prev.some(m => m.msgId === msgId)) return prev
+        return [...prev, localMsg].slice(-MAX_MESSAGES)
       })
-    } catch {}
+      // Emit via socket so other users see it (dedup prevents double for sender)
+      socketRef.current?.emit('chat_message', {
+        to: to ?? null, text: '', msgId,
+        mediaUrl: data.url, mediaType: data.mediaType, mediaName: data.mediaName,
+      })
+      return null
+    } catch (e) {
+      return (e as Error).message
+    }
   }, [displayName])
 
   // ── markRead ───────────────────────────────────────────────────────────────

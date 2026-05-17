@@ -487,6 +487,7 @@ export function CommPanel() {
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingPreviewUrl, setPendingPreviewUrl] = useState<string | null>(null)
   const [sendingMedia, setSendingMedia] = useState(false)
+  const [mediaError, setMediaError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -691,51 +692,56 @@ export function CommPanel() {
                     }}
                     style={{ border: 'none', background: 'transparent', color: 'var(--text2)', cursor: 'pointer', fontSize: 14, padding: 2 }}
                   >✕</button>
-                  <button
-                    disabled={sendingMedia}
-                    onClick={async () => {
-                      setSendingMedia(true)
-                      await sendMedia(pendingFile, privateTarget?.clientId)
-                      if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl)
-                      setPendingFile(null); setPendingPreviewUrl(null)
-                      setSendingMedia(false)
-                    }}
-                    style={{
-                      padding: '5px 14px', background: 'var(--blue, #007aff)', color: '#fff',
-                      border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
-                    }}
-                  >{sendingMedia ? '…' : '↑ Send'}</button>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                    {mediaError && <span style={{ fontSize: 10, color: '#ff3b30' }}>{mediaError}</span>}
+                    <button
+                      disabled={sendingMedia}
+                      onClick={async () => {
+                        setSendingMedia(true); setMediaError(null)
+                        const err = await sendMedia(pendingFile!, privateTarget?.clientId)
+                        setSendingMedia(false)
+                        if (err) { setMediaError(err); return }
+                        if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl)
+                        setPendingFile(null); setPendingPreviewUrl(null)
+                      }}
+                      style={{
+                        padding: '5px 14px', background: 'var(--blue, #007aff)', color: '#fff',
+                        border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap',
+                      }}
+                    >{sendingMedia ? '…' : '↑ Send'}</button>
+                  </div>
                 </div>
               )}
 
               {/* Input */}
               <div style={{ padding: 8, borderTop: '1px solid var(--sep)', display: 'flex', gap: 6, flexShrink: 0 }}>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*,video/*,.pdf,.doc,.docx,.txt,.zip"
-                  style={{ display: 'none' }}
-                  onChange={e => {
-                    const f = e.target.files?.[0]
-                    if (f) {
-                      if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl)
-                      setPendingFile(f)
-                      setPendingPreviewUrl(f.type.startsWith('image/') ? URL.createObjectURL(f) : null)
-                    }
-                    e.target.value = ''
-                  }}
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
+                <label
+                  htmlFor="comm-file-attach"
                   title="Attach file"
                   style={{
-                    width: 36, height: 36, borderRadius: '50%', border: 'none', flexShrink: 0,
+                    width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
                     background: pendingFile ? 'rgba(0,122,255,0.15)' : 'var(--bg)',
                     color: pendingFile ? 'var(--blue, #007aff)' : 'var(--text2)',
                     fontSize: 16, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
-                >📎</button>
+                >📎</label>
+                <input
+                  id="comm-file-attach"
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.zip"
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    const f = e.target.files?.[0]
+                    if (f) {
+                      if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl)
+                      setPendingFile(f); setMediaError(null)
+                      setPendingPreviewUrl(f.type.startsWith('image/') ? URL.createObjectURL(f) : null)
+                    }
+                    e.target.value = ''
+                  }}
+                />
                 <VoiceMsgButton onSend={(blob, durationMs) => sendVoiceMessage(blob, durationMs, privateTarget?.clientId)} />
                 <input
                   value={input}
