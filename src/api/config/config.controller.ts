@@ -157,8 +157,14 @@ export class ConfigController {
   async saveConfigText(@Body() body: { content: string }) {
     const logger = new Logger('ConfigText');
     const configPath = process.env.HA_CONFIG_PATH ?? path.resolve(process.cwd(), 'config', 'configuration.yaml');
-    try { yaml.load(body.content); } catch (e: any) { throw new BadRequestException(`Invalid YAML: ${e.message}`); }
-    fs.writeFileSync(configPath, body.content, 'utf-8');
+    let parsed: Record<string, any>;
+    try { parsed = yaml.load(body.content) as Record<string, any>; } catch (e: any) { throw new BadRequestException(`Invalid YAML: ${e.message}`); }
+    // Always keep demo — it registers core light/switch/scene services
+    const ints: any[] = parsed.integrations ?? [];
+    if (!ints.some((i: any) => i.domain === 'demo')) {
+      parsed.integrations = [{ domain: 'demo' }, ...ints];
+    }
+    fs.writeFileSync(configPath, yaml.dump(parsed, { indent: 2, lineWidth: 120, noRefs: true }), 'utf-8');
     logger.log('configuration.yaml saved directly, restarting...');
     setTimeout(() => {
       exec('pm2 restart home-assistant', (err) => {
