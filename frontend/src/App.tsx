@@ -9,6 +9,7 @@ import { CommPanel } from './components/comm/CommPanel'
 import DoorbellOverlay from './components/DoorbellOverlay'
 import LoginPage from './pages/LoginPage'
 import TabBar from './components/TabBar'
+import { useIsLandscape, TAB_H } from './components/panel/PanelContext'
 
 const DashboardPage    = lazy(() => import('./pages/DashboardPage'))
 const EntitiesPage     = lazy(() => import('./pages/EntitiesPage'))
@@ -63,6 +64,7 @@ type MicState = 'idle' | 'listening' | 'processing' | 'done'
 
 function FloatingMic() {
   const { token } = useHa()
+  const isLandscape = useIsLandscape()
   const [micState, setMicState] = useState<MicState>('idle')
   const [lastReply, setLastReply] = useState('')
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -237,7 +239,7 @@ function FloatingMic() {
       <button
         onClick={micState === 'idle' ? startRecording : cancel}
         style={{
-          position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)', left: 16, zIndex: 9999,
+          position: 'fixed', bottom: isLandscape ? 'calc(env(safe-area-inset-bottom, 0px) + 8px)' : `calc(${TAB_H}px + env(safe-area-inset-bottom, 0px) + 8px)`, left: 16, zIndex: 9999,
           width: 56, height: 56, borderRadius: 28, border: 'none',
           background: 'linear-gradient(135deg, #ff9500 0%, #ff2d78 50%, #af52de 100%)',
           color: '#fff', fontSize: 24, cursor: 'pointer',

@@ -264,13 +264,18 @@ input[type=range].ios-range::-webkit-slider-thumb {
   padding-top: 8px;
   padding-bottom: var(--safe-bottom);
   z-index: 100;
+  overflow-x: scroll;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.tab-bar::-webkit-scrollbar { display: none; }
 :root.light .tab-bar {
   background: rgba(242,242,247,0.85);
 }
 
 .tab-item {
-  flex: 1;
+  flex: 0 0 auto;
+  min-width: 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -278,7 +283,7 @@ input[type=range].ios-range::-webkit-slider-thumb {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0;
+  padding: 0 10px;
   -webkit-tap-highlight-color: transparent;
 }
 

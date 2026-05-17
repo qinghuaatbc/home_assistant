@@ -121,8 +121,13 @@ export function RightSidebar({ mode, onMode, theme, onTheme, lang, onLang, sound
       <div style={{ width: 7, height: 7, borderRadius: 4, background: wsConnected ? '#30d158' : '#ff453a', margin: '2px 0 4px' }} />
 
       {/* Time */}
-      <div style={{ fontSize: 10, fontWeight: 600, color: tc2(th), letterSpacing: 0.3, marginBottom: 4, textAlign: 'center', lineHeight: 1.3 }}>
-        {time.split(':').join('\n:')}
+      <div style={{ textAlign: 'center', marginBottom: 4, lineHeight: 1.2 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: tc1(th), letterSpacing: 0.2 }}>
+          {time.slice(0, time.indexOf(':'))}
+        </div>
+        <div style={{ fontSize: 9, fontWeight: 600, color: tc2(th), letterSpacing: 0.3 }}>
+          {time.slice(time.indexOf(':') + 1)}
+        </div>
       </div>
 
       {/* Weather */}

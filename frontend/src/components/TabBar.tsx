@@ -23,13 +23,12 @@ export default function TabBar() {
   const location = useLocation()
   const current = location.pathname.replace('/app/', '') || ''
   return (
-    <nav className="tab-bar" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+    <nav className="tab-bar">
       {TABS.map((t) => (
         <button
           key={t.id}
           className={`tab-item ${current === t.id || current.replace('/','') === t.id ? 'active' : ''}`}
           onClick={() => navigate('/' + t.id)}
-          style={{ flex: '0 0 auto', padding: '6px 10px' }}
         >
           <span className="tab-icon">{t.icon}</span>
           <span className="tab-label">{t.label}</span>

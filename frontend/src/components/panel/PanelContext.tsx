@@ -218,6 +218,8 @@ export function useRtiStyles() {
 .rti-slider::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.15)}
 .rti-slider::-moz-range-thumb{width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,0.22);cursor:grab;border:none}
 .rti-scroll::-webkit-scrollbar{width:3px}.rti-scroll::-webkit-scrollbar-track{background:transparent}.rti-scroll::-webkit-scrollbar-thumb{background:rgba(130,150,180,0.25);border-radius:3px}
+.rti-card{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.rti-card:active{transform:scale(0.94);transition:transform 0.08s!important}
 .rti-aurora-bg{position:fixed;inset:0;z-index:0;pointer-events:none;background:linear-gradient(-45deg,#001122,#002244,#003322,#001133,#003344,#002255);background-size:400% 400%;animation:auroraFlow 14s ease-in-out infinite}
 @keyframes auroraFlow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
 @keyframes auroraGlow{0%{opacity:0.45}100%{opacity:1}}

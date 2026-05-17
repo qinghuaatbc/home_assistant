@@ -76,10 +76,39 @@ interface CommContextValue {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const ICE_SERVERS: RTCIceServer[] = [
+const FALLBACK_ICE: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
 ]
+
+let cachedIceServers: RTCIceServer[] | null = null
+let iceFetchedAt = 0
+
+async function getIceServers(): Promise<RTCIceServer[]> {
+  // Cache for 20 hours (TURN credentials TTL is 24h)
+  if (cachedIceServers && Date.now() - iceFetchedAt < 20 * 3600 * 1000) {
+    console.log('[ICE] using cached servers:', cachedIceServers.length)
+    return cachedIceServers
+  }
+  try {
+    const token = localStorage.getItem('ha_token')
+    const res = await fetch('/api/webrtc/ice-servers', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (res.ok) {
+      const data = await res.json()
+      cachedIceServers = data.iceServers ?? FALLBACK_ICE
+      iceFetchedAt = Date.now()
+      console.log('[ICE] fetched servers:', JSON.stringify(cachedIceServers))
+      return cachedIceServers!
+    }
+    console.warn('[ICE] fetch failed:', res.status)
+  } catch (e) {
+    console.warn('[ICE] fetch error:', e)
+  }
+  console.warn('[ICE] using fallback STUN only')
+  return FALLBACK_ICE
+}
 
 const MAX_MESSAGES = 200
 
@@ -167,8 +196,8 @@ export function CommProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const createGroupPc = useCallback((peerId: string, peerName: string, stream: MediaStream): RTCPeerConnection => {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+  const createGroupPc = useCallback(async (peerId: string, peerName: string, stream: MediaStream): Promise<RTCPeerConnection> => {
+    const pc = new RTCPeerConnection({ iceServers: await getIceServers() })
     groupPcMapRef.current.set(peerId, pc)
     stream.getTracks().forEach(t => pc.addTrack(t, stream))
     pc.ontrack = e => {
@@ -246,7 +275,7 @@ export function CommProvider({ children }: { children: ReactNode }) {
     setLocalStream(stream)
     localStreamRef.current = stream
 
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+    const pc = new RTCPeerConnection({ iceServers: await getIceServers() })
     pcRef.current = pc
 
     stream.getTracks().forEach(t => pc.addTrack(t, stream))
@@ -265,14 +294,15 @@ export function CommProvider({ children }: { children: ReactNode }) {
     }
 
     pc.onicecandidate = e => {
-      if (e.candidate && socketRef.current) {
-        socketRef.current.emit('signal', {
-          to: user.clientId,
-          type: 'ice',
-          payload: e.candidate,
-        })
+      if (e.candidate) {
+        console.log('[ICE] candidate:', e.candidate.type, e.candidate.candidate)
+        socketRef.current?.emit('signal', { to: user.clientId, type: 'ice', payload: e.candidate })
+      } else {
+        console.log('[ICE] gathering complete')
       }
     }
+    pc.oniceconnectionstatechange = () => console.log('[ICE] connection state:', pc.iceConnectionState)
+    pc.onconnectionstatechange = () => console.log('[PC] connection state:', pc.connectionState)
 
     const offer = await pc.createOffer()
     await pc.setLocalDescription(offer)
@@ -306,7 +336,7 @@ export function CommProvider({ children }: { children: ReactNode }) {
     setLocalStream(stream)
     localStreamRef.current = stream
 
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+    const pc = new RTCPeerConnection({ iceServers: await getIceServers() })
     pcRef.current = pc
 
     stream.getTracks().forEach(t => pc.addTrack(t, stream))
@@ -577,7 +607,7 @@ export function CommProvider({ children }: { children: ReactNode }) {
       if (!stream) return
       for (const peer of peers) {
         setGroupPeers(prev => prev.some(p => p.clientId === peer.clientId) ? prev : [...prev, { ...peer, stream: null }])
-        const pc = createGroupPc(peer.clientId, peer.displayName, stream)
+        const pc = await createGroupPc(peer.clientId, peer.displayName, stream)
         const offer = await pc.createOffer()
         await pc.setLocalDescription(offer)
         socket.emit('signal', { to: peer.clientId, type: 'offer', payload: { ...offer, group: true }, group: true })
@@ -611,7 +641,7 @@ export function CommProvider({ children }: { children: ReactNode }) {
             const stream = localGroupStreamRef.current
             if (!stream) return
             setGroupPeers(prev => prev.some(p => p.clientId === from) ? prev : [...prev, { clientId: from, displayName: fromName, stream: null }])
-            const pc = createGroupPc(from, fromName, stream)
+            const pc = await createGroupPc(from, fromName, stream)
             await pc.setRemoteDescription(new RTCSessionDescription(payload))
             const answer = await pc.createAnswer()
             await pc.setLocalDescription(answer)

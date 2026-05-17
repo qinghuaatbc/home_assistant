@@ -22,7 +22,7 @@ export function BulbImg({ on, bPct }: { on: boolean; bPct: number }) {
   const bri   = 0.38 + b * 0.72
   const filter = on
     ? `sepia(${sepia.toFixed(2)}) saturate(${sat.toFixed(2)}) brightness(${bri.toFixed(2)}) drop-shadow(0 0 ${glow}px rgba(255,${warmG},50,${warmA}))`
-    : 'grayscale(1) brightness(0.22) opacity(0.45)'
+    : 'grayscale(1) brightness(0.40) opacity(0.62)'
   return (
     <img src="/bulb.png" style={{
       width: '100%', maxWidth: 56, height: 'auto', display: 'block',
@@ -64,6 +64,7 @@ export const LightRtiCard = memo(({ s }: { s: HaState }) => {
 
   return (
     <div
+      className="rti-card"
       style={{
         ...cardSt(th, {
           padding: '8px 8px 6px', minHeight: 138, gap: 0, cursor: 'pointer',
@@ -76,9 +77,9 @@ export const LightRtiCard = memo(({ s }: { s: HaState }) => {
       onClick={toggle}
     >
       {/* Name — centered */}
-      <div style={{ textAlign: 'center', marginBottom: 4 }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: on ? (th === 'day' ? '#7a3d00' : `rgb(255,${warmG},50)`) : tc1(th), transition: 'color 0.3s' }}>{name}</span>
-        <span style={{ fontSize: 12, color: tc2(th), marginLeft: 6 }}>{t.bri} {bPct}%</span>
+      <div style={{ textAlign: 'center', marginBottom: 4, width: '100%' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: on ? (th === 'day' ? '#7a3d00' : `rgb(255,${warmG},50)`) : tc1(th), transition: 'color 0.3s', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 4px' }}>{name}</div>
+        <div style={{ fontSize: 11, color: tc2(th), marginTop: 1 }}>{on ? `${bPct}%` : '—'}</div>
       </div>
       {/* Bulb */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2px 0' }}>

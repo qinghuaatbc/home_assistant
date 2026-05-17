@@ -33,7 +33,14 @@ async function bootstrap(): Promise<void> {
   wsProxy.on('error', (err: Error) => logger.warn(`go2rtc WS proxy: ${err.message}`));
 
   // Serve frontend from public/
-  app.useStaticAssets(join(__dirname, '..', 'public'));
+  // All assets: no-cache so browser always revalidates after deploy.
+  // JS/CSS have content-hash names so ETag revalidation returns 304 (no body cost) when unchanged.
+  app.useStaticAssets(join(__dirname, '..', 'public'), {
+    setHeaders: (res: any) => {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Pragma', 'no-cache');
+    },
+  });
   // Serve uploaded files from data/ (GLB, etc.)
   app.useStaticAssets(join(__dirname, '..', 'data'), { prefix: '/data' });
   // Serve disk-based HLS segments at /hls/{streamName}/index.m3u8
