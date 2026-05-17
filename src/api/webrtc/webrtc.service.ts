@@ -38,12 +38,18 @@ export class WebrtcService implements OnApplicationBootstrap, OnApplicationShutd
   private manualStreams: Map<string, string> = new Map();
   private go2rtcReady = false;
 
+  // Disk-based HLS: ffmpeg writes segments to /tmp/ha_hls/{name}/
+  static readonly HLS_BASE_DIR = '/tmp/ha_hls';
+  private hlsProcesses: Map<string, ChildProcess> = new Map();
+  private hlsRestartTimers: Map<string, NodeJS.Timeout> = new Map();
+
   async onApplicationBootstrap(): Promise<void> {
     this.loadManualStreams();
     await this.startGo2rtc();
   }
 
   onApplicationShutdown(): void {
+    this.stopAllHls();
     if (this.go2rtcProcess) {
       this.go2rtcProcess.kill('SIGTERM');
       this.go2rtcProcess = null;
@@ -55,11 +61,13 @@ export class WebrtcService implements OnApplicationBootstrap, OnApplicationShutd
   registerIntegrationStream(name: string, rtspUrl: string, entityId?: string): void {
     this.integrationStreams.set(name, { rtspUrl, entityId });
     this.reloadGo2rtc();
+    if (this.go2rtcReady) setTimeout(() => this.startHlsForStream(name), 4000);
     this.logger.log(`WebRTC stream registered: ${name}`);
   }
 
   unregisterIntegrationStream(name: string): void {
     this.integrationStreams.delete(name);
+    this.stopHlsForStream(name);
     this.reloadGo2rtc();
   }
 
@@ -70,11 +78,13 @@ export class WebrtcService implements OnApplicationBootstrap, OnApplicationShutd
     this.manualStreams.set(key, rtspUrl);
     this.saveManualStreams();
     this.reloadGo2rtc();
+    if (this.go2rtcReady) setTimeout(() => this.startHlsForStream(key), 4000);
   }
 
   removeStream(name: string): boolean {
     if (!this.manualStreams.has(name)) return false;
     this.manualStreams.delete(name);
+    this.stopHlsForStream(name);
     this.saveManualStreams();
     this.reloadGo2rtc();
     return true;
@@ -154,6 +164,14 @@ export class WebrtcService implements OnApplicationBootstrap, OnApplicationShutd
 
     await new Promise(r => setTimeout(r, 3000));
     if (!this.go2rtcReady) this.go2rtcReady = true;
+
+    // Start disk-based HLS for all streams (give go2rtc RTSP server 2s to settle)
+    fs.mkdirSync(WebrtcService.HLS_BASE_DIR, { recursive: true });
+    setTimeout(() => {
+      for (const stream of this.getStreams()) {
+        this.startHlsForStream(stream.name);
+      }
+    }, 2000);
   }
 
   private reloadGo2rtc(): void {
@@ -175,6 +193,12 @@ export class WebrtcService implements OnApplicationBootstrap, OnApplicationShutd
       `  listen: :${GO2RTC_PORT}`,
       `log:`,
       `  level: warn`,
+      `rtsp:`,
+      `  listen: :8554`,
+      `webrtc:`,
+      `  candidates:`,
+      `    - 207.216.151.27`,
+      `  listen: :8555`,
       `streams:`,
       streamsYaml || '  {}',
     ].join('\n');
@@ -182,6 +206,55 @@ export class WebrtcService implements OnApplicationBootstrap, OnApplicationShutd
     const configPath = path.join(configDir, 'go2rtc.yaml');
     fs.writeFileSync(configPath, yaml, 'utf8');
     return configPath;
+  }
+
+  // ── Disk-based HLS (ffmpeg → /tmp/ha_hls/{name}/) ────────────────────────
+
+  private startHlsForStream(name: string): void {
+    if (this.hlsProcesses.has(name)) return;
+
+    const dir = path.join(WebrtcService.HLS_BASE_DIR, name);
+    fs.mkdirSync(dir, { recursive: true });
+
+    const proc = spawn('ffmpeg', [
+      '-fflags', '+genpts',
+      '-rtsp_transport', 'tcp',
+      '-i', `rtsp://localhost:8554/${name}`,
+      '-c', 'copy',
+      '-f', 'hls',
+      '-hls_time', '1',
+      '-hls_list_size', '3',
+      '-hls_flags', 'delete_segments+append_list+split_by_time',
+      '-hls_segment_filename', path.join(dir, 'seg%03d.ts'),
+      '-y',
+      path.join(dir, 'index.m3u8'),
+    ], { stdio: ['ignore', 'ignore', 'pipe'] });
+
+    this.hlsProcesses.set(name, proc);
+    this.logger.log(`HLS started for stream: ${name}`);
+
+    proc.on('close', (code) => {
+      this.hlsProcesses.delete(name);
+      if (this.getStreams().find(s => s.name === name)) {
+        const timer = setTimeout(() => {
+          this.hlsRestartTimers.delete(name);
+          this.startHlsForStream(name);
+        }, 5000);
+        this.hlsRestartTimers.set(name, timer);
+      }
+    });
+  }
+
+  private stopHlsForStream(name: string): void {
+    const timer = this.hlsRestartTimers.get(name);
+    if (timer) { clearTimeout(timer); this.hlsRestartTimers.delete(name); }
+    const proc = this.hlsProcesses.get(name);
+    if (proc) { proc.kill('SIGTERM'); this.hlsProcesses.delete(name); }
+  }
+
+  private stopAllHls(): void {
+    const names = [...new Set([...this.hlsProcesses.keys(), ...this.hlsRestartTimers.keys()])];
+    for (const name of names) this.stopHlsForStream(name);
   }
 
   // ── Binary management ─────────────────────────────────────────────────────

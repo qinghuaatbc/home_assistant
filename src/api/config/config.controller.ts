@@ -175,7 +175,9 @@ export class ConfigController {
     const logger = new Logger('ConfigApply');
     const yamlPath = path.resolve(process.cwd(), 'config', 'configuration.yaml');
     const existing = yaml.load(fs.readFileSync(yamlPath, 'utf-8')) as Record<string, any>;
-    existing.integrations = body.integrations;
+    // demo must always be present — it registers light/switch/scene services
+    const withoutDemo = (body.integrations ?? []).filter((i: any) => i.domain !== 'demo');
+    existing.integrations = [{ domain: 'demo' }, ...withoutDemo];
     fs.writeFileSync(yamlPath, yaml.dump(existing, { indent: 2, lineWidth: 120, noRefs: true }), 'utf-8');
     logger.log('Configuration saved, restarting...');
     // Return response before restarting so client doesn't get 502

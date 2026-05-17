@@ -36,7 +36,7 @@ interface FrontendUser {
 @Injectable()
 @WebSocketGateway({
   transports: ['polling', 'websocket'],
-  path: '/api/comm',
+  path: '/api/comm/socket',
 })
 export class CommGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect

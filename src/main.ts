@@ -4,7 +4,9 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import * as fs from 'fs';
 import { AppModule } from './app.module';
+import { WebrtcService } from './api/webrtc/webrtc.service';
 import { HaExceptionFilter } from './common/filters/ha-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { SocketIoAdapter } from './websocket/socket-io.adapter';
@@ -34,6 +36,9 @@ async function bootstrap(): Promise<void> {
   app.useStaticAssets(join(__dirname, '..', 'public'));
   // Serve uploaded files from data/ (GLB, etc.)
   app.useStaticAssets(join(__dirname, '..', 'data'), { prefix: '/data' });
+  // Serve disk-based HLS segments at /hls/{streamName}/index.m3u8
+  fs.mkdirSync(WebrtcService.HLS_BASE_DIR, { recursive: true });
+  app.useStaticAssets(WebrtcService.HLS_BASE_DIR, { prefix: '/hls' });
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('http.port', 8123);
@@ -64,7 +69,7 @@ async function bootstrap(): Promise<void> {
   // SPA fallback: serve index.html for client-side routes
   const publicDir = join(__dirname, '..', 'public');
   app.use((req: any, res: any, next: any) => {
-    if (req.path.startsWith('/api/') || req.path.startsWith('/data/') || req.path.startsWith('/assets/') || req.path === '/') return next();
+    if (req.path.startsWith('/api/') || req.path.startsWith('/data/') || req.path.startsWith('/assets/') || req.path.startsWith('/hls/') || req.path === '/') return next();
     res.sendFile(join(publicDir, 'index.html'));
   });
 

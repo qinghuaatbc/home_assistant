@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useMemo, useEffect } from 'react';
 import Hls from 'hls.js';
 import { useHa } from '../context/HaContext';
 
@@ -100,13 +100,13 @@ function useHlsPlayer(
     if (!hlsUrl || !videoRef.current) return;
     setState('connecting'); setError(undefined);
     if (Hls.isSupported()) {
-      const hls = new Hls({ lowLatencyMode: true, liveSyncDurationCount: 1, liveMaxLatencyDurationCount: 3, maxBufferLength: 4, backBufferLength: 4 });
+      const hls = new Hls({ lowLatencyMode: false, liveSyncDurationCount: 2, liveMaxLatencyDurationCount: 4, maxBufferLength: 4, maxMaxBufferLength: 8, backBufferLength: 1, manifestLoadingMaxRetry: 6, manifestLoadingRetryDelay: 2000, levelLoadingMaxRetry: 6, levelLoadingRetryDelay: 2000, fragLoadingMaxRetry: 6, fragLoadingRetryDelay: 2000 });
       hlsRef.current = hls;
       hls.loadSource(hlsUrl);
       hls.attachMedia(videoRef.current);
       hls.on(Hls.Events.MANIFEST_PARSED, () => { videoRef.current?.play().catch(() => {}); setState('playing'); });
       hls.on(Hls.Events.ERROR, (_, d) => {
-        if (d.fatal) { setState('error'); setError(d.type); }
+        if (d.fatal) { setState('error'); setError(d.details ?? d.type); }
       });
     } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
       videoRef.current.src = hlsUrl;
@@ -127,24 +127,26 @@ function useHlsPlayer(
 
 // ── Unified camera tile ───────────────────────────────────────────────────────
 
-function CameraTile({ stream, defaultMode }: { stream: StreamInfo; defaultMode: StreamMode }) {
+function CameraTile({ stream }: { stream: StreamInfo }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [mode, setMode] = useState<StreamMode>(defaultMode);
-  const [active, setActive] = useState(false);
+  const [mode, setMode] = useState<StreamMode>('hls');
+  const [active, setActive] = useState(true);
   const [muted, setMuted] = useState(true);
 
+  const hlsUrl = useMemo(() => `/hls/${stream.name}/index.m3u8`, [stream.name]);
+
   const whep = useWhepPlayer(videoRef, stream.name, active && mode === 'whep');
-  const hls = useHlsPlayer(videoRef, stream.hlsUrl, active && mode === 'hls');
+  const hls = useHlsPlayer(videoRef, hlsUrl, active && mode === 'hls');
   const { state, error, retry } = mode === 'whep' ? whep : hls;
+
+  const switchMode = useCallback((m: StreamMode) => {
+    setActive(false);
+    setTimeout(() => { setMode(m); setActive(true); }, 300);
+  }, []);
 
   const label = stream.entityId
     ? stream.entityId.replace(/^camera\.(rtsp2hls|rtsp2webrtc)_/, '').replace(/_/g, ' ')
     : stream.name.replace(/_/g, ' ');
-
-  const switchMode = (m: StreamMode) => {
-    setActive(false);
-    setTimeout(() => { setMode(m); setActive(true); }, 300);
-  };
 
   const toggleFullscreen = () => {
     const el = videoRef.current;
@@ -171,14 +173,14 @@ function CameraTile({ stream, defaultMode }: { stream: StreamInfo; defaultMode: 
               <span style={{ color: '#f66', fontSize: 12, textAlign: 'center', padding: '0 16px', maxWidth: 200 }}>{error}</span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={retry} style={{ padding: '4px 12px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>Retry</button>
-                {stream.hlsUrl && mode === 'whep' && (
+                {mode === 'whep' && (
                   <button onClick={() => switchMode('hls')} style={{ padding: '4px 12px', background: '#444', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>Use HLS</button>
                 )}
               </div>
             </>
           )}
           {state === 'idle' && (
-            <button onClick={() => setActive(true)} style={{ padding: '6px 16px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>▶ Start</button>
+            <div style={{ width: 32, height: 32, border: '3px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
           )}
         </div>
       )}
@@ -190,13 +192,11 @@ function CameraTile({ stream, defaultMode }: { stream: StreamInfo; defaultMode: 
           <span style={{ color: '#fff', fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>{label}</span>
         </div>
         <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-          {stream.hlsUrl && (
-            <button
-              onClick={() => switchMode(mode === 'whep' ? 'hls' : 'whep')}
-              style={{ background: mode === 'whep' ? 'rgba(0,122,255,0.6)' : 'rgba(100,100,100,0.5)', border: 'none', color: '#fff', borderRadius: 5, padding: '2px 6px', cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>
-              {mode === 'whep' ? 'RTC' : 'HLS'}
-            </button>
-          )}
+          <button
+            onClick={() => switchMode(mode === 'whep' ? 'hls' : 'whep')}
+            style={{ background: mode === 'whep' ? 'rgba(0,122,255,0.6)' : 'rgba(100,100,100,0.5)', border: 'none', color: '#fff', borderRadius: 5, padding: '2px 6px', cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>
+            {mode === 'whep' ? 'RTC' : 'HLS'}
+          </button>
           <button onClick={() => setMuted(m => !m)} style={{ background: 'rgba(0,0,0,0.4)', border: 'none', color: '#fff', borderRadius: 5, padding: '2px 6px', cursor: 'pointer', fontSize: 13 }}>{muted ? '🔇' : '🔊'}</button>
           <button onClick={toggleFullscreen} style={{ background: 'rgba(0,0,0,0.4)', border: 'none', color: '#fff', borderRadius: 5, padding: '2px 6px', cursor: 'pointer', fontSize: 13 }}>⛶</button>
         </div>
@@ -211,7 +211,6 @@ export default function SecurityPage() {
   const { token } = useHa();
   const [streams, setStreams] = useState<StreamInfo[]>([]);
   const [cols, setCols] = useState(2);
-  const [globalMode, setGlobalMode] = useState<StreamMode>('whep');
   const [showAdd, setShowAdd] = useState(false);
   const [addName, setAddName] = useState('');
   const [addUrl, setAddUrl] = useState('');
@@ -232,7 +231,11 @@ export default function SecurityPage() {
   useEffect(() => { fetchStreams(); }, [fetchStreams]);
 
   const handleAdd = async () => {
-    if (!addName.trim() || !addUrl.trim()) { setAddError('Name and RTSP URL required'); return; }
+    if (!addName.trim() || !addUrl.trim()) { setAddError('Name and URL required'); return; }
+    const u = addUrl.trim();
+    if (!u.startsWith('rtsp://') && !u.startsWith('http://') && !u.startsWith('https://')) {
+      setAddError('URL must start with rtsp://, http://, or https://'); return;
+    }
     setAdding(true); setAddError('');
     try {
       const res = await fetch('/api/webrtc/streams', {
@@ -267,18 +270,9 @@ export default function SecurityPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 10, flexShrink: 0 }}>
         <div>
           <h2 style={{ margin: 0, color: 'var(--text)' }}>Security Cameras</h2>
-          <p style={{ margin: '2px 0 0', color: 'var(--muted)', fontSize: 13 }}>Add RTSP streams via Config → Integrations (rtsp2webrtc) or manually below</p>
+          <p style={{ margin: '2px 0 0', color: 'var(--muted)', fontSize: 13 }}>Add RTSP or HLS streams via Config → Integrations (rtsp2webrtc) or manually below</p>
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Global mode toggle */}
-          <div style={{ display: 'flex', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 7, overflow: 'hidden' }}>
-            {(['whep', 'hls'] as StreamMode[]).map(m => (
-              <button key={m} onClick={() => setGlobalMode(m)} style={{
-                padding: '5px 12px', border: 'none', background: globalMode === m ? 'var(--accent)' : 'transparent',
-                color: globalMode === m ? '#fff' : 'var(--muted)', cursor: 'pointer', fontSize: 12, fontWeight: 700, textTransform: 'uppercase',
-              }}>{m}</button>
-            ))}
-          </div>
           {[1, 2, 3].map(n => (
             <button key={n} onClick={() => setCols(n)} style={{
               padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)',
@@ -297,15 +291,15 @@ export default function SecurityPage() {
       {/* Add stream */}
       {showAdd && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, padding: 16, marginBottom: 12, flexShrink: 0 }}>
-          <h3 style={{ margin: '0 0 12px', color: 'var(--text)', fontSize: 15 }}>Add RTSP Stream (manual)</h3>
+          <h3 style={{ margin: '0 0 12px', color: 'var(--text)', fontSize: 15 }}>Add Stream (manual)</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10, marginBottom: 10 }}>
             <div>
               <label style={{ color: 'var(--muted)', fontSize: 12, display: 'block', marginBottom: 4 }}>Name</label>
               <input style={inp} placeholder="front_door" value={addName} onChange={e => setAddName(e.target.value)} />
             </div>
             <div>
-              <label style={{ color: 'var(--muted)', fontSize: 12, display: 'block', marginBottom: 4 }}>RTSP URL</label>
-              <input style={inp} placeholder="rtsp://user:pass@192.168.1.100/stream" value={addUrl} onChange={e => setAddUrl(e.target.value)} />
+              <label style={{ color: 'var(--muted)', fontSize: 12, display: 'block', marginBottom: 4 }}>Source URL (RTSP or HLS)</label>
+              <input style={inp} placeholder="rtsp://user:pass@host/stream  or  https://host/stream.m3u8" value={addUrl} onChange={e => setAddUrl(e.target.value)} />
             </div>
           </div>
           {addError && <p style={{ color: '#f66', fontSize: 13, margin: '0 0 10px' }}>{addError}</p>}
@@ -338,7 +332,7 @@ export default function SecurityPage() {
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)`, gap: 10 }}>
-          {streams.map(s => <CameraTile key={s.name} stream={s} defaultMode={globalMode} />)}
+          {streams.map(s => <CameraTile key={s.name} stream={s} />)}
         </div>
       )}
     </div>

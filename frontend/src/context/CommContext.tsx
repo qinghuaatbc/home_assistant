@@ -458,7 +458,7 @@ export function CommProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const socket = io('/', {
-      path: '/api/comm',
+      path: '/api/comm/socket',
       transports: ['polling', 'websocket'],
       reconnectionDelay: 1000,
       reconnectionAttempts: Infinity,

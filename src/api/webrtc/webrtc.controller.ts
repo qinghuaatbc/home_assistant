@@ -18,15 +18,15 @@ import { WebrtcService } from './webrtc.service';
 export class WebrtcController {
   constructor(private readonly webrtcService: WebrtcService) {}
 
-  /** List all streams with optional HLS URL for integration cameras */
+  /** List all streams — HLS served by go2rtc at /go2rtc/api/hls/:name/index.m3u8 */
   @Get('streams')
   getStreams() {
-    return this.webrtcService.getStreams().map(s => {
-      const hlsUrl = s.entityId
-        ? `/api/camera/hls/${s.entityId}/index.m3u8`
-        : undefined;
-      return { name: s.name, source: s.source, entityId: s.entityId, hlsUrl };
-    });
+    return this.webrtcService.getStreams().map(s => ({
+      name: s.name,
+      source: s.source,
+      entityId: s.entityId,
+      hlsUrl: `/go2rtc/api/stream.m3u8?src=${s.name}`,
+    }));
   }
 
   /** Add a manual stream */

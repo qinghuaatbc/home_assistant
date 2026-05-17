@@ -82,16 +82,22 @@ function useHls(videoRef: React.RefObject<HTMLVideoElement>, hlsUrl: string | nu
     setErr('')
     if (Hls.isSupported()) {
       const hls = new Hls({
-        lowLatencyMode: true,
-        liveSyncDurationCount: 1,
-        liveMaxLatencyDurationCount: 3,
+        lowLatencyMode: false,
+        liveSyncDurationCount: 2,
+        liveMaxLatencyDurationCount: 4,
         maxBufferLength: 4,
         maxMaxBufferLength: 8,
-        backBufferLength: 4,
+        backBufferLength: 1,
+        manifestLoadingMaxRetry: 6,
+        manifestLoadingRetryDelay: 2000,
+        levelLoadingMaxRetry: 6,
+        levelLoadingRetryDelay: 2000,
+        fragLoadingMaxRetry: 6,
+        fragLoadingRetryDelay: 2000,
       }); hlsRef.current = hls
       hls.loadSource(hlsUrl); hls.attachMedia(videoRef.current)
       hls.on(Hls.Events.MANIFEST_PARSED, () => { videoRef.current?.play().catch(() => {}); setOk(true) })
-      hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) setErr(d.type) })
+      hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) setErr(d.details ?? d.type) })
     } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
       videoRef.current.src = hlsUrl; videoRef.current.play().catch(() => {}); setOk(true)
     } else { setErr('HLS unsupported') }
@@ -104,12 +110,13 @@ function useHls(videoRef: React.RefObject<HTMLVideoElement>, hlsUrl: string | nu
 
 // ── Camera tile ───────────────────────────────────────────────────────────────
 
-function CameraVideo({ entityId, hlsUrl, muted }: {
-  entityId: string; hlsUrl: string | null; muted: boolean
+function CameraVideo({ entityId, muted }: {
+  entityId: string; muted: boolean
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamName = entityId.replace(/[^a-z0-9_]/g, '_')
-  const [mode, setMode] = useState<'whep' | 'hls'>('whep')
+  const hlsUrl = `/hls/${streamName}/index.m3u8`
+  const [mode, setMode] = useState<'whep' | 'hls'>('hls')
 
   const whep = useWhep(videoRef, streamName, mode === 'whep')
   const hls  = useHls (videoRef, hlsUrl,     mode === 'hls')
@@ -131,24 +138,10 @@ function CameraVideo({ entityId, hlsUrl, muted }: {
           {err ? (
             <>
               <span style={{ fontSize: 11, color: '#f66', textAlign: 'center', padding: '0 16px', maxWidth: 200 }}>{err}</span>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={retry}
-                  style={{ fontSize: 11, padding: '3px 10px', background: 'rgba(0,122,255,0.8)', border: 'none', color: '#fff', borderRadius: 6, cursor: 'pointer' }}>
-                  Retry
-                </button>
-                {mode === 'whep' && hlsUrl && (
-                  <button onClick={() => setMode('hls')}
-                    style={{ fontSize: 11, padding: '3px 10px', background: 'rgba(80,80,80,0.8)', border: 'none', color: '#fff', borderRadius: 6, cursor: 'pointer' }}>
-                    Use HLS
-                  </button>
-                )}
-                {mode === 'hls' && (
-                  <button onClick={() => setMode('whep')}
-                    style={{ fontSize: 11, padding: '3px 10px', background: 'rgba(80,80,80,0.8)', border: 'none', color: '#fff', borderRadius: 6, cursor: 'pointer' }}>
-                    Use WebRTC
-                  </button>
-                )}
-              </div>
+              <button onClick={retry}
+                style={{ fontSize: 11, padding: '3px 10px', background: 'rgba(0,122,255,0.8)', border: 'none', color: '#fff', borderRadius: 6, cursor: 'pointer' }}>
+                Retry
+              </button>
             </>
           ) : (
             <div style={{ width: 24, height: 24, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'camSpin 0.8s linear infinite' }} />
@@ -156,10 +149,12 @@ function CameraVideo({ entityId, hlsUrl, muted }: {
         </div>
       )}
 
+      {/* Mode badge — tap to toggle WebRTC ↔ HLS */}
       <div style={{ position: 'absolute', top: 6, left: 8 }}>
-        <span style={{ fontSize: 9, padding: '2px 5px', borderRadius: 4, fontWeight: 700, color: '#fff', background: badgeBg }}>
+        <button onClick={e => { e.stopPropagation(); setMode(m => m === 'hls' ? 'whep' : 'hls') }}
+          style={{ fontSize: 9, padding: '2px 5px', borderRadius: 4, fontWeight: 700, color: '#fff', background: badgeBg, border: 'none', cursor: 'pointer' }}>
           {mode === 'whep' ? (playing ? 'WebRTC' : 'RTC…') : (playing ? 'HLS' : 'HLS…')}
-        </span>
+        </button>
       </div>
     </div>
   )
@@ -167,20 +162,19 @@ function CameraVideo({ entityId, hlsUrl, muted }: {
 
 // ── Card ──────────────────────────────────────────────────────────────────────
 
-export const CameraRtiCard = memo(({ s, fill }: { s: HaState; fill?: boolean }) => {
+export const CameraRtiCard = memo(({ s }: { s: HaState }) => {
   const th = useTh()
   const [expanded, setExpanded] = useState(false)
   const [muted, setMuted] = useState(true)
   const name = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
-  const hlsUrl = (s.attributes.hls_url as string) || null
 
   return (
     <>
       <style>{`@keyframes camSpin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ ...cardSt(th, { padding: 0, overflow: 'hidden', cursor: 'pointer', ...(!fill && { gridColumn: 'span 2' }), ...(fill && { height: '100%' }) }) }}
+      <div style={{ ...cardSt(th, { padding: 0, overflow: 'hidden', cursor: 'pointer', gridColumn: 'span 2' }) }}
         onClick={() => setExpanded(true)}>
-        <div style={{ borderRadius: 18, overflow: 'hidden', position: 'relative', ...(fill ? { height: '100%' } : { aspectRatio: '16/9' }) }}>
-          <CameraVideo entityId={s.entity_id} hlsUrl={hlsUrl} muted={true} />
+        <div style={{ borderRadius: 18, overflow: 'hidden', aspectRatio: '16/9', position: 'relative' }}>
+          <CameraVideo entityId={s.entity_id} muted={true} />
           <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '6px 10px', background: 'linear-gradient(transparent,rgba(0,0,0,0.72))', borderRadius: '0 0 18px 18px', pointerEvents: 'none' }}>
             <span style={{ fontSize: 11, color: '#fff', fontWeight: 600 }}>📷 {name}</span>
           </div>
@@ -201,7 +195,7 @@ export const CameraRtiCard = memo(({ s, fill }: { s: HaState; fill?: boolean }) 
             </button>
           </div>
           <div style={{ flex: 1, position: 'relative' }} onClick={e => e.stopPropagation()}>
-            <CameraVideo entityId={s.entity_id} hlsUrl={hlsUrl} muted={muted} />
+            <CameraVideo entityId={s.entity_id} muted={muted} />
           </div>
         </div>,
         document.body,
