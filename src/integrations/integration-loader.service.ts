@@ -116,8 +116,12 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
    * Start loading integrations. Called after HomeAssistant start event.
    */
   async loadIntegrations(): Promise<void> {
-    const integrationConfigs: IntegrationConfig[] =
+    const fromConfig: IntegrationConfig[] =
       this.configService.get('integrations') ?? [];
+
+    // demo registers core light/switch/scene services — always load it first
+    const hasDemo = fromConfig.some(c => c.domain === 'demo');
+    const integrationConfigs = hasDemo ? fromConfig : [{ domain: 'demo' }, ...fromConfig];
 
     this.logger.log(
       `Loading ${integrationConfigs.length} integrations: ${integrationConfigs.map((c) => c.domain).join(', ')}`,
