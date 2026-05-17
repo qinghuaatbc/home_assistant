@@ -124,11 +124,20 @@ const INTEGRATIONS: IntegrationDef[] = [
     devicesLabel: 'Entity Mappings',
     addLabel: '+ Add mapping',
   },
-  { domain: 'rtsp2hls', name: 'RTSP2HLS', icon: '📷', category: 'camera',
-    desc: 'IP cameras via RTSP (requires FFmpeg)',
+  { domain: 'rtsp2hls', name: 'RTSP to HLS', icon: '📷', category: 'camera',
+    desc: 'IP cameras via RTSP → HLS (requires FFmpeg). Shown in Security tab.',
     fields: [],
     dynamicFields: [
       { label: 'Name', key: 'name', placeholder: 'Driveway' },
+      { label: 'RTSP URL', key: 'rtsp_url', placeholder: 'rtsp://user:pass@ip:554/stream' },
+    ]},
+  { domain: 'rtsp2webrtc', name: 'RTSP to WebRTC', icon: '🔴', category: 'camera',
+    desc: 'IP cameras via RTSP → WebRTC (go2rtc, low-latency). Shown in Security tab.',
+    fields: [],
+    devicesLabel: 'Cameras',
+    addLabel: '+ Add camera',
+    dynamicFields: [
+      { label: 'Name', key: 'name', placeholder: 'Front Door' },
       { label: 'RTSP URL', key: 'rtsp_url', placeholder: 'rtsp://user:pass@ip:554/stream' },
     ]},
   { domain: 'mqtt', name: 'MQTT', icon: '📡', category: 'protocol',
@@ -335,10 +344,10 @@ export default function IntegrationsPage() {
           const existing = m[domain] || {}
           for (const [k, v] of Object.entries(int)) {
             if (k === 'domain') continue
-            if (domain === 'rtsp2hls' && k === 'cameras') {
+            if ((domain === 'rtsp2hls' || domain === 'rtsp2webrtc') && k === 'cameras') {
               existing.devices = (v as any[]).map((cam: any) => ({
                 name: cam.name || '',
-                rtsp_url: (cam.streams?.[0]?.rtsp_url) || '',
+                rtsp_url: cam.rtsp_url || (cam.streams?.[0]?.rtsp_url) || '',
               }))
             } else if (domain === 'rti' && k === 'entities') {
               existing.devices = v as any[]
@@ -496,11 +505,10 @@ export default function IntegrationsPage() {
         const existing = m[domain] || {}
         for (const [k, v] of Object.entries(int)) {
           if (k === 'domain') continue
-          if (domain === 'rtsp2hls' && k === 'cameras') {
-            // Transform server cameras format → UI devices format
+          if ((domain === 'rtsp2hls' || domain === 'rtsp2webrtc') && k === 'cameras') {
             existing.devices = (v as any[]).map((cam: any) => ({
               name: cam.name || '',
-              rtsp_url: (cam.streams?.[0]?.rtsp_url) || '',
+              rtsp_url: cam.rtsp_url || (cam.streams?.[0]?.rtsp_url) || '',
             }))
           } else {
             existing[k] = v
@@ -527,12 +535,11 @@ export default function IntegrationsPage() {
         const out: any = { domain: int.domain }
         for (const [k, v] of Object.entries(cfg)) {
           if (k === 'devices' && int.domain === 'rtsp2hls') {
-            if (Array.isArray(v) && v.length > 0) {
-              out.cameras = v.map((d: any) => ({
-                name: d.name || 'Camera',
-                streams: [{ label: 'Main', rtsp_url: d.rtsp_url }],
-              }))
-            }
+            if (Array.isArray(v) && v.length > 0)
+              out.cameras = v.map((d: any) => ({ name: d.name || 'Camera', streams: [{ label: 'Main', rtsp_url: d.rtsp_url }] }))
+          } else if (k === 'devices' && int.domain === 'rtsp2webrtc') {
+            if (Array.isArray(v) && v.length > 0)
+              out.cameras = v.map((d: any) => ({ name: d.name || 'Camera', rtsp_url: d.rtsp_url || '' }))
           } else if (k === 'devices' && int.domain === 'rti') {
             if (Array.isArray(v) && v.length > 0) out.entities = v.filter((d: any) => d.entity_id)
           } else if (k === 'devices') { if (Array.isArray(v) && v.length > 0) out.devices = v }

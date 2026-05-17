@@ -142,6 +142,16 @@ export class CameraStreamService extends EventEmitter implements OnApplicationSh
     return this.groups.get(entityId)?.defaultLabel ?? '';
   }
 
+  getRegisteredRtspUrls(): Array<{ entityId: string; label: string; rtspUrl: string }> {
+    const result: Array<{ entityId: string; label: string; rtspUrl: string }> = [];
+    for (const [entityId, group] of this.groups) {
+      for (const [label, entry] of group.streams) {
+        result.push({ entityId, label, rtspUrl: entry.rtspUrl });
+      }
+    }
+    return result;
+  }
+
   // ── Private helpers ──────────────────────────────────────────────────────────
 
   private resolveEntry(entityId: string, quality: string): StreamEntry | undefined {

@@ -1,4 +1,5 @@
 import { useState, useContext } from 'react'
+import { useComm } from '../../../context/CommContext'
 import { createPortal } from 'react-dom'
 import { useHa } from '../../../context/HaContext'
 import { usePushSubscription } from '../../../hooks/usePushSubscription'
@@ -211,7 +212,40 @@ export function RightSidebar({ mode, onMode, theme, onTheme, lang, onLang, sound
           )}
         </>
       )}
+
+      {/* Communications */}
+      <CommToggleBtn />
     </div>
+    </div>
+  )
+}
+
+function CommToggleBtn() {
+  const { panelOpen, setPanelOpen, unreadCount } = useComm()
+  return (
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <button
+        onClick={() => setPanelOpen(v => !v)}
+        title="Communications"
+        style={{
+          width: 36, height: 36, borderRadius: 10, border: 'none', cursor: 'pointer',
+          background: panelOpen ? 'var(--blue, #007aff)' : 'rgba(128,128,128,0.15)',
+          color: panelOpen ? '#fff' : 'inherit',
+          fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative',
+        }}
+      >
+        💬
+        {unreadCount > 0 && (
+          <span style={{
+            position: 'absolute', top: -3, right: -3,
+            background: '#ff3b30', color: '#fff', fontSize: 9, fontWeight: 700,
+            borderRadius: 8, padding: '1px 4px', minWidth: 14, textAlign: 'center',
+          }}>
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
+      </button>
     </div>
   )
 }

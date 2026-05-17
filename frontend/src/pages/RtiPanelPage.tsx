@@ -11,6 +11,7 @@ import { DayParticles, DarkEmbers, AuroraLayer, StarField, FireworksField } from
 import { CategoryNav } from '../components/panel/ui/CategoryNav'
 import { RightSidebar } from '../components/panel/ui/RightSidebar'
 import { SecurityView } from '../components/panel/views/SecurityView'
+import { CameraView } from '../components/panel/views/CameraView'
 import { LightsView } from '../components/panel/views/LightsView'
 import { MusicView } from '../components/panel/views/MusicView'
 import { TheaterView } from '../components/panel/views/TheaterView'
@@ -194,6 +195,7 @@ export default function RtiPanelPage({ standaloneToken }: { standaloneToken?: st
               <>
                 <div style={{ ...contentStyle, zIndex: 1 }}>
                   {cat === 'security' && <SecurityView states={states} cols={cols} />}
+                  {cat === 'camera'   && <CameraView   states={states} cols={cols} />}
                   {cat === 'music'    && <MusicView    states={states} cols={cols} />}
                   {cat === 'lights'   && <LightsView   states={states} cols={cols} />}
                   {cat === 'theater'  && <TheaterView  states={states} cols={cols} />}

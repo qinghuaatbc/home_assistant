@@ -22,6 +22,7 @@ import { GeofenceModule } from './geofence/geofence.module';
 import { SunModule } from './sun/sun.module';
 import { VoiceLogModule } from './voice-log/voice-log.module';
 import { AnomalyModule } from './anomaly/anomaly.module';
+import { WebrtcModule } from './api/webrtc/webrtc.module';
 
 @Module({
   imports: [
@@ -84,6 +85,9 @@ import { AnomalyModule } from './anomaly/anomaly.module';
 
     // AI anomaly detection (power spikes + door left open)
     AnomalyModule,
+
+    // RTSP-to-WebRTC streaming (go2rtc)
+    WebrtcModule,
   ],
 })
 export class AppModule implements OnModuleInit {

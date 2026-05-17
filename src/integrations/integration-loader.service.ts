@@ -28,6 +28,7 @@ import { FanIntegration } from './built-in/fan/fan.integration';
 import { SceneIntegration } from './built-in/scene/scene.integration';
 import { NestThermostatIntegration } from './built-in/nest-thermostat/nest-thermostat.integration';
 import { EcobeeIntegration } from './built-in/ecobee/ecobee.integration';
+import { Rtsp2WebrtcIntegration } from './built-in/rtsp2webrtc/rtsp2webrtc.integration';
 import {
   EVENT_HOMEASSISTANT_START,
   EVENT_COMPONENT_LOADED,
@@ -88,6 +89,7 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     sceneIntegration: SceneIntegration,
     nestThermostatIntegration: NestThermostatIntegration,
     ecobeeIntegration: EcobeeIntegration,
+    rtsp2webrtcIntegration: Rtsp2WebrtcIntegration,
   ) {
     this.builtInRegistry.set('light', lightIntegration);
     this.builtInRegistry.set('switch', switchIntegration);
@@ -107,6 +109,7 @@ export class IntegrationLoaderService implements OnApplicationShutdown {
     this.builtInRegistry.set('scene', sceneIntegration);
     this.builtInRegistry.set('nest_thermostat', nestThermostatIntegration);
     this.builtInRegistry.set('ecobee', ecobeeIntegration);
+    this.builtInRegistry.set('rtsp2webrtc', rtsp2webrtcIntegration);
   }
 
   /**

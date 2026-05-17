@@ -10,6 +10,7 @@ import {
 import { CameraStreamService, StreamDef } from './camera-stream.service';
 import { DOMAIN_CAMERA, STATE_IDLE, STATE_STREAMING } from './camera.constants';
 import { STATE_UNAVAILABLE } from '../../../common/constants/domains.constants';
+import { WebrtcService } from '../../../api/webrtc/webrtc.service';
 
 export interface CameraStreamConfig {
   /** Display label shown on the toggle button (e.g. "SD", "HD") */
@@ -50,6 +51,7 @@ export class CameraIntegration implements HaIntegration {
     private readonly entityRegistry: EntityRegistryService,
     private readonly contextService: ContextService,
     private readonly streamService: CameraStreamService,
+    private readonly webrtcService: WebrtcService,
   ) {}
 
   async setup(config: IntegrationConfig): Promise<boolean> {
@@ -110,6 +112,15 @@ export class CameraIntegration implements HaIntegration {
           this.contextService.system(),
         );
       });
+
+      // Also register with go2rtc so cameras appear on the Security page
+      const defaultRtsp = cam.streams
+        ? (cam.streams.find(s => s.default) ?? cam.streams[0])?.rtsp_url
+        : cam.rtsp_url;
+      if (defaultRtsp) {
+        const webrtcName = entityId.replace(/[^a-z0-9_]/g, '_');
+        this.webrtcService.registerIntegrationStream(webrtcName, defaultRtsp, entityId);
+      }
 
       this.logger.log(`Camera registered: ${entityId} (${streams.map(s => s.label).join('/')})`);
     }

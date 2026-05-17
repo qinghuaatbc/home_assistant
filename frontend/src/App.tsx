@@ -28,7 +28,7 @@ const PersonsPage         = lazy(() => import('./pages/PersonsPage'))
 const EnergyPage          = lazy(() => import('./pages/EnergyPage'))
 const ThermostatPage      = lazy(() => import('./pages/ThermostatPage'))
 const ScenesPage          = lazy(() => import('./pages/ScenesPage'))
-const CameraGridPage      = lazy(() => import('./pages/CameraGridPage'))
+const SecurityPage        = lazy(() => import('./pages/SecurityPage'))
 
 function getToken(): string {
   const stored = localStorage.getItem('ha_token')
@@ -292,7 +292,7 @@ function AuthLayout() {
             <Route path="energy" element={<EnergyPage />} />
             <Route path="thermostat" element={<ThermostatPage />} />
             <Route path="scenes" element={<ScenesPage />} />
-            <Route path="cameras" element={<CameraGridPage />} />
+            <Route path="security" element={<SecurityPage />} />
           </Routes>
         </Suspense>
       </div>

@@ -14,7 +14,7 @@ const TABS = [
   { id: 'energy',       icon: '⚡',  label: 'Energy'  },
   { id: 'thermostat',   icon: '🌡️',  label: 'Climate' },
   { id: 'scenes',       icon: '🎬',  label: 'Scenes'  },
-  { id: 'cameras',      icon: '📷',  label: 'Cams'    },
+  { id: 'security',     icon: '📷',  label: 'Security'},
   { id: 'settings',     icon: '☰',  label: 'More'    },
 ]
 

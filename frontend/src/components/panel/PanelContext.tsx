@@ -8,7 +8,7 @@ import {
 // ─── Types & i18n ─────────────────────────────────────────────────────────────
 
 export type Mode  = '3d' | '2d'
-export type Cat   = 'security' | 'music' | 'lights' | 'theater' | 'climate' | 'garage' | 'scenes'
+export type Cat   = 'security' | 'camera' | 'music' | 'lights' | 'theater' | 'climate' | 'garage' | 'scenes'
 export type Theme = 'day' | 'dark' | 'aurora' | 'galaxy' | 'fireworks'
 export type Lang  = 'en' | 'zh' | 'fa'
 
@@ -62,21 +62,21 @@ export const TR: Record<Lang, {
   activate: string; trigger: string; speed: string
 }> = {
   en: {
-    cats: { security:'Security', music:'Music', lights:'Lights', theater:'Theater', climate:'Climate', garage:'Garage', scenes:'Scenes' },
+    cats: { security:'Security', camera:'Camera', music:'Music', lights:'Lights', theater:'Theater', climate:'Climate', garage:'Garage', scenes:'Scenes' },
     on:'ON', off:'OFF', open:'OPEN', closed:'CLOSED', detected:'DETECTED', clear:'CLEAR',
     armHome:'ARM HOME', armAway:'ARM AWAY', disarm:'DISARM', bri:'bri', vol:'vol', langBtn:'EN',
     noDevices:'No devices', heating:'Heating', cooling:'Cooling', idle:'Idle',
     activate:'Activate', trigger:'Trigger', speed:'Speed',
   },
   zh: {
-    cats: { security:'安防', music:'音乐', lights:'灯光', theater:'影院', climate:'气候', garage:'车库', scenes:'场景' },
+    cats: { security:'安防', camera:'摄像头', music:'音乐', lights:'灯光', theater:'影院', climate:'气候', garage:'车库', scenes:'场景' },
     on:'开', off:'关', open:'开门', closed:'关闭', detected:'已检测', clear:'正常',
     armHome:'在家布防', armAway:'离家布防', disarm:'撤防', bri:'亮', vol:'音量', langBtn:'中文',
     noDevices:'无设备', heating:'加热中', cooling:'制冷中', idle:'待机',
     activate:'激活', trigger:'触发', speed:'风速',
   },
   fa: {
-    cats: { security:'امنیت', music:'موسیقی', lights:'چراغ‌ها', theater:'سینما', climate:'آب‌وهوا', garage:'گاراژ', scenes:'صحنه‌ها' },
+    cats: { security:'امنیت', camera:'دوربین', music:'موسیقی', lights:'چراغ‌ها', theater:'سینما', climate:'آب‌وهوا', garage:'گاراژ', scenes:'صحنه‌ها' },
     on:'روشن', off:'خاموش', open:'باز', closed:'بسته', detected:'تشخیص', clear:'پاک',
     armHome:'حالت خانه', armAway:'حالت خروج', disarm:'غیرفعال', bri:'روشنایی', vol:'صدا', langBtn:'فارسی',
     noDevices:'دستگاهی نیست', heating:'گرمایش', cooling:'سرمایش', idle:'آماده',
@@ -118,6 +118,7 @@ export const useCardSize = () => useContext(SizeCtx)
 
 export const CATS: { id: Cat; icon: string }[] = [
   { id: 'security', icon: '🔒' },
+  { id: 'camera',   icon: '📷' },
   { id: 'music',    icon: '🎵' },
   { id: 'lights',   icon: '💡' },
   { id: 'theater',  icon: '🎬' },

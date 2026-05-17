@@ -30,9 +30,11 @@ import { NestThermostatIntegration } from './built-in/nest-thermostat/nest-therm
 import { NestThermostatClientService } from './built-in/nest-thermostat/nest-thermostat-client.service';
 import { EcobeeIntegration } from './built-in/ecobee/ecobee.integration';
 import { EcobeeClientService } from './built-in/ecobee/ecobee-client.service';
+import { Rtsp2WebrtcIntegration } from './built-in/rtsp2webrtc/rtsp2webrtc.integration';
+import { WebrtcModule } from '../api/webrtc/webrtc.module';
 
 @Module({
-  imports: [RegistryModule, AutomationModule],
+  imports: [RegistryModule, AutomationModule, WebrtcModule],
   controllers: [CameraController],
   providers: [
     IntegrationLoaderService,
@@ -76,7 +78,9 @@ import { EcobeeClientService } from './built-in/ecobee/ecobee-client.service';
     // Ecobee Thermostat
     EcobeeIntegration,
     EcobeeClientService,
+    // RTSP to WebRTC (go2rtc)
+    Rtsp2WebrtcIntegration,
   ],
-  exports: [IntegrationLoaderService],
+  exports: [IntegrationLoaderService, CameraStreamService],
 })
 export class IntegrationsModule {}

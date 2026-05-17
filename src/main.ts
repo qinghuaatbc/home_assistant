@@ -8,6 +8,8 @@ import { AppModule } from './app.module';
 import { HaExceptionFilter } from './common/filters/ha-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { SocketIoAdapter } from './websocket/socket-io.adapter';
+import { createProxyMiddleware } from 'http-proxy-middleware';
+import * as httpProxy from 'http-proxy';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
@@ -15,6 +17,18 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['log', 'error', 'warn', 'debug'],
   });
+
+  // HTTP proxy for go2rtc REST calls (/go2rtc/api/streams etc.)
+  const go2rtcProxy = createProxyMiddleware({
+    target: 'http://localhost:1984',
+    changeOrigin: true,
+    pathRewrite: { '^/go2rtc': '' },
+  } as any);
+  app.use('/go2rtc', go2rtcProxy);
+
+  // Separate raw WebSocket proxy — http-proxy handles WS upgrade correctly
+  const wsProxy = (httpProxy as any).createProxyServer({ target: 'http://localhost:1984', ws: true });
+  wsProxy.on('error', (err: Error) => logger.warn(`go2rtc WS proxy: ${err.message}`));
 
   // Serve frontend from public/
   app.useStaticAssets(join(__dirname, '..', 'public'));
@@ -96,6 +110,14 @@ async function bootstrap(): Promise<void> {
   SwaggerModule.setup('api/doc', app, document);
 
   await app.listen(port);
+
+  // Prepend before Socket.io's upgrade handler so /go2rtc/* WS is intercepted first
+  app.getHttpServer().prependListener('upgrade', (req: any, socket: any, head: any) => {
+    if (req.url?.startsWith('/go2rtc')) {
+      req.url = req.url.slice('/go2rtc'.length) || '/';
+      wsProxy.ws(req, socket, head);
+    }
+  });
 
   logger.log('');
   logger.log(`REST API:      http://localhost:${port}/api`);
