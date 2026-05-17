@@ -19,3 +19,26 @@ export function EmptyState({ icon, cat }: { icon: string; cat: Cat }) {
     </div>
   )
 }
+
+export function SkeletonCard() {
+  const th = useTh()
+  const base = th === 'day' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)'
+  const shine = th === 'day' ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.12)'
+  return (
+    <div style={{
+      borderRadius: 14, minHeight: 92,
+      background: `linear-gradient(90deg, ${base} 25%, ${shine} 50%, ${base} 75%)`,
+      backgroundSize: '200% 100%',
+      animation: 'shimmer 1.4s ease-in-out infinite',
+      border: th === 'day' ? '1px solid rgba(255,255,255,0.7)' : '1px solid rgba(255,255,255,0.08)',
+    }} />
+  )
+}
+
+export function SkeletonGrid({ cols, count = 8 }: { cols: number; count?: number }) {
+  return (
+    <CardGrid cols={cols}>
+      {Array.from({ length: count }, (_, i) => <SkeletonCard key={i} />)}
+    </CardGrid>
+  )
+}

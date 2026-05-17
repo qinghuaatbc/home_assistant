@@ -103,6 +103,7 @@ export function CategoryNav({ cat, onChange, vertical, cardSize = 'md' }: {
         <div style={{ flex: 1, overflowY: 'scroll', overflowX: 'hidden', WebkitOverflowScrolling: 'touch' as any, display: 'flex', flexDirection: 'column', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}>
           {activeCats.map(c => {
             const active = cat === c.id
+            const count = activeCounts[c.id] ?? 0
             return (
               <button key={c.id} onClick={() => handleClick(c.id)} style={{
                 background: 'none', border: 'none', cursor: 'pointer', padding: '5px 4px',
@@ -111,6 +112,7 @@ export function CategoryNav({ cat, onChange, vertical, cardSize = 'md' }: {
                 transition: 'opacity 0.15s',
               }}>
                 <div style={{
+                  position: 'relative',
                   width: sv.boxS, height: sv.boxS, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: active ? 'rgba(240,168,0,0.22)' : 'transparent',
                   boxShadow: active ? '0 2px 10px rgba(240,168,0,0.25), inset 0 1px 0 rgba(255,220,80,0.30)' : 'none',
@@ -118,6 +120,16 @@ export function CategoryNav({ cat, onChange, vertical, cardSize = 'md' }: {
                   transition: 'background 0.2s, box-shadow 0.2s',
                 }}>
                   <span style={{ fontSize: sv.icon }}>{catIcon(c.id, c.icon)}</span>
+                  {count > 0 && (
+                    <span style={{
+                      position: 'absolute', top: -4, right: -4,
+                      background: '#ff9f0a', color: '#fff',
+                      fontSize: 8, fontWeight: 800,
+                      borderRadius: 7, padding: '1px 4px',
+                      minWidth: 13, textAlign: 'center', lineHeight: '1.3',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+                    }}>{count}</span>
+                  )}
                 </div>
                 <span style={{ fontSize: sv.label, fontWeight: active ? 700 : 500, color: active ? '#d4880a' : th === 'day' ? 'rgba(140,90,0,0.80)' : 'rgba(240,168,0,0.70)', letterSpacing: 0.2 }}>{catLabel(c.id)}</span>
               </button>

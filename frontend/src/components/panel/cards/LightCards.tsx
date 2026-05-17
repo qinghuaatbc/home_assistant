@@ -177,6 +177,9 @@ export const LightTile = memo(({ s }: { s: HaState }) => {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onTouchStart={e => e.stopPropagation()}
+      onTouchMove={e => e.stopPropagation()}
+      onTouchEnd={e => e.stopPropagation()}
       style={{
         border: displayOn && glow ? `1px solid ${glow}70` : `1px solid ${th === 'day' ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.10)'}`,
         borderRadius: 18, background: bg,
@@ -202,10 +205,56 @@ export const LightTile = memo(({ s }: { s: HaState }) => {
         {displayOn ? `${displayBri}%` : '—'}
       </div>
       <div style={{ width: '100%', paddingTop: 2 }} onPointerDown={e => e.stopPropagation()}>
-        {displayOn
-          ? <FancySlider value={displayBri} color={glow ?? '#888'} onChange={v => { setLocalBri(v); if (v === 0) callService('light', 'turn_off', {}, s.entity_id); else callService('light', 'turn_on', { brightness: Math.round(v * 255 / 100) }, s.entity_id) }} />
-          : <div style={{ height: 10, borderRadius: 8, background: th === 'day' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)' }} />
-        }
+        <FancySlider
+          value={displayOn ? displayBri : 0}
+          color={displayOn ? (glow ?? '#888') : 'rgba(200,200,200,0.25)'}
+          onChange={v => {
+            setLocalBri(v)
+            if (v === 0) { slidedToZeroRef.current = true; callService('light', 'turn_off', {}, s.entity_id) }
+            else callService('light', 'turn_on', { brightness: Math.round(v * 255 / 100) }, s.entity_id)
+          }}
+        />
+        {/* Color temperature slider */}
+        {displayOn && (() => {
+          const modes: string[] = (s.attributes.supported_color_modes as string[]) ?? []
+          const hasColorTemp = modes.includes('color_temp')
+          const hasColor = modes.some(m => m === 'hs' || m === 'rgb' || m === 'xy')
+          const minK = Number(s.attributes.min_color_temp_kelvin ?? 2000)
+          const maxK = Number(s.attributes.max_color_temp_kelvin ?? 6500)
+          const curK = Number(s.attributes.color_temp_kelvin ?? minK)
+          const ctPct = Math.round((curK - minK) / (maxK - minK) * 100)
+          if (hasColorTemp) {
+            return (
+              <div style={{ marginTop: 4 }}>
+                <FancySlider
+                  value={ctPct}
+                  color={`hsl(${40 - ctPct * 0.27}, 100%, 62%)`}
+                  onChange={pct => {
+                    const k = Math.round(minK + pct / 100 * (maxK - minK))
+                    callService('light', 'turn_on', { color_temp_kelvin: k }, s.entity_id)
+                  }}
+                />
+              </div>
+            )
+          }
+          if (hasColor) {
+            const hue = (s.attributes.hs_color as [number, number] | undefined)?.[0] ?? 0
+            const huePct = Math.round(hue / 360 * 100)
+            return (
+              <div style={{ marginTop: 4 }}>
+                <FancySlider
+                  value={huePct}
+                  color={`hsl(${hue}, 100%, 55%)`}
+                  onChange={pct => {
+                    const h = Math.round(pct / 100 * 360)
+                    callService('light', 'turn_on', { hs_color: [h, 100] }, s.entity_id)
+                  }}
+                />
+              </div>
+            )
+          }
+          return null
+        })()}
       </div>
     </div>
   )

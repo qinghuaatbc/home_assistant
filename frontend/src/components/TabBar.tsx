@@ -15,6 +15,7 @@ const TABS = [
   { id: 'thermostat',   icon: '🌡️',  label: 'Climate' },
   { id: 'scenes',       icon: '🎬',  label: 'Scenes'  },
   { id: 'security',     icon: '📷',  label: 'Security'},
+  { id: 'codeanalysis', icon: '🔍',  label: 'Code'    },
   { id: 'settings',     icon: '☰',  label: 'More'    },
 ]
 

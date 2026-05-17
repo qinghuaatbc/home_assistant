@@ -229,6 +229,10 @@ export function useRtiStyles() {
 @keyframes fwTrail{0%{transform:translateY(0) scaleY(1);opacity:0.9}100%{transform:translateY(-160px) scaleY(0.3);opacity:0}}
 @keyframes floatUp{0%{transform:translateY(0) scale(1);opacity:0}10%{opacity:1}85%{opacity:0.6}100%{transform:translateY(-60vh) scale(0.4);opacity:0}}
 @keyframes emberFloat{0%{transform:translate(0,0) scale(1);opacity:0}10%{opacity:0.85}90%{opacity:0.2}100%{transform:translate(var(--ex,20px),-55vh) scale(0.3);opacity:0}}
+@keyframes viewFadeIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+@keyframes ptrSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
     `
     document.head.appendChild(s)
     return () => { document.getElementById(id)?.remove() }

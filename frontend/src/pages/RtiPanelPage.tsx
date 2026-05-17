@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
 import { useHa } from '../context/HaContext'
 import {
   type Mode, type Cat, type Theme, type Lang, type CardSize, type DashboardConfig,
-  LANG_LIST, THEMES, CARD_SIZES, CARD_SIZE_COLS, TAB_W, TAB_H, SIDE_W,
+  LANG_LIST, THEMES, CATS, CARD_SIZES, CARD_SIZE_COLS, TAB_W, TAB_H, SIDE_W,
   LangCtx, ThemeCtx, SoundCtx, MappedCtx, DashboardCtx, SizeCtx,
   useIsLandscape, useRtiStyles,
   getLang, setLang,
@@ -18,10 +18,11 @@ import { TheaterView } from '../components/panel/views/TheaterView'
 import { ClimateView } from '../components/panel/views/ClimateView'
 import { GarageView } from '../components/panel/views/GarageView'
 import { ScenesView } from '../components/panel/views/ScenesView'
+import { SkeletonGrid } from '../components/panel/ui/CardGrid'
 
 const FloorPlan3D = lazy(() => import('../components/FloorPlan3DScene').then(m => ({ default: m.FloorPlan3DScene })))
 
-interface PanelToast { id: number; icon: string; text: string }
+interface PanelToast { id: number; icon: string; text: string; cat?: Cat }
 
 export default function RtiPanelPage({ standaloneToken }: { standaloneToken?: string }) {
   const { wsConnected, states, token } = useHa()
@@ -30,9 +31,9 @@ export default function RtiPanelPage({ standaloneToken }: { standaloneToken?: st
   const prevStates = useRef<Map<string, string>>(new Map())
   const toastId = useRef(0)
 
-  const addToast = useCallback((icon: string, text: string) => {
+  const addToast = useCallback((icon: string, text: string, cat?: Cat) => {
     const id = ++toastId.current
-    setToasts(t => [...t.slice(-3), { id, icon, text }])
+    setToasts(t => [...t.slice(-3), { id, icon, text, cat }])
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 5000)
   }, [])
 
@@ -46,29 +47,56 @@ export default function RtiPanelPage({ standaloneToken }: { standaloneToken?: st
       const domain = eid.split('.')[0]
       if (domain === 'binary_sensor') {
         const dc = String(s.attributes.device_class ?? '')
-        if ((dc === 'door' || dc === 'window') && s.state === 'on')  addToast('🚪', `${name} opened`)
-        if ((dc === 'motion') && s.state === 'on')                   addToast('🏃', `${name} detected`)
-        if ((dc === 'smoke') && s.state === 'on')                    addToast('🚨', `${name} SMOKE ALARM`)
+        if ((dc === 'door' || dc === 'window') && s.state === 'on')  addToast('🚪', `${name} opened`, 'security')
+        if ((dc === 'motion') && s.state === 'on')                   addToast('🏃', `${name} detected`, 'security')
+        if ((dc === 'smoke') && s.state === 'on')                    addToast('🚨', `${name} SMOKE ALARM`, 'security')
       }
       if (domain === 'alarm_control_panel') {
-        if (s.state === 'triggered')  addToast('🚨', `ALARM TRIGGERED: ${name}`)
-        if (s.state === 'disarmed')   addToast('✅', `${name} disarmed`)
-        if (s.state === 'armed_away') addToast('🔒', `${name} armed away`)
+        if (s.state === 'triggered')  addToast('🚨', `ALARM TRIGGERED: ${name}`, 'security')
+        if (s.state === 'disarmed')   addToast('✅', `${name} disarmed`, 'security')
+        if (s.state === 'armed_away') addToast('🔒', `${name} armed away`, 'security')
       }
-      if (domain === 'lock' && s.state === 'unlocked') addToast('🔓', `${name} unlocked`)
+      if (domain === 'lock' && s.state === 'unlocked') addToast('🔓', `${name} unlocked`, 'security')
     })
   }, [states, addToast])
-  const [cat, setCat] = useState<Cat>('lights')
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('ha_theme')
-    return saved === 'dark' ? 'dark' : 'day'
+  const [cat, setCat] = useState<Cat>(() => {
+    const s = localStorage.getItem('ha_panel_cat') as Cat
+    return CATS.some(c => c.id === s) ? s : 'lights'
   })
-  const [cardSize, setCardSize] = useState<CardSize>('md')
-  const cycleSize = useCallback(() => setCardSize(s => CARD_SIZES[(CARD_SIZES.indexOf(s) + 1) % CARD_SIZES.length]), [])
-  const [soundMode, setSoundMode] = useState(2)
+  const changeCat = useCallback((c: Cat) => { setCat(c); localStorage.setItem('ha_panel_cat', c) }, [])
+
+  const [theme, setTheme] = useState<Theme>(() => {
+    const s = localStorage.getItem('ha_panel_theme') as Theme
+    return THEMES.includes(s) ? s : 'dark'
+  })
+  const [cardSize, setCardSize] = useState<CardSize>(() => {
+    const s = localStorage.getItem('ha_panel_cardsize') as CardSize
+    return CARD_SIZES.includes(s) ? s : 'md'
+  })
+  const cycleSize = useCallback(() => setCardSize(s => {
+    const next = CARD_SIZES[(CARD_SIZES.indexOf(s) + 1) % CARD_SIZES.length]
+    localStorage.setItem('ha_panel_cardsize', next); return next
+  }), [])
+  const [soundMode, setSoundMode] = useState(() => {
+    const s = localStorage.getItem('ha_panel_sound'); const n = s !== null ? parseInt(s, 10) : 2
+    return isNaN(n) ? 2 : n
+  })
   const [lang, setLangState] = useState<Lang>(() => (localStorage.getItem('ha_lang') as Lang) || 'en')
   const isLandscape = useIsLandscape()
   useRtiStyles()
+
+  // Screen wake lock — keep display on while panel is open
+  useEffect(() => {
+    if (!('wakeLock' in navigator)) return
+    let lock: WakeLockSentinel | null = null
+    const acquire = async () => {
+      try { lock = await (navigator as any).wakeLock.request('screen') } catch {}
+    }
+    acquire()
+    const onVis = () => { if (document.visibilityState === 'visible') acquire() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { document.removeEventListener('visibilitychange', onVis); lock?.release() }
+  }, [])
 
   // Sync lang state → sounds module on mount and on change
   useEffect(() => { setLang(lang) }, [lang])
@@ -103,12 +131,56 @@ export default function RtiPanelPage({ standaloneToken }: { standaloneToken?: st
         setDashboardConfig(d)
         // Navigate to first non-empty view from yaml if current tab is missing
         const firstValid = Object.keys(d.views)[0] as Cat | undefined
-        if (firstValid) setCat(c => (d.views[c] !== undefined ? c : firstValid))
+        if (firstValid) setCat(c => (d.views[c] !== undefined ? c : firstValid))  // do not persist this auto-redirect
       })
       .catch(() => {})
   }, [token])
 
   const cols = isLandscape ? CARD_SIZE_COLS[cardSize].landscape : CARD_SIZE_COLS[cardSize].portrait
+
+  // Pull-to-refresh
+  const ptrRef   = useRef<{ startY: number; triggered: boolean } | null>(null)
+  const [ptrActive, setPtrActive] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const onPtrStart = useCallback((e: React.TouchEvent) => {
+    const el = scrollRef.current
+    if (!el || el.scrollTop > 0) return
+    ptrRef.current = { startY: e.touches[0].clientY, triggered: false }
+  }, [])
+  const onPtrMove = useCallback((e: React.TouchEvent) => {
+    if (!ptrRef.current) return
+    const dy = e.touches[0].clientY - ptrRef.current.startY
+    if (dy > 60 && !ptrRef.current.triggered) { setPtrActive(true) }
+  }, [])
+  const onPtrEnd = useCallback(() => {
+    if (!ptrRef.current) return
+    if (ptrActive) { setTimeout(() => window.location.reload(), 600) }
+    ptrRef.current = null
+  }, [ptrActive])
+
+  // Swipe left/right to change category
+  const swipeRef = useRef<{ x: number; y: number } | null>(null)
+  const activeCatIds = useMemo<Cat[]>(() => {
+    if (!dashboardConfig?.views) return CATS.map(c => c.id)
+    const keys = Object.keys(dashboardConfig.views) as Cat[]
+    const filt = keys.filter(id => CATS.some(c => c.id === id))
+    return filt.length > 0 ? filt : CATS.map(c => c.id)
+  }, [dashboardConfig])
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    swipeRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  }, [])
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!swipeRef.current) return
+    const dx = e.changedTouches[0].clientX - swipeRef.current.x
+    const dy = e.changedTouches[0].clientY - swipeRef.current.y
+    swipeRef.current = null
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return
+    const idx = activeCatIds.indexOf(cat)
+    const next = dx < 0
+      ? activeCatIds[(idx + 1) % activeCatIds.length]
+      : activeCatIds[(idx - 1 + activeCatIds.length) % activeCatIds.length]
+    changeCat(next)
+  }, [cat, activeCatIds, changeCat])
 
   const cycleLang = useCallback(() => {
     const next = LANG_LIST[(LANG_LIST.indexOf(lang) + 1) % LANG_LIST.length]
@@ -119,16 +191,14 @@ export default function RtiPanelPage({ standaloneToken }: { standaloneToken?: st
 
   const toggleTheme = useCallback(() => setTheme(t => {
     const next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length]
-    if (next === 'day') {
-      document.documentElement.classList.add('light')
-      localStorage.setItem('ha_theme', 'light')
-    } else {
-      document.documentElement.classList.remove('light')
-      localStorage.setItem('ha_theme', 'dark')
-    }
+    localStorage.setItem('ha_panel_theme', next)
+    if (next === 'day') document.documentElement.classList.add('light')
+    else document.documentElement.classList.remove('light')
     return next
   }), [])
-  const cycleSound = useCallback(() => setSoundMode(m => (m + 1) % 3), [])
+  const cycleSound = useCallback(() => setSoundMode(m => {
+    const next = (m + 1) % 3; localStorage.setItem('ha_panel_sound', String(next)); return next
+  }), [])
 
   const BG_COLORS: Record<Theme, string> = {
     day:       'radial-gradient(ellipse at 18% 22%, rgba(140,195,255,0.65) 0%, transparent 48%), radial-gradient(ellipse at 82% 80%, rgba(100,170,255,0.45) 0%, transparent 48%), linear-gradient(150deg, #a8c8f0 0%, #9bbfe8 45%, #a4c4ee 100%)',
@@ -193,34 +263,52 @@ export default function RtiPanelPage({ standaloneToken }: { standaloneToken?: st
             {/* 2D mode */}
             {mode === '2d' && (
               <>
-                <div style={{ ...contentStyle, zIndex: 1 }}>
-                  {cat === 'security' && <SecurityView states={states} cols={cols} />}
-                  {cat === 'camera'   && <CameraView   states={states} cols={cols} />}
-                  {cat === 'music'    && <MusicView    states={states} cols={cols} />}
-                  {cat === 'lights'   && <LightsView   states={states} cols={cols} />}
-                  {cat === 'theater'  && <TheaterView  states={states} cols={cols} />}
-                  {cat === 'climate'  && <ClimateView  states={states} cols={cols} />}
-                  {cat === 'garage'   && <GarageView   states={states} cols={cols} />}
-                  {cat === 'scenes'   && <ScenesView   states={states} cols={cols} />}
+                <div ref={scrollRef} style={{ ...contentStyle, zIndex: 1 }}
+                  onTouchStart={(e) => { handleTouchStart(e); onPtrStart(e) }}
+                  onTouchMove={onPtrMove}
+                  onTouchEnd={(e) => { handleTouchEnd(e); onPtrEnd() }}
+                >
+                  {/* Pull-to-refresh indicator */}
+                  {ptrActive && (
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #4d8fff, #a78bfa, #4d8fff)', backgroundSize: '200% 100%', animation: 'shimmer 1s linear infinite', zIndex: 10 }} />
+                  )}
+                  <div key={cat} style={{ animation: 'viewFadeIn 0.22s ease-out', minHeight: '100%' }}>
+                    {states.size === 0 ? <SkeletonGrid cols={cols} /> : (
+                      <>
+                        {cat === 'security' && <SecurityView states={states} cols={cols} />}
+                        {cat === 'camera'   && <CameraView   states={states} cols={cols} />}
+                        {cat === 'music'    && <MusicView    states={states} cols={cols} />}
+                        {cat === 'lights'   && <LightsView   states={states} cols={cols} />}
+                        {cat === 'theater'  && <TheaterView  states={states} cols={cols} />}
+                        {cat === 'climate'  && <ClimateView  states={states} cols={cols} />}
+                        {cat === 'garage'   && <GarageView   states={states} cols={cols} />}
+                        {cat === 'scenes'   && <ScenesView   states={states} cols={cols} />}
+                      </>
+                    )}
+                  </div>
                 </div>
-                <CategoryNav cat={cat} onChange={setCat} vertical={isLandscape} cardSize={cardSize} />
+                <CategoryNav cat={cat} onChange={changeCat} vertical={isLandscape} cardSize={cardSize} />
               </>
             )}
 
-            {/* Toast notifications */}
+            {/* Toast notifications — right side above sidebar to avoid FloatingMic */}
             {toasts.length > 0 && (
-              <div style={{ position: 'fixed', bottom: isLandscape ? 20 : TAB_H + 12, left: 16, zIndex: 9990, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
+              <div style={{ position: 'fixed', bottom: isLandscape ? 20 : TAB_H + 12, right: `calc(${SIDE_W}px + env(safe-area-inset-right, 0px) + 10px)`, zIndex: 9990, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 260 }}>
                 {toasts.map(t => (
-                  <div key={t.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    background: 'rgba(20,22,35,0.88)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-                    border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14,
-                    padding: '9px 16px', boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
-                    fontSize: 13, color: '#fff', fontWeight: 500,
-                    animation: 'slideIn 0.25s ease-out',
-                  }}>
+                  <div key={t.id}
+                    onClick={() => { if (t.cat) { changeCat(t.cat); setMode('2d') } }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      background: 'rgba(20,22,35,0.88)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14,
+                      padding: '9px 16px', boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+                      fontSize: 13, color: '#fff', fontWeight: 500,
+                      animation: 'slideIn 0.25s ease-out',
+                      cursor: t.cat ? 'pointer' : 'default',
+                    }}>
                     <span style={{ fontSize: 18, lineHeight: 1 }}>{t.icon}</span>
                     <span>{t.text}</span>
+                    {t.cat && <span style={{ fontSize: 10, opacity: 0.5, marginLeft: 'auto' }}>→</span>}
                   </div>
                 ))}
               </div>

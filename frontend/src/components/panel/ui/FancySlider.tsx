@@ -24,7 +24,12 @@ export function FancySlider({ value, min = 0, max = 100, onChange, color, unit =
   }, [trackBg])
 
   return (
-    <div style={{ position: 'relative', paddingTop: dragging ? 22 : 0, transition: 'padding 0.1s' }}>
+    <div
+      style={{ position: 'relative', paddingTop: dragging ? 22 : 0, transition: 'padding 0.1s' }}
+      onTouchStart={e => e.stopPropagation()}
+      onTouchMove={e => e.stopPropagation()}
+      onTouchEnd={e => e.stopPropagation()}
+    >
       {dragging && (
         <div style={{
           position: 'absolute', top: 0,
