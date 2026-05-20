@@ -37,28 +37,29 @@ function playNestTick(ctx: AudioContext) {
   const now = ctx.currentTime
   const sr = ctx.sampleRate
 
-  // Soft noise whisper — barely audible transient, just gives the "start" of the click
-  const aLen = Math.floor(sr * 0.002)
-  const aBuf = ctx.createBuffer(1, aLen, sr)
-  const aData = aBuf.getChannelData(0)
-  for (let i = 0; i < aLen; i++) aData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.0005))
-  const aSrc = ctx.createBufferSource()
-  aSrc.buffer = aBuf
-  const aG = ctx.createGain(); aG.gain.value = 0.07
-  aSrc.connect(aG); aG.connect(ctx.destination)
-  aSrc.start(now)
+  // Bandpass noise impulse — the encoder contact (crisp attack, ~2 ms)
+  const nLen = Math.floor(sr * 0.003)
+  const nBuf = ctx.createBuffer(1, nLen, sr)
+  const nd = nBuf.getChannelData(0)
+  for (let i = 0; i < nLen; i++) nd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.0005))
+  const nSrc = ctx.createBufferSource()
+  nSrc.buffer = nBuf
+  const nBp = ctx.createBiquadFilter()
+  nBp.type = 'bandpass'; nBp.frequency.value = 2400; nBp.Q.value = 1.1
+  const nG = ctx.createGain(); nG.gain.value = 0.22
+  nSrc.connect(nBp); nBp.connect(nG); nG.connect(ctx.destination)
+  nSrc.start(now)
 
-  // Harmonic stack: root (660 Hz) + perfect fifth (990 Hz) + octave (1320 Hz)
-  // Gives a soft, musical "ding" — each harmonic shorter and quieter than the last
+  // Two inharmonic plate modes — plastic ring resonance (not musical ratios → sounds physical)
+  // 1350 Hz and 2230 Hz  →  ratio ≈ 1.65  (between fifth and major-sixth — no simple fraction)
   ;([
-    [660, 0.09, 0.010],
-    [990, 0.06, 0.007],
-    [1320, 0.035, 0.005],
+    [1350, 0.11, 0.006],
+    [2230, 0.06, 0.0035],
   ] as [number, number, number][]).forEach(([freq, gain, tc]) => {
     const len = Math.floor(sr * tc * 5)
     const buf = ctx.createBuffer(1, len, sr)
-    const data = buf.getChannelData(0)
-    for (let i = 0; i < len; i++) data[i] = Math.sin(2 * Math.PI * freq * i / sr) * Math.exp(-i / (sr * tc))
+    const d = buf.getChannelData(0)
+    for (let i = 0; i < len; i++) d[i] = Math.sin(2 * Math.PI * freq * i / sr) * Math.exp(-i / (sr * tc))
     const src = ctx.createBufferSource()
     src.buffer = buf
     const g = ctx.createGain(); g.gain.value = gain
