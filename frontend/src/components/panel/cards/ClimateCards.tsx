@@ -74,12 +74,17 @@ export const NestThermostat = memo(({ s }: { s: HaState }) => {
   const hvacMode   = s.state ?? 'off'
   const isHeating  = hvacAction === 'heating'
   const isCooling  = hvacAction === 'cooling'
-  const isActive   = isHeating || isCooling
+
+  // Immediate drag feedback — red when setpoint > current, blue when < current in cool mode
+  const wantsHeat  = hvacMode !== 'off' && setpoint > current
+  const wantsCool  = hvacMode === 'cool' && setpoint < current
+  const isActive   = wantsHeat || wantsCool
 
   const heatColor  = '#ff8035'
   const coolColor  = '#30b8f0'
-  const modeColor  = isHeating ? heatColor : isCooling ? coolColor : 'rgba(255,255,255,0.22)'
-  const glowRgba   = isHeating ? 'rgba(255,128,53,0.35)' : isCooling ? 'rgba(48,184,240,0.35)' : 'transparent'
+  const modeColor  = wantsHeat ? heatColor : wantsCool ? coolColor : 'rgba(255,255,255,0.22)'
+  const glowRgba   = wantsHeat ? 'rgba(255,128,53,0.35)' : wantsCool ? 'rgba(48,184,240,0.35)' : 'transparent'
+  const faceGlow   = wantsHeat ? 'rgba(220,55,0,0.38)'   : wantsCool ? 'rgba(30,140,255,0.28)' : 'transparent'
 
   const setpointFrac = (setpoint - minT) / (maxT - minT)
   const thumbAngle   = ARC_START + setpointFrac * ARC_SPAN
@@ -181,14 +186,18 @@ export const NestThermostat = memo(({ s }: { s: HaState }) => {
           <filter id="nShadow" x="-10%" y="-10%" width="120%" height="120%">
             <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#000" floodOpacity="0.6" />
           </filter>
+          {/* Face heat/cool tint — dynamic radial glow */}
+          <radialGradient id="nFaceTint" cx="50%" cy="42%" r="58%">
+            <stop offset="0%"   stopColor={faceGlow} />
+            <stop offset="70%"  stopColor={faceGlow} />
+            <stop offset="100%" stopColor="transparent" />
+          </radialGradient>
         </defs>
 
         {/* Ambient glow ring (heating/cooling) */}
-        {isActive && (
-          <circle cx={CX} cy={CY} r={R_CHROME + 6}
-            fill="none" stroke={glowRgba} strokeWidth={24}
-            style={{ filter: 'blur(14px)', transition: 'stroke 1s' }} />
-        )}
+        <circle cx={CX} cy={CY} r={R_CHROME + 6}
+          fill="none" stroke={glowRgba} strokeWidth={24}
+          style={{ filter: 'blur(14px)', transition: 'stroke 0.6s', opacity: isActive ? 1 : 0 }} />
 
         {/* Chrome outer ring */}
         <circle cx={CX} cy={CY} r={R_CHROME} fill="url(#nChrome)" />
@@ -201,6 +210,11 @@ export const NestThermostat = memo(({ s }: { s: HaState }) => {
 
         {/* Inner face */}
         <circle cx={CX} cy={CY} r={R_FACE} fill="url(#nFace)" filter="url(#nShadow)" />
+
+        {/* Heat / cool tint overlay — fades in when setpoint ≠ current */}
+        <circle cx={CX} cy={CY} r={R_FACE} fill="url(#nFaceTint)"
+          opacity={isActive ? 1 : 0}
+          style={{ transition: 'opacity 0.6s', pointerEvents: 'none' }} />
 
         {/* Dead zone subtle line */}
         <path d={arcPath(ARC_START + ARC_SPAN + 2, 360 - ARC_SPAN - 4, R_ARC)}
