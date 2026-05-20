@@ -36,21 +36,36 @@ function rawAngleToProgress(raw: number): number {
 function playNestTick(ctx: AudioContext) {
   const now = ctx.currentTime
   const sr = ctx.sampleRate
-  const bufLen = Math.floor(sr * 0.045)
-  const buf = ctx.createBuffer(1, bufLen, sr)
-  const data = buf.getChannelData(0)
-  for (let i = 0; i < bufLen; i++) {
-    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufLen * 0.12))
+
+  // Layer 1: sharp noise transient (the "click" attack)
+  const noiseLen = Math.floor(sr * 0.025)
+  const noiseBuf = ctx.createBuffer(1, noiseLen, sr)
+  const noiseData = noiseBuf.getChannelData(0)
+  for (let i = 0; i < noiseLen; i++) {
+    noiseData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (noiseLen * 0.08))
   }
-  const src = ctx.createBufferSource()
-  src.buffer = buf
-  const gain = ctx.createGain()
-  gain.gain.setValueAtTime(0.18, now)
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.045)
-  src.connect(gain)
-  gain.connect(ctx.destination)
-  src.start(now)
-  src.stop(now + 0.05)
+  const noiseSrc = ctx.createBufferSource()
+  noiseSrc.buffer = noiseBuf
+  const noiseGain = ctx.createGain()
+  noiseGain.gain.setValueAtTime(0.28, now)
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.025)
+  noiseSrc.connect(noiseGain)
+  noiseGain.connect(ctx.destination)
+  noiseSrc.start(now)
+  noiseSrc.stop(now + 0.03)
+
+  // Layer 2: short tonal thump (~900 Hz) for mechanical body resonance
+  const osc = ctx.createOscillator()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(900, now)
+  osc.frequency.exponentialRampToValueAtTime(300, now + 0.04)
+  const oscGain = ctx.createGain()
+  oscGain.gain.setValueAtTime(0.12, now)
+  oscGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04)
+  osc.connect(oscGain)
+  oscGain.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + 0.045)
 }
 
 export const NestThermostat = memo(({ s }: { s: HaState }) => {
