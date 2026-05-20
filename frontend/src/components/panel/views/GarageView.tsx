@@ -17,9 +17,9 @@ export function GarageView({ states, cols }: { states: Map<string, HaState>; col
     return rendered.length ? <CardGrid cols={cols}>{rendered}</CardGrid> : <EmptyState icon="🚗" cat="garage" />
   }
 
-  const covers   = filterStates(states, s => s.entity_id.startsWith('cover.') && (s.entity_id.includes('garage') || String(s.attributes.device_class ?? '').includes('garage')), mapped)
-  const switches = filterStates(states, s => s.entity_id.startsWith('switch.') && (s.entity_id.includes('garage') || s.entity_id.includes('gate')), mapped)
-  const sensors  = filterStates(states, s => s.entity_id.startsWith('binary_sensor.') && (s.entity_id.includes('garage') || String(s.attributes.device_class ?? '').includes('garage')), mapped)
+  const covers   = filterStates(states, s => s.entity_id.startsWith('cover.') && (s.entity_id.includes('garage') || String(s.attributes.device_class ?? '').includes('garage')))
+  const switches = filterStates(states, s => s.entity_id.startsWith('switch.') && (s.entity_id.includes('garage') || s.entity_id.includes('gate')))
+  const sensors  = filterStates(states, s => s.entity_id.startsWith('binary_sensor.') && (s.entity_id.includes('garage') || String(s.attributes.device_class ?? '').includes('garage')))
   if (!covers.length && !switches.length && !sensors.length) return <EmptyState icon="🚗" cat="garage" />
   return (
     <CardGrid cols={cols}>

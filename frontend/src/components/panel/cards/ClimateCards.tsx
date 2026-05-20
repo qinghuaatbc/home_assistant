@@ -100,13 +100,15 @@ export const NestThermostat = memo(({ s }: { s: HaState }) => {
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
       <svg ref={svgRef} viewBox={`0 0 ${SVG_S} ${SVG_S}`}
         style={{ width: 220, height: 220, cursor: 'grab', touchAction: 'none', userSelect: 'none', overflow: 'visible' }}
-        onPointerDown={e => { dragging.current = true; svgRef.current?.setPointerCapture(e.pointerId) }}
-        onPointerMove={e => { if (!dragging.current) return; setSetpoint(getNewTemp(e)) }}
+        onPointerDown={e => { e.stopPropagation(); dragging.current = true; svgRef.current?.setPointerCapture(e.pointerId) }}
+        onPointerMove={e => { if (!dragging.current) return; e.stopPropagation(); setSetpoint(getNewTemp(e)) }}
         onPointerUp={e => {
+          e.stopPropagation()
           if (!dragging.current) return; dragging.current = false
           const nt = getNewTemp(e); setSetpoint(nt)
           callService('climate', 'set_temperature', { temperature: nt }, s.entity_id)
-        }}>
+        }}
+        onClick={e => e.stopPropagation()}>
 
         <defs>
           {/* Chrome outer ring */}
