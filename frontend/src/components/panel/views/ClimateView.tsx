@@ -15,8 +15,9 @@ export function ClimateView({ states, cols }: { states: Map<string, HaState>; co
     return rendered.length ? <CardGrid cols={cols}>{rendered}</CardGrid> : <EmptyState icon="🌡️" cat="climate" />
   }
 
-  const sensors = filterStates(states, s => s.entity_id.startsWith('sensor.') && ['temperature', 'humidity', 'carbon_dioxide'].includes(String(s.attributes.device_class ?? '')), mapped)
-  const thermostats = filterStates(states, s => s.entity_id.startsWith('climate.'), mapped)
+  // climate entities are never in 3D mappings — don't filter by mapped
+  const sensors = filterStates(states, s => s.entity_id.startsWith('sensor.') && ['temperature', 'humidity', 'carbon_dioxide'].includes(String(s.attributes.device_class ?? '')))
+  const thermostats = filterStates(states, s => s.entity_id.startsWith('climate.'))
   if (!sensors.length && !thermostats.length) return <EmptyState icon="🌡️" cat="climate" />
   return (
     <CardGrid cols={cols}>
