@@ -1,23 +1,30 @@
 import { useState, useEffect, memo, useRef } from 'react'
 import type { HaState } from '../../../context/HaContext'
-import { useT, useTh, useRestCall, cardSt, mkBtn, tc1, tc2, tempColor } from '../PanelContext'
+import { useT, useTh, useRestCall, cardSt, tempColor, tc2 } from '../PanelContext'
 
 // ─── Nest Thermostat ──────────────────────────────────────────────────────────
 
-const SVG_S = 240; const CX = 120; const CY = 120; const R_OUTER = 112; const R_ARC = 88; const ARC_START = 135; const ARC_SPAN = 270
+const SVG_S = 260; const CX = 130; const CY = 130
+const R_CHROME = 124   // outer chrome ring
+const R_BEZEL  = 116   // dark bezel start
+const R_FACE   = 96    // inner face
+const R_TICK_O = 112   // tick outer edge
+const R_TICK_I_MAJ = 104  // major tick inner
+const R_TICK_I_MIN = 108  // minor tick inner
+const R_ARC    = 108   // arc for active indicator
+const ARC_START = 135; const ARC_SPAN = 270
 
-function polar(angle: number, r = R_ARC): [number, number] {
+function polar(angle: number, r: number): [number, number] {
   const a = angle * Math.PI / 180
   return [CX + r * Math.cos(a), CY + r * Math.sin(a)]
 }
 
-function arcPath(startAngle: number, spanDeg: number, r = R_ARC): string {
+function arcPath(startAngle: number, spanDeg: number, r: number): string {
   if (spanDeg <= 0) return ''
+  const clipped = Math.min(spanDeg, ARC_SPAN - 0.1)
   const [sx, sy] = polar(startAngle, r)
-  const endAngle = startAngle + Math.min(spanDeg, ARC_SPAN - 0.01)
-  const [ex, ey] = polar(endAngle, r)
-  const large = spanDeg > 180 ? 1 : 0
-  return `M ${sx.toFixed(1)} ${sy.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${ex.toFixed(1)} ${ey.toFixed(1)}`
+  const [ex, ey] = polar(startAngle + clipped, r)
+  return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 ${clipped > 180 ? 1 : 0} 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`
 }
 
 function rawAngleToProgress(raw: number): number {
@@ -26,35 +33,12 @@ function rawAngleToProgress(raw: number): number {
   return raw <= 90 ? 1 : 0
 }
 
-function buildTicks(minT: number, maxT: number, setpoint: number, modeColor: string) {
-  const ticks: JSX.Element[] = []
-  const totalDeg = maxT - minT
-  for (let t = minT; t <= maxT; t += 0.5) {
-    const frac = (t - minT) / totalDeg
-    const angle = ARC_START + frac * ARC_SPAN
-    const isMajor = Number.isInteger(t)
-    const r0 = isMajor ? R_OUTER - 18 : R_OUTER - 12
-    const r1 = R_OUTER - 6
-    const [x0, y0] = polar(angle, r0)
-    const [x1, y1] = polar(angle, r1)
-    const isActive = t <= setpoint
-    ticks.push(
-      <line key={t} x1={x0.toFixed(1)} y1={y0.toFixed(1)} x2={x1.toFixed(1)} y2={y1.toFixed(1)}
-        stroke={isActive ? modeColor : 'rgba(255,255,255,0.18)'}
-        strokeWidth={isMajor ? 2 : 1}
-        strokeLinecap="round"
-        style={{ transition: 'stroke 0.4s' }}
-      />
-    )
-  }
-  return ticks
-}
-
 export const NestThermostat = memo(({ s }: { s: HaState }) => {
   const callService = useRestCall()
   const t = useT()
   const svgRef = useRef<SVGSVGElement>(null)
   const dragging = useRef(false)
+
   const minT = Number(s.attributes.min_temp ?? 9)
   const maxT = Number(s.attributes.max_temp ?? 35)
   const current = Number(s.attributes.current_temperature ?? 20)
@@ -63,149 +47,186 @@ export const NestThermostat = memo(({ s }: { s: HaState }) => {
   useEffect(() => { setSetpoint(setpointRaw) }, [setpointRaw])
 
   const hvacAction = String(s.attributes.hvac_action ?? 'idle')
-  const hvacMode = s.state ?? 'off'
-  const isHeating = hvacAction === 'heating'
-  const isCooling = hvacAction === 'cooling'
-  const modeColor = isHeating ? '#ff8c42' : isCooling ? '#41b8e8' : 'rgba(255,255,255,0.25)'
-  const glowColor = isHeating ? '#ff8c4255' : isCooling ? '#41b8e855' : 'transparent'
-  const statusText = isHeating ? (t.heating ?? 'HEATING') : isCooling ? (t.cooling ?? 'COOLING') : (t.idle ?? 'IDLE')
+  const hvacMode   = s.state ?? 'off'
+  const isHeating  = hvacAction === 'heating'
+  const isCooling  = hvacAction === 'cooling'
+  const isActive   = isHeating || isCooling
+
+  const heatColor  = '#ff8035'
+  const coolColor  = '#30b8f0'
+  const modeColor  = isHeating ? heatColor : isCooling ? coolColor : 'rgba(255,255,255,0.22)'
+  const glowRgba   = isHeating ? 'rgba(255,128,53,0.35)' : isCooling ? 'rgba(48,184,240,0.35)' : 'transparent'
+
+  const setpointFrac = (setpoint - minT) / (maxT - minT)
+  const thumbAngle   = ARC_START + setpointFrac * ARC_SPAN
+  const [thumbX, thumbY] = polar(thumbAngle, R_ARC)
 
   const getNewTemp = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!svgRef.current) return setpoint
     const rect = svgRef.current.getBoundingClientRect()
     const scale = rect.width / SVG_S
-    const dx = e.clientX - rect.left - CX * scale
-    const dy = e.clientY - rect.top - CY * scale
-    const raw = ((Math.atan2(dy, dx) * 180 / Math.PI) + 360) % 360
-    const prog = rawAngleToProgress(raw)
-    return Math.round((minT + prog * (maxT - minT)) * 2) / 2 // 0.5 steps
+    const raw = ((Math.atan2(
+      e.clientY - rect.top  - CY * scale,
+      e.clientX - rect.left - CX * scale
+    ) * 180 / Math.PI) + 360) % 360
+    return Math.round((minT + rawAngleToProgress(raw) * (maxT - minT)) * 2) / 2
   }
 
-  const ticks = buildTicks(minT, maxT, setpoint, modeColor)
-  const [thumbX, thumbY] = polar(ARC_START + ((setpoint - minT) / (maxT - minT)) * ARC_SPAN)
+  // Build tick marks: major every 5°C, minor every 1°C
+  const ticks: React.ReactElement[] = []
+  for (let tmp = minT; tmp <= maxT; tmp += 1) {
+    const frac  = (tmp - minT) / (maxT - minT)
+    const angle = ARC_START + frac * ARC_SPAN
+    const isMaj = (tmp - minT) % 5 === 0
+    const ri    = isMaj ? R_TICK_I_MAJ : R_TICK_I_MIN
+    const [x0, y0] = polar(angle, ri)
+    const [x1, y1] = polar(angle, R_TICK_O)
+    const active = tmp <= setpoint
+    ticks.push(
+      <line key={tmp} x1={x0.toFixed(2)} y1={y0.toFixed(2)} x2={x1.toFixed(2)} y2={y1.toFixed(2)}
+        stroke={active ? modeColor : 'rgba(255,255,255,0.15)'}
+        strokeWidth={isMaj ? 2 : 1} strokeLinecap="round"
+        style={{ transition: 'stroke 0.3s' }} />
+    )
+  }
 
-  // dead-zone gap: 90deg at bottom
-  const deadStart = ARC_START + ARC_SPAN   // 405 = 45°
-  const deadEnd = ARC_START                 // 135°
+  const statusLabel = isHeating ? (t.heating ?? 'HEATING').toUpperCase()
+    : isCooling ? (t.cooling ?? 'COOLING').toUpperCase()
+    : hvacMode === 'off' ? 'OFF' : (t.idle ?? 'IDLE').toUpperCase()
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
       <svg ref={svgRef} viewBox={`0 0 ${SVG_S} ${SVG_S}`}
-        style={{ width: 210, height: 210, cursor: 'grab', touchAction: 'none', userSelect: 'none' }}
+        style={{ width: 220, height: 220, cursor: 'grab', touchAction: 'none', userSelect: 'none', overflow: 'visible' }}
         onPointerDown={e => { dragging.current = true; svgRef.current?.setPointerCapture(e.pointerId) }}
         onPointerMove={e => { if (!dragging.current) return; setSetpoint(getNewTemp(e)) }}
         onPointerUp={e => {
           if (!dragging.current) return; dragging.current = false
           const nt = getNewTemp(e); setSetpoint(nt)
           callService('climate', 'set_temperature', { temperature: nt }, s.entity_id)
-        }}
-      >
+        }}>
+
         <defs>
-          {/* Outer bezel gradient — dark charcoal like physical Nest */}
-          <radialGradient id="nestBezel" cx="45%" cy="35%" r="65%">
-            <stop offset="0%" stopColor="#3a3a3a" />
-            <stop offset="60%" stopColor="#222" />
-            <stop offset="100%" stopColor="#111" />
+          {/* Chrome outer ring */}
+          <radialGradient id="nChrome" cx="40%" cy="30%" r="70%">
+            <stop offset="0%"   stopColor="#c8c8c8" />
+            <stop offset="35%"  stopColor="#888" />
+            <stop offset="70%"  stopColor="#555" />
+            <stop offset="100%" stopColor="#333" />
+          </radialGradient>
+          {/* Dark bezel */}
+          <radialGradient id="nBezel" cx="45%" cy="35%" r="65%">
+            <stop offset="0%"   stopColor="#2e2e2e" />
+            <stop offset="60%"  stopColor="#1a1a1a" />
+            <stop offset="100%" stopColor="#0d0d0d" />
           </radialGradient>
           {/* Inner face */}
-          <radialGradient id="nestFace" cx="50%" cy="40%" r="60%">
-            <stop offset="0%" stopColor="#2e2e2e" />
-            <stop offset="100%" stopColor="#1a1a1a" />
+          <radialGradient id="nFace" cx="50%" cy="38%" r="62%">
+            <stop offset="0%"   stopColor="#282828" />
+            <stop offset="100%" stopColor="#111" />
           </radialGradient>
-          {/* Ambient glow filter */}
-          <filter id="nestGlow" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="8" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          {/* Ambient glow */}
+          <filter id="nGlow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="10" result="b" />
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
           </filter>
-          <filter id="thumbGlow" x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          {/* Thumb glow */}
+          <filter id="nThumb" x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur stdDeviation="3" result="b" />
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          {/* Inner bevel shadow */}
+          <filter id="nShadow" x="-10%" y="-10%" width="120%" height="120%">
+            <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#000" floodOpacity="0.6" />
           </filter>
         </defs>
 
-        {/* Ambient glow when active */}
-        {(isHeating || isCooling) && (
-          <circle cx={CX} cy={CY} r={R_OUTER + 4} fill="none"
-            stroke={glowColor} strokeWidth={18}
-            style={{ filter: 'blur(12px)', transition: 'stroke 0.8s' }} />
+        {/* Ambient glow ring (heating/cooling) */}
+        {isActive && (
+          <circle cx={CX} cy={CY} r={R_CHROME + 6}
+            fill="none" stroke={glowRgba} strokeWidth={24}
+            style={{ filter: 'blur(14px)', transition: 'stroke 1s' }} />
         )}
 
-        {/* Outer bezel */}
-        <circle cx={CX} cy={CY} r={R_OUTER} fill="url(#nestBezel)" />
+        {/* Chrome outer ring */}
+        <circle cx={CX} cy={CY} r={R_CHROME} fill="url(#nChrome)" />
 
-        {/* Tick marks around rim */}
+        {/* Dark bezel */}
+        <circle cx={CX} cy={CY} r={R_BEZEL} fill="url(#nBezel)" />
+
+        {/* Tick marks in bezel groove */}
         {ticks}
 
-        {/* Inner face circle */}
-        <circle cx={CX} cy={CY} r={R_OUTER - 22} fill="url(#nestFace)" />
+        {/* Inner face */}
+        <circle cx={CX} cy={CY} r={R_FACE} fill="url(#nFace)" filter="url(#nShadow)" />
 
-        {/* Dead zone indicator (gap at bottom) */}
-        <path d={arcPath(deadEnd - 360, -(360 - ARC_SPAN))} fill="none"
-          stroke="rgba(0,0,0,0.6)" strokeWidth={3} strokeLinecap="round" />
+        {/* Dead zone subtle line */}
+        <path d={arcPath(ARC_START + ARC_SPAN + 2, 360 - ARC_SPAN - 4, R_ARC)}
+          fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth={3} strokeLinecap="round" />
 
-        {/* Active arc highlight */}
-        <path d={arcPath(ARC_START, ((setpoint - minT) / (maxT - minT)) * ARC_SPAN, R_OUTER - 8)}
-          fill="none" stroke={modeColor} strokeWidth={3} strokeLinecap="round"
-          style={{ transition: 'stroke 0.4s, d 0.1s' }} />
+        {/* Active arc */}
+        {setpointFrac > 0.01 && (
+          <path d={arcPath(ARC_START, setpointFrac * ARC_SPAN, R_ARC)}
+            fill="none" stroke={modeColor} strokeWidth={3} strokeLinecap="round" opacity={0.7}
+            style={{ transition: 'stroke 0.4s' }} />
+        )}
 
-        {/* Thumb handle */}
-        <circle cx={thumbX} cy={thumbY} r={10} fill={modeColor}
-          stroke="rgba(255,255,255,0.5)" strokeWidth={2}
-          filter="url(#thumbGlow)"
+        {/* Thumb */}
+        <circle cx={thumbX} cy={thumbY} r={9} fill={modeColor}
+          stroke="rgba(255,255,255,0.55)" strokeWidth={2}
+          filter="url(#nThumb)"
           style={{ transition: 'fill 0.4s', cursor: 'grab' }} />
 
-        {/* Current temperature — large, white */}
-        <text x={CX} y={CY - 14} textAnchor="middle"
-          fill="rgba(255,255,255,0.95)" fontSize={46} fontWeight={300}
-          fontFamily="-apple-system, 'Helvetica Neue', sans-serif"
-          letterSpacing="-1">
+        {/* Current temperature — large, thin */}
+        <text x={CX} y={CY - 8} textAnchor="middle"
+          fill="rgba(255,255,255,0.92)" fontSize={50} fontWeight={200}
+          fontFamily="'Helvetica Neue', -apple-system, Arial, sans-serif"
+          letterSpacing="-2">
           {current}°
         </text>
 
-        {/* Setpoint row */}
-        <text x={CX} y={CY + 18} textAnchor="middle"
-          fill={modeColor} fontSize={16} fontWeight={400}
-          fontFamily="-apple-system, 'Helvetica Neue', sans-serif"
+        {/* Setpoint line */}
+        <text x={CX} y={CY + 22} textAnchor="middle"
+          fill={modeColor} fontSize={17} fontWeight={300}
+          fontFamily="'Helvetica Neue', -apple-system, Arial, sans-serif"
           style={{ transition: 'fill 0.4s' }}>
           {setpoint}°
         </text>
 
         {/* Status label */}
-        <text x={CX} y={CY + 40} textAnchor="middle"
-          fill={(isHeating || isCooling) ? modeColor : 'rgba(255,255,255,0.3)'}
-          fontSize={10} fontWeight={600} letterSpacing="2"
-          fontFamily="-apple-system, 'Helvetica Neue', sans-serif"
-          style={{ transition: 'fill 0.4s', textTransform: 'uppercase' }}>
-          {statusText.toUpperCase()}
+        <text x={CX} y={CY + 44} textAnchor="middle"
+          fill={isActive ? modeColor : 'rgba(255,255,255,0.25)'}
+          fontSize={9} fontWeight={600} letterSpacing="2.5"
+          fontFamily="'Helvetica Neue', -apple-system, Arial, sans-serif"
+          style={{ transition: 'fill 0.4s' }}>
+          {statusLabel}
         </text>
       </svg>
 
-      {/* Mode buttons */}
-      <div style={{ display: 'flex', gap: 6, width: '100%', maxWidth: 210 }}>
-        {[
-          { m: 'off', icon: '⏸', label: 'Off' },
-          { m: 'heat', icon: '🔥', label: 'Heat' },
-          { m: 'cool', icon: '❄️', label: 'Cool' },
-        ].map(({ m, icon, label }) => (
-          <button key={m}
-            onClick={() => callService('climate', 'set_hvac_mode', { hvac_mode: m }, s.entity_id)}
-            style={{
-              flex: 1, padding: '7px 0', fontSize: 11, fontWeight: 600,
-              background: hvacMode === m
-                ? (m === 'heat' ? 'rgba(255,140,66,0.25)' : m === 'cool' ? 'rgba(65,184,232,0.25)' : 'rgba(255,255,255,0.1)')
-                : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${hvacMode === m
-                ? (m === 'heat' ? '#ff8c42' : m === 'cool' ? '#41b8e8' : 'rgba(255,255,255,0.3)')
-                : 'rgba(255,255,255,0.08)'}`,
-              borderRadius: 8, cursor: 'pointer',
-              color: hvacMode === m
-                ? (m === 'heat' ? '#ff8c42' : m === 'cool' ? '#41b8e8' : 'rgba(255,255,255,0.8)')
-                : 'rgba(255,255,255,0.35)',
-              transition: 'all 0.3s',
-            }}>
-            {icon} {label}
-          </button>
-        ))}
+      {/* Mode buttons — Nest style */}
+      <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 220 }}>
+        {([
+          { m: 'off',  icon: '⏸', color: 'rgba(255,255,255,0.5)' },
+          { m: 'heat', icon: '🔥', color: heatColor },
+          { m: 'cool', icon: '❄️', color: coolColor },
+        ] as const).map(({ m, icon, color }) => {
+          const active = hvacMode === m
+          return (
+            <button key={m}
+              onClick={() => callService('climate', 'set_hvac_mode', { hvac_mode: m }, s.entity_id)}
+              style={{
+                flex: 1, padding: '8px 0', fontSize: 12, fontWeight: 600,
+                background: active ? `${color}22` : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${active ? color : 'rgba(255,255,255,0.08)'}`,
+                borderRadius: 10, cursor: 'pointer',
+                color: active ? color : 'rgba(255,255,255,0.3)',
+                boxShadow: active ? `0 0 12px ${color}44` : 'none',
+                transition: 'all 0.3s',
+              }}>
+              {icon}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -217,39 +238,40 @@ export const ClimateRtiCard = memo(({ s }: { s: HaState }) => {
   const th = useTh()
   const name = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
   const unit = String(s.attributes.unit_of_measurement ?? '')
-  const dc = String(s.attributes.device_class ?? '')
+  const dc   = String(s.attributes.device_class ?? '')
   const icon = dc === 'humidity' ? '💧' : dc === 'carbon_dioxide' ? '☁️' : '📊'
   const numVal = Number(s.state)
-  const val = isNaN(numVal) ? s.state : numVal.toFixed(1)
-  const color = tempColor(numVal, dc)
+  const val    = isNaN(numVal) ? s.state : numVal.toFixed(1)
+  const color  = tempColor(numVal, dc)
   const isTemp = dc === 'temperature'
 
   if (isTemp) {
     return (
       <div style={{
-        ...cardSt(th, {
-          padding: '12px 12px 10px', minHeight: 100, gap: 0,
-          alignItems: 'center', justifyContent: 'center',
-          borderLeft: `3px solid ${color}`,
-          boxShadow: `0 2px 16px ${color}18`,
-          transition: 'box-shadow 0.5s, border-color 0.5s',
-        })
+        background: th === 'day' ? '#fff' : '#1c1c1e',
+        border: `1px solid ${color}44`,
+        borderLeft: `3px solid ${color}`,
+        borderRadius: 14, padding: '12px 12px 10px', minHeight: 100,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0,
+        boxShadow: `0 2px 16px ${color}18`, transition: 'box-shadow 0.5s, border-color 0.5s',
       }}>
-        <div style={{ width: '100%', textAlign: 'center', marginBottom: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color, transition: 'color 0.5s' }}>{name}</span>
-        </div>
+        <span style={{ fontSize: 13, fontWeight: 700, color, marginBottom: 4, transition: 'color 0.5s' }}>{name}</span>
         <span style={{
           fontSize: 36, fontWeight: 700, color,
           textShadow: `0 0 16px ${color}55`,
-          animation: 'tempFloat 3s ease-in-out infinite',
-          transition: 'color 0.5s',
+          animation: 'tempFloat 3s ease-in-out infinite', transition: 'color 0.5s',
         }}>{val}<span style={{ fontSize: 16, fontWeight: 400, opacity: 0.7 }}>{unit}</span></span>
       </div>
     )
   }
 
   return (
-    <div style={{ ...cardSt(th, { alignItems: 'center', justifyContent: 'center', gap: 6 }) }}>
+    <div style={{
+      background: th === 'day' ? '#fff' : '#1c1c1e',
+      border: `1px solid ${th === 'day' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.07)'}`,
+      borderRadius: 14, padding: '12px',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
+    }}>
       <span style={{ fontSize: 32 }}>{icon}</span>
       <span style={{ fontSize: 14, fontWeight: 700, color, textAlign: 'center' }}>{val}<span style={{ fontSize: 11, opacity: 0.7 }}>{unit}</span></span>
       <span style={{ fontSize: 11, color: tc2(th), textAlign: 'center' }}>{name}</span>
@@ -257,19 +279,25 @@ export const ClimateRtiCard = memo(({ s }: { s: HaState }) => {
   )
 })
 
-// ─── Thermostat Card (climate entity) ─────────────────────────────────────────
+// ─── Thermostat Card ──────────────────────────────────────────────────────────
 
 export const ThermostatCard = memo(({ s }: { s: HaState }) => {
   const name = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
   return (
     <div style={{
       gridColumn: 'span 2',
-      background: '#111', border: '1px solid rgba(255,255,255,0.07)',
-      borderRadius: 16, padding: '16px 12px 12px',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-      boxShadow: '0 4px 32px rgba(0,0,0,0.5)',
+      // always dark — the Nest device is always a dark charcoal object
+      background: 'linear-gradient(160deg, #1e1e1e 0%, #111 100%)',
+      border: '1px solid rgba(255,255,255,0.06)',
+      borderRadius: 20, padding: '18px 14px 14px',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+      boxShadow: '0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)',
     }}>
-      <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.4)', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+      <span style={{
+        fontSize: 11, fontWeight: 500, letterSpacing: '2px',
+        color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase',
+        fontFamily: "'Helvetica Neue', sans-serif",
+      }}>
         {name}
       </span>
       <NestThermostat s={s} />
