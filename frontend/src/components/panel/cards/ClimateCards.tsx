@@ -37,38 +37,34 @@ function playNestTick(ctx: AudioContext) {
   const now = ctx.currentTime
   const sr = ctx.sampleRate
 
-  // 1. Wideband attack — 2 ms noise burst, instant decay (the initial "snap")
+  // Soft noise whisper — barely audible transient, just gives the "start" of the click
   const aLen = Math.floor(sr * 0.002)
   const aBuf = ctx.createBuffer(1, aLen, sr)
   const aData = aBuf.getChannelData(0)
-  for (let i = 0; i < aLen; i++) aData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.0004))
+  for (let i = 0; i < aLen; i++) aData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.0005))
   const aSrc = ctx.createBufferSource()
   aSrc.buffer = aBuf
-  const aG = ctx.createGain(); aG.gain.value = 0.55
+  const aG = ctx.createGain(); aG.gain.value = 0.07
   aSrc.connect(aG); aG.connect(ctx.destination)
   aSrc.start(now)
 
-  // 2. Body resonance — damped 780 Hz sine, 5 ms time constant (warm click body)
-  const rLen = Math.floor(sr * 0.028)
-  const rBuf = ctx.createBuffer(1, rLen, sr)
-  const rData = rBuf.getChannelData(0)
-  for (let i = 0; i < rLen; i++) rData[i] = Math.sin(2 * Math.PI * 780 * i / sr) * Math.exp(-i / (sr * 0.005))
-  const rSrc = ctx.createBufferSource()
-  rSrc.buffer = rBuf
-  const rG = ctx.createGain(); rG.gain.value = 0.14
-  rSrc.connect(rG); rG.connect(ctx.destination)
-  rSrc.start(now); rSrc.stop(now + 0.03)
-
-  // 3. Low thud — damped 160 Hz sine, 2 ms time constant (tactile weight)
-  const lLen = Math.floor(sr * 0.012)
-  const lBuf = ctx.createBuffer(1, lLen, sr)
-  const lData = lBuf.getChannelData(0)
-  for (let i = 0; i < lLen; i++) lData[i] = Math.sin(2 * Math.PI * 160 * i / sr) * Math.exp(-i / (sr * 0.002))
-  const lSrc = ctx.createBufferSource()
-  lSrc.buffer = lBuf
-  const lG = ctx.createGain(); lG.gain.value = 0.18
-  lSrc.connect(lG); lG.connect(ctx.destination)
-  lSrc.start(now); lSrc.stop(now + 0.014)
+  // Harmonic stack: root (660 Hz) + perfect fifth (990 Hz) + octave (1320 Hz)
+  // Gives a soft, musical "ding" — each harmonic shorter and quieter than the last
+  ;([
+    [660, 0.09, 0.010],
+    [990, 0.06, 0.007],
+    [1320, 0.035, 0.005],
+  ] as [number, number, number][]).forEach(([freq, gain, tc]) => {
+    const len = Math.floor(sr * tc * 5)
+    const buf = ctx.createBuffer(1, len, sr)
+    const data = buf.getChannelData(0)
+    for (let i = 0; i < len; i++) data[i] = Math.sin(2 * Math.PI * freq * i / sr) * Math.exp(-i / (sr * tc))
+    const src = ctx.createBufferSource()
+    src.buffer = buf
+    const g = ctx.createGain(); g.gain.value = gain
+    src.connect(g); g.connect(ctx.destination)
+    src.start(now); src.stop(now + tc * 5)
+  })
 }
 
 export const NestThermostat = memo(({ s }: { s: HaState }) => {
