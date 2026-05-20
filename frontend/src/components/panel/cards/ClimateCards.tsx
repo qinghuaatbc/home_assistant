@@ -37,35 +37,35 @@ function playNestTick(ctx: AudioContext) {
   const now = ctx.currentTime
   const sr = ctx.sampleRate
 
-  // Layer 1: sharp noise transient (the "click" attack)
-  const noiseLen = Math.floor(sr * 0.025)
-  const noiseBuf = ctx.createBuffer(1, noiseLen, sr)
-  const noiseData = noiseBuf.getChannelData(0)
-  for (let i = 0; i < noiseLen; i++) {
-    noiseData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (noiseLen * 0.08))
-  }
-  const noiseSrc = ctx.createBufferSource()
-  noiseSrc.buffer = noiseBuf
-  const noiseGain = ctx.createGain()
-  noiseGain.gain.setValueAtTime(0.28, now)
-  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.025)
-  noiseSrc.connect(noiseGain)
-  noiseGain.connect(ctx.destination)
-  noiseSrc.start(now)
-  noiseSrc.stop(now + 0.03)
+  // High "tick" — bandpass noise, 6 ms, 1 ms decay constant
+  const nLen = Math.floor(sr * 0.006)
+  const nBuf = ctx.createBuffer(1, nLen, sr)
+  const nd = nBuf.getChannelData(0)
+  const nTc = sr * 0.001
+  for (let i = 0; i < nLen; i++) nd[i] = (Math.random() * 2 - 1) * Math.exp(-i / nTc)
+  const nSrc = ctx.createBufferSource()
+  nSrc.buffer = nBuf
+  const bp = ctx.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.value = 3400
+  bp.Q.value = 0.9
+  const nG = ctx.createGain()
+  nG.gain.value = 0.55
+  nSrc.connect(bp); bp.connect(nG); nG.connect(ctx.destination)
+  nSrc.start(now); nSrc.stop(now + 0.008)
 
-  // Layer 2: short tonal thump (~900 Hz) for mechanical body resonance
-  const osc = ctx.createOscillator()
-  osc.type = 'sine'
-  osc.frequency.setValueAtTime(900, now)
-  osc.frequency.exponentialRampToValueAtTime(300, now + 0.04)
-  const oscGain = ctx.createGain()
-  oscGain.gain.setValueAtTime(0.12, now)
-  oscGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04)
-  osc.connect(oscGain)
-  oscGain.connect(ctx.destination)
-  osc.start(now)
-  osc.stop(now + 0.045)
+  // Low body thump — damped 110 Hz sine, 2 ms decay constant
+  const pLen = Math.floor(sr * 0.01)
+  const pBuf = ctx.createBuffer(1, pLen, sr)
+  const pd = pBuf.getChannelData(0)
+  const pTc = sr * 0.002
+  for (let i = 0; i < pLen; i++) pd[i] = Math.sin(2 * Math.PI * 110 * i / sr) * Math.exp(-i / pTc)
+  const pSrc = ctx.createBufferSource()
+  pSrc.buffer = pBuf
+  const pG = ctx.createGain()
+  pG.gain.value = 0.22
+  pSrc.connect(pG); pG.connect(ctx.destination)
+  pSrc.start(now); pSrc.stop(now + 0.012)
 }
 
 export const NestThermostat = memo(({ s }: { s: HaState }) => {
