@@ -36,6 +36,8 @@ function rawAngleToProgress(raw: number): number {
 export const NestThermostat = memo(({ s }: { s: HaState }) => {
   const callService = useRestCall()
   const t = useT()
+  const th = useTh()
+  const isDay = th === 'day'
   const svgRef = useRef<SVGSVGElement>(null)
   const dragging = useRef(false)
 
@@ -206,20 +208,23 @@ export const NestThermostat = memo(({ s }: { s: HaState }) => {
       {/* Mode buttons — Nest style */}
       <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 220 }}>
         {([
-          { m: 'off',  icon: '⏸', color: 'rgba(255,255,255,0.5)' },
+          { m: 'off',  icon: '⏸', color: isDay ? '#666' : 'rgba(255,255,255,0.6)' },
           { m: 'heat', icon: '🔥', color: heatColor },
           { m: 'cool', icon: '❄️', color: coolColor },
         ] as const).map(({ m, icon, color }) => {
           const active = hvacMode === m
+          const inactiveBg     = isDay ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.04)'
+          const inactiveBorder = isDay ? 'rgba(0,0,0,0.12)'  : 'rgba(255,255,255,0.10)'
+          const inactiveColor  = isDay ? 'rgba(0,0,0,0.35)'  : 'rgba(255,255,255,0.3)'
           return (
             <button key={m}
               onClick={() => callService('climate', 'set_hvac_mode', { hvac_mode: m }, s.entity_id)}
               style={{
                 flex: 1, padding: '8px 0', fontSize: 12, fontWeight: 600,
-                background: active ? `${color}22` : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${active ? color : 'rgba(255,255,255,0.08)'}`,
+                background: active ? `${color}22` : inactiveBg,
+                border: `1px solid ${active ? color : inactiveBorder}`,
                 borderRadius: 10, cursor: 'pointer',
-                color: active ? color : 'rgba(255,255,255,0.3)',
+                color: active ? color : inactiveColor,
                 boxShadow: active ? `0 0 12px ${color}44` : 'none',
                 transition: 'all 0.3s',
               }}>
