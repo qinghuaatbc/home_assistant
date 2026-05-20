@@ -282,20 +282,22 @@ export const ClimateRtiCard = memo(({ s }: { s: HaState }) => {
 // ─── Thermostat Card ──────────────────────────────────────────────────────────
 
 export const ThermostatCard = memo(({ s }: { s: HaState }) => {
+  const th = useTh()
   const name = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
+  const isDay = th === 'day'
   return (
     <div style={{
       gridColumn: 'span 2',
-      // always dark — the Nest device is always a dark charcoal object
-      background: 'linear-gradient(160deg, #1e1e1e 0%, #111 100%)',
-      border: '1px solid rgba(255,255,255,0.06)',
+      background: isDay ? '#f2f2f7' : '#1c1c1e',
+      border: `1px solid ${isDay ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.07)'}`,
       borderRadius: 20, padding: '18px 14px 14px',
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-      boxShadow: '0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)',
+      boxShadow: isDay ? '0 4px 20px rgba(0,0,0,0.08)' : '0 4px 20px rgba(0,0,0,0.4)',
+      transition: 'background 0.3s, border-color 0.3s',
     }}>
       <span style={{
-        fontSize: 11, fontWeight: 500, letterSpacing: '2px',
-        color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase',
+        fontSize: 11, fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase',
+        color: isDay ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.35)',
         fontFamily: "'Helvetica Neue', sans-serif",
       }}>
         {name}
