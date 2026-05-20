@@ -10,6 +10,7 @@ import { SwitchTile, FanRtiCard } from '../cards/SwitchCards'
 import { SceneTile, AutomationTile } from '../cards/SceneCards'
 import { ButtonTile, NumberTile, SelectTile } from '../cards/ActionCards'
 import { ChartCard } from '../cards/ChartCard'
+import { HomeTheaterCard } from '../cards/TheaterCard'
 
 export function renderCard(s: HaState, cardType: string, icon?: string, label?: string): React.ReactNode | null {
   const entity = label ? { ...s, attributes: { ...s.attributes, friendly_name: label } } : s
@@ -33,6 +34,7 @@ export function renderCard(s: HaState, cardType: string, icon?: string, label?: 
     case 'number':       return <NumberTile        key={entity.entity_id} s={entity} />
     case 'select':       return <SelectTile        key={entity.entity_id} s={entity} />
     case 'chart':        return <ChartCard         key={entity.entity_id} s={entity} />
+    case 'home-theater': return <HomeTheaterCard   key={entity.entity_id} s={entity} />
     default:             return null
   }
 }

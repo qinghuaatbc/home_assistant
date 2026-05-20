@@ -39,6 +39,10 @@ const DEMO_ENTITIES: Array<{ entity_id: string; name: string; type: string; attr
   },
   { entity_id: 'media_player.demo_living_room_speaker', name: 'Living Room Speaker', type: 'media_player', attrs: { volume_level: 0.5 } },
   { entity_id: 'media_player.demo_bedroom_speaker', name: 'Bedroom Speaker', type: 'media_player', attrs: { volume_level: 0.5 } },
+  {
+    entity_id: 'media_player.demo_home_theater', name: 'Home Theater', type: 'media_player',
+    attrs: { volume_level: 0.7, is_volume_muted: false, media_title: 'Inception', media_artist: 'Christopher Nolan', source: 'Blu-ray' },
+  },
 ];
 
 @Injectable()

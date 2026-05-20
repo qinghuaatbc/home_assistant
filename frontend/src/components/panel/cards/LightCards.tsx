@@ -285,12 +285,34 @@ function lrAngleToProgress(raw: number): number {
   return raw <= 90 ? 1 : 0
 }
 
+function playRingTick(ctx: AudioContext) {
+  const now = ctx.currentTime, sr = ctx.sampleRate
+  // Soft chime: wideband snap + airy 1800 Hz shimmer
+  const nLen = Math.floor(sr * 0.002)
+  const nBuf = ctx.createBuffer(1, nLen, sr)
+  const nd = nBuf.getChannelData(0)
+  for (let i = 0; i < nLen; i++) nd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.0004))
+  const nSrc = ctx.createBufferSource(); nSrc.buffer = nBuf
+  const nG = ctx.createGain(); nG.gain.value = 0.18
+  nSrc.connect(nG); nG.connect(ctx.destination); nSrc.start(now)
+
+  const rLen = Math.floor(sr * 0.022)
+  const rBuf = ctx.createBuffer(1, rLen, sr)
+  const rd = rBuf.getChannelData(0)
+  for (let i = 0; i < rLen; i++) rd[i] = Math.sin(2 * Math.PI * 1800 * i / sr) * Math.exp(-i / (sr * 0.005))
+  const rSrc = ctx.createBufferSource(); rSrc.buffer = rBuf
+  const rG = ctx.createGain(); rG.gain.value = 0.07
+  rSrc.connect(rG); rG.connect(ctx.destination); rSrc.start(now); rSrc.stop(now + 0.025)
+}
+
 export const LightRingCard = memo(({ s }: { s: HaState }) => {
   const callService = useRestCall()
   const th = useTh(); const sound = useSound()
   const svgRef = useRef<SVGSVGElement>(null)
   const dragging = useRef(false)
   const didDrag = useRef(false)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const lastTickBri = useRef<number | null>(null)
 
   const on = s.state === 'on'
   const bPct = Math.round(Number(s.attributes.brightness ?? 0) / 255 * 100)
@@ -300,10 +322,12 @@ export const LightRingCard = memo(({ s }: { s: HaState }) => {
 
   const displayBri = dragging.current ? localBri : bPct
   const displayOn  = on || (dragging.current && localBri > 0)
-  const b    = displayBri / 100
-  const warmG = Math.round(160 + b * 75)
-  const arcColor = displayOn ? `rgb(255,${warmG},50)` : (th === 'day' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)')
-  const glowColor = `rgba(255,${warmG},50,${b * 0.5})`
+  const b     = displayBri / 100
+  // Sunshine color: deep amber at low → bright warm white at full
+  const warmG = Math.round(148 + b * 107)   // 148→255
+  const warmB = Math.round(b * 185)          //   0→185
+  const arcColor  = displayOn ? `rgb(255,${warmG},${warmB})` : (th === 'day' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)')
+  const glowColor = `rgba(255,${warmG},${warmB},${0.15 + b * 0.65})`
 
   const getProgress = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!svgRef.current) return displayBri / 100
@@ -318,7 +342,7 @@ export const LightRingCard = memo(({ s }: { s: HaState }) => {
 
   const isDay = th === 'day'
   const faceColor = displayOn
-    ? isDay ? `rgba(255,${warmG},50,0.12)` : `rgba(255,${warmG},50,0.18)`
+    ? isDay ? `rgba(255,${warmG},${warmB},0.16)` : `rgba(255,${warmG},${warmB},0.22)`
     : isDay ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)'
   const trackColor = isDay ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.10)'
 
@@ -347,12 +371,19 @@ export const LightRingCard = memo(({ s }: { s: HaState }) => {
         onPointerDown={e => {
           e.stopPropagation(); dragging.current = true; didDrag.current = false
           svgRef.current?.setPointerCapture(e.pointerId)
+          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+          lastTickBri.current = null
         }}
         onPointerMove={e => {
           if (!dragging.current) return; e.stopPropagation(); didDrag.current = true
           const prog = getProgress(e)
           const newBri = Math.round(prog * 100)
           setLocalBri(newBri)
+          // Tick every ~4% change
+          if (lastTickBri.current === null || Math.abs(newBri - lastTickBri.current) >= 4) {
+            lastTickBri.current = newBri
+            if (audioCtxRef.current) audioCtxRef.current.resume().then(() => playRingTick(audioCtxRef.current!))
+          }
           if (newBri > 0) callService('light', 'turn_on', { brightness: Math.round(newBri * 255 / 100) }, s.entity_id)
           else callService('light', 'turn_off', {}, s.entity_id)
         }}
@@ -407,28 +438,40 @@ export const LightRingCard = memo(({ s }: { s: HaState }) => {
           fill={displayOn ? faceColor : `url(#lrFace_${s.entity_id})`}
           style={{ transition: 'fill 0.4s' }} />
 
-        {/* Warm glow behind face when on */}
+        {/* Sunshine glow behind face when on */}
         {displayOn && (
-          <circle cx={LR_CX} cy={LR_CY} r={LR_R_FACE - 4}
-            fill={`rgba(255,${warmG},50,${b * 0.25})`}
+          <circle cx={LR_CX} cy={LR_CY} r={LR_R_FACE - 2}
+            fill={`rgba(255,${warmG},${warmB},${b * 0.45})`}
+            filter={`url(#lrGlow_${s.entity_id})`}
             style={{ transition: 'fill 0.4s' }} />
         )}
 
-        {/* Center: brightness % */}
-        <text x={LR_CX} y={LR_CY + 6} textAnchor="middle"
-          fill={displayOn ? (isDay ? `rgb(160,80,0)` : `rgb(255,${warmG},50)`) : (isDay ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)')}
-          fontSize={22} fontWeight={300}
-          fontFamily="'Helvetica Neue', -apple-system, sans-serif"
-          style={{ transition: 'fill 0.4s' }}>
-          {displayOn ? `${displayBri}%` : '—'}
-        </text>
+        {/* Bulb icon inside face */}
+        <image href="/bulb.png"
+          x={LR_CX - 19} y={LR_CY - 30} width={38} height={48}
+          style={{
+            filter: displayOn
+              ? `sepia(${Math.max(0,(0.78-b*0.78)).toFixed(2)}) saturate(${(1+b*2).toFixed(2)}) brightness(${(0.38+b*0.72).toFixed(2)}) drop-shadow(0 0 ${Math.round(6+b*22)}px rgba(255,${warmG},${warmB},${(0.4+b*0.55).toFixed(2)}))`
+              : 'grayscale(1) brightness(0.35) opacity(0.5)',
+            transition: 'filter 0.45s',
+          }} />
       </svg>
+
+      {/* Brightness percentage */}
+      <div style={{
+        fontSize: 18, fontWeight: 300, textAlign: 'center', lineHeight: 1,
+        color: displayOn
+          ? (isDay ? `rgb(${Math.round(160-b*40)},${Math.round(80+b*60)},0)` : `rgb(255,${warmG},${warmB})`)
+          : (isDay ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.25)'),
+        fontFamily: "'Helvetica Neue', -apple-system, sans-serif",
+        transition: 'color 0.4s',
+      }}>{displayOn ? `${displayBri}%` : '—'}</div>
 
       {/* Name */}
       <div style={{
         fontSize: 11, fontWeight: 600, textAlign: 'center',
         color: displayOn
-          ? (isDay ? `rgb(140,70,0)` : `rgb(255,${warmG},50)`)
+          ? (isDay ? `rgb(${Math.round(140-b*40)},${Math.round(70+b*70)},0)` : `rgb(255,${warmG},${warmB})`)
           : (isDay ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.4)'),
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         width: '100%', padding: '0 4px',
