@@ -33,6 +33,26 @@ function rawAngleToProgress(raw: number): number {
   return raw <= 90 ? 1 : 0
 }
 
+function playNestTick(ctx: AudioContext) {
+  const now = ctx.currentTime
+  const sr = ctx.sampleRate
+  const bufLen = Math.floor(sr * 0.045)
+  const buf = ctx.createBuffer(1, bufLen, sr)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < bufLen; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufLen * 0.12))
+  }
+  const src = ctx.createBufferSource()
+  src.buffer = buf
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(0.18, now)
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.045)
+  src.connect(gain)
+  gain.connect(ctx.destination)
+  src.start(now)
+  src.stop(now + 0.05)
+}
+
 export const NestThermostat = memo(({ s }: { s: HaState }) => {
   const callService = useRestCall()
   const t = useT()
@@ -40,6 +60,8 @@ export const NestThermostat = memo(({ s }: { s: HaState }) => {
   const isDay = th === 'day'
   const svgRef = useRef<SVGSVGElement>(null)
   const dragging = useRef(false)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const lastTickedTemp = useRef<number | null>(null)
 
   const minT = Number(s.attributes.min_temp ?? 9)
   const maxT = Number(s.attributes.max_temp ?? 35)
@@ -103,8 +125,21 @@ export const NestThermostat = memo(({ s }: { s: HaState }) => {
       onTouchStart={stopTouch} onTouchMove={stopTouch} onTouchEnd={stopTouch}>
       <svg ref={svgRef} viewBox={`0 0 ${SVG_S} ${SVG_S}`}
         style={{ width: 220, height: 220, cursor: 'grab', touchAction: 'none', userSelect: 'none', overflow: 'visible' }}
-        onPointerDown={e => { e.stopPropagation(); dragging.current = true; svgRef.current?.setPointerCapture(e.pointerId) }}
-        onPointerMove={e => { if (!dragging.current) return; e.stopPropagation(); setSetpoint(getNewTemp(e)) }}
+        onPointerDown={e => {
+          e.stopPropagation(); dragging.current = true; svgRef.current?.setPointerCapture(e.pointerId)
+          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+          lastTickedTemp.current = null
+        }}
+        onPointerMove={e => {
+          if (!dragging.current) return; e.stopPropagation()
+          const nt = getNewTemp(e); setSetpoint(nt)
+          if (nt !== lastTickedTemp.current) {
+            lastTickedTemp.current = nt
+            if (audioCtxRef.current) {
+              audioCtxRef.current.resume().then(() => playNestTick(audioCtxRef.current!))
+            }
+          }
+        }}
         onPointerUp={e => {
           e.stopPropagation()
           if (!dragging.current) return; dragging.current = false
