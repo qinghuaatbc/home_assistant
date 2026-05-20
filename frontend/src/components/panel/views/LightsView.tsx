@@ -102,19 +102,22 @@ export function LightsView({ states, cols }: { states: Map<string, HaState>; col
     })
     const result: { areaId: string; areaName: string; lights: HaState[] }[] = []
     map.forEach((ls, aId) => {
-      result.push({ areaId: aId, areaName: areaNames.get(aId) ?? '其他', lights: ls })
+      result.push({ areaId: aId, areaName: areaNames.get(aId) ?? t.other, lights: ls })
     })
     return result.sort((a, b) => {
       if (a.areaId === '__none__') return 1
       if (b.areaId === '__none__') return -1
       return a.areaName.localeCompare(b.areaName)
     })
-  }, [lights, entityArea, areaNames, hasAreas])
+  }, [lights, entityArea, areaNames, hasAreas, t])
 
   // Conditional returns after all hooks
   if (dashboard?.views?.lights !== undefined) {
-    const dbCards = dashboard.views.lights
-    const rendered = dbCards.map(e => { const s = states.get(e.entity); return s ? renderCard(s, e.card_type, e.icon, e.label) : null }).filter(Boolean)
+    // Sort: light-ring cards first, then the rest
+    const sorted = [...dashboard.views.lights].sort((a, b) =>
+      a.card_type === 'light-ring' ? -1 : b.card_type === 'light-ring' ? 1 : 0
+    )
+    const rendered = sorted.map(e => { const s = states.get(e.entity); return s ? renderCard(s, e.card_type, e.icon, e.label) : null }).filter(Boolean)
     return rendered.length ? <CardGrid cols={cols}>{rendered}</CardGrid> : <EmptyState icon="💡" cat="lights" />
   }
 
@@ -125,7 +128,7 @@ export function LightsView({ states, cols }: { states: Map<string, HaState>; col
       {/* Global all-off / all-on toolbar */}
       <div style={{ display: 'flex', gap: 8, padding: '8px 10px 0', alignItems: 'center' }}>
         <span style={{ fontSize: 11, fontWeight: 600, color: tc2(th), flex: 1 }}>
-          {lights.length} 盏灯{lights.filter(s => s.state === 'on').length > 0 ? ` · ${lights.filter(s => s.state === 'on').length} 开启` : ''}
+          {lights.length} {t.lamp}{(() => { const n = lights.filter(s => s.state === 'on').length; return n > 0 ? ` · ${n} ${t.on}` : '' })()}
         </span>
         <button onClick={() => allOn(lights.map(s => s.entity_id))} style={{
           fontSize: 11, padding: '5px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700,

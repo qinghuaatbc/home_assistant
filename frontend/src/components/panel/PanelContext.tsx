@@ -59,7 +59,7 @@ export const TR: Record<Lang, {
   armHome: string; armAway: string; disarm: string
   bri: string; vol: string; langBtn: string
   noDevices: string; heating: string; cooling: string; idle: string
-  activate: string; trigger: string; speed: string; allOn: string; allOff: string
+  activate: string; trigger: string; speed: string; allOn: string; allOff: string; other: string; lamp: string
 }> = {
   en: {
     cats: { security:'Security', camera:'Camera', music:'Music', lights:'Lights', theater:'Theater', climate:'Climate', garage:'Garage', scenes:'Scenes' },
@@ -67,6 +67,7 @@ export const TR: Record<Lang, {
     armHome:'ARM HOME', armAway:'ARM AWAY', disarm:'DISARM', bri:'bri', vol:'vol', langBtn:'EN',
     noDevices:'No devices', heating:'Heating', cooling:'Cooling', idle:'Idle',
     activate:'Activate', trigger:'Trigger', speed:'Speed', allOn:'All On', allOff:'All Off',
+    other:'Other', lamp:'lights',
   },
   zh: {
     cats: { security:'安防', camera:'摄像头', music:'音乐', lights:'灯光', theater:'影院', climate:'气候', garage:'车库', scenes:'场景' },
@@ -74,6 +75,7 @@ export const TR: Record<Lang, {
     armHome:'在家布防', armAway:'离家布防', disarm:'撤防', bri:'亮', vol:'音量', langBtn:'中文',
     noDevices:'无设备', heating:'加热中', cooling:'制冷中', idle:'待机',
     activate:'激活', trigger:'触发', speed:'风速', allOn:'全开', allOff:'全关',
+    other:'其他', lamp:'盏灯',
   },
   fa: {
     cats: { security:'امنیت', camera:'دوربین', music:'موسیقی', lights:'چراغ‌ها', theater:'سینما', climate:'آب‌وهوا', garage:'گاراژ', scenes:'صحنه‌ها' },
@@ -81,6 +83,7 @@ export const TR: Record<Lang, {
     armHome:'حالت خانه', armAway:'حالت خروج', disarm:'غیرفعال', bri:'روشنایی', vol:'صدا', langBtn:'فارسی',
     noDevices:'دستگاهی نیست', heating:'گرمایش', cooling:'سرمایش', idle:'آماده',
     activate:'فعال', trigger:'اجرا', speed:'سرعت', allOn:'همه روشن', allOff:'همه خاموش',
+    other:'سایر', lamp:'چراغ',
   },
 }
 
