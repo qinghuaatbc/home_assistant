@@ -96,8 +96,11 @@ export const NestThermostat = memo(({ s }: { s: HaState }) => {
     : isCooling ? (t.cooling ?? 'COOLING').toUpperCase()
     : hvacMode === 'off' ? 'OFF' : (t.idle ?? 'IDLE').toUpperCase()
 
+  const stopTouch = (e: React.TouchEvent) => e.stopPropagation()
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}
+      onTouchStart={stopTouch} onTouchMove={stopTouch} onTouchEnd={stopTouch}>
       <svg ref={svgRef} viewBox={`0 0 ${SVG_S} ${SVG_S}`}
         style={{ width: 220, height: 220, cursor: 'grab', touchAction: 'none', userSelect: 'none', overflow: 'visible' }}
         onPointerDown={e => { e.stopPropagation(); dragging.current = true; svgRef.current?.setPointerCapture(e.pointerId) }}
