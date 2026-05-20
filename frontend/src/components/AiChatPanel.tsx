@@ -51,8 +51,19 @@ export default function AiChatPanel({ onClose }: { onClose: () => void }) {
   const audioCtxRef = useRef<AudioContext | null>(null)
   const cancelSilenceRef = useRef<(() => void) | null>(null)
   const silenceStartRef = useRef<number | null>(null)
-  const lang = getLang() as Lang
+  const [lang, setLangState] = useState<Lang>(() => getLang() as Lang)
   const t = T[lang]
+
+  // Stay in sync when panel language button changes
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const l = (e as CustomEvent).detail as Lang
+      setLangState(l)
+      setLang(l)
+    }
+    window.addEventListener('ha-lang', handler)
+    return () => window.removeEventListener('ha-lang', handler)
+  }, [])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
   useEffect(() => { if (inputRef.current) inputRef.current.focus() }, [])
