@@ -37,35 +37,38 @@ function playNestTick(ctx: AudioContext) {
   const now = ctx.currentTime
   const sr = ctx.sampleRate
 
-  // High "tick" — bandpass noise, 6 ms, 1 ms decay constant
-  const nLen = Math.floor(sr * 0.006)
-  const nBuf = ctx.createBuffer(1, nLen, sr)
-  const nd = nBuf.getChannelData(0)
-  const nTc = sr * 0.001
-  for (let i = 0; i < nLen; i++) nd[i] = (Math.random() * 2 - 1) * Math.exp(-i / nTc)
-  const nSrc = ctx.createBufferSource()
-  nSrc.buffer = nBuf
-  const bp = ctx.createBiquadFilter()
-  bp.type = 'bandpass'
-  bp.frequency.value = 3400
-  bp.Q.value = 0.9
-  const nG = ctx.createGain()
-  nG.gain.value = 0.55
-  nSrc.connect(bp); bp.connect(nG); nG.connect(ctx.destination)
-  nSrc.start(now); nSrc.stop(now + 0.008)
+  // 1. Wideband attack — 2 ms noise burst, instant decay (the initial "snap")
+  const aLen = Math.floor(sr * 0.002)
+  const aBuf = ctx.createBuffer(1, aLen, sr)
+  const aData = aBuf.getChannelData(0)
+  for (let i = 0; i < aLen; i++) aData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.0004))
+  const aSrc = ctx.createBufferSource()
+  aSrc.buffer = aBuf
+  const aG = ctx.createGain(); aG.gain.value = 0.55
+  aSrc.connect(aG); aG.connect(ctx.destination)
+  aSrc.start(now)
 
-  // Low body thump — damped 110 Hz sine, 2 ms decay constant
-  const pLen = Math.floor(sr * 0.01)
-  const pBuf = ctx.createBuffer(1, pLen, sr)
-  const pd = pBuf.getChannelData(0)
-  const pTc = sr * 0.002
-  for (let i = 0; i < pLen; i++) pd[i] = Math.sin(2 * Math.PI * 110 * i / sr) * Math.exp(-i / pTc)
-  const pSrc = ctx.createBufferSource()
-  pSrc.buffer = pBuf
-  const pG = ctx.createGain()
-  pG.gain.value = 0.22
-  pSrc.connect(pG); pG.connect(ctx.destination)
-  pSrc.start(now); pSrc.stop(now + 0.012)
+  // 2. Body resonance — damped 780 Hz sine, 5 ms time constant (warm click body)
+  const rLen = Math.floor(sr * 0.028)
+  const rBuf = ctx.createBuffer(1, rLen, sr)
+  const rData = rBuf.getChannelData(0)
+  for (let i = 0; i < rLen; i++) rData[i] = Math.sin(2 * Math.PI * 780 * i / sr) * Math.exp(-i / (sr * 0.005))
+  const rSrc = ctx.createBufferSource()
+  rSrc.buffer = rBuf
+  const rG = ctx.createGain(); rG.gain.value = 0.14
+  rSrc.connect(rG); rG.connect(ctx.destination)
+  rSrc.start(now); rSrc.stop(now + 0.03)
+
+  // 3. Low thud — damped 160 Hz sine, 2 ms time constant (tactile weight)
+  const lLen = Math.floor(sr * 0.012)
+  const lBuf = ctx.createBuffer(1, lLen, sr)
+  const lData = lBuf.getChannelData(0)
+  for (let i = 0; i < lLen; i++) lData[i] = Math.sin(2 * Math.PI * 160 * i / sr) * Math.exp(-i / (sr * 0.002))
+  const lSrc = ctx.createBufferSource()
+  lSrc.buffer = lBuf
+  const lG = ctx.createGain(); lG.gain.value = 0.18
+  lSrc.connect(lG); lG.connect(ctx.destination)
+  lSrc.start(now); lSrc.stop(now + 0.014)
 }
 
 export const NestThermostat = memo(({ s }: { s: HaState }) => {
