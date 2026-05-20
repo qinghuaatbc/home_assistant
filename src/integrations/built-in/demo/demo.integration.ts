@@ -24,6 +24,19 @@ const DEMO_ENTITIES: Array<{ entity_id: string; name: string; type: string; attr
   { entity_id: 'cover.demo_living_room_curtain', name: 'Living Room Curtain', type: 'cover', attrs: { device_class: 'curtain', glb_floor: 1, glb_pos: [5, -2] } },
   { entity_id: 'sensor.demo_temperature', name: 'Temperature', type: 'sensor', attrs: { unit_of_measurement: '°C', device_class: 'temperature' } },
   { entity_id: 'sensor.demo_humidity', name: 'Humidity', type: 'sensor', attrs: { unit_of_measurement: '%', device_class: 'humidity' } },
+  {
+    entity_id: 'climate.demo_thermostat', name: 'Nest Thermostat', type: 'climate',
+    attrs: {
+      friendly_name: 'Nest Thermostat',
+      hvac_modes: ['off', 'heat', 'cool', 'heat_cool'],
+      hvac_action: 'heating',
+      current_temperature: 19,
+      temperature: 22,
+      min_temp: 9,
+      max_temp: 35,
+      target_temp_step: 0.5,
+    },
+  },
   { entity_id: 'media_player.demo_living_room_speaker', name: 'Living Room Speaker', type: 'media_player', attrs: { volume_level: 0.5 } },
   { entity_id: 'media_player.demo_bedroom_speaker', name: 'Bedroom Speaker', type: 'media_player', attrs: { volume_level: 0.5 } },
 ];
@@ -54,9 +67,10 @@ export class DemoIntegration implements HaIntegration {
         original_name: full.name,
       });
 
+      const initState = full.type === 'cover' ? 'closed' : full.type === 'climate' ? 'heat' : 'off'
       await this.stateMachine.setState(
         full.entity_id,
-        full.type === 'cover' ? 'closed' : 'off',
+        initState,
         {
           friendly_name: full.name,
           ...(full.attrs || {}),
@@ -102,6 +116,41 @@ export class DemoIntegration implements HaIntegration {
         }
       }
     }
+    // climate: set_temperature + set_hvac_mode
+    this.serviceRegistry.register({
+      domain: 'climate', service: 'set_temperature', name: 'Set temperature',
+      description: 'Set target temperature', fields: { temperature: { required: true, description: 'Target °C' } },
+      handler: async (call: ServiceCall) => {
+        const ids = call.target?.entity_id ? (Array.isArray(call.target.entity_id) ? call.target.entity_id : [call.target.entity_id]) : []
+        for (const eid of ids) {
+          const cur = this.stateMachine.getState(eid)
+          if (!cur) continue
+          const newTemp = Number(call.service_data?.temperature ?? (cur.attributes as any).temperature)
+          const curTemp = Number((cur.attributes as any).current_temperature ?? 20)
+          const hvacAction = cur.state === 'heat' ? (curTemp < newTemp ? 'heating' : 'idle') : cur.state === 'cool' ? (curTemp > newTemp ? 'cooling' : 'idle') : 'idle'
+          this.stateMachine.setState(eid, cur.state, { ...cur.attributes as any, temperature: newTemp, hvac_action: hvacAction }, call.context)
+        }
+      },
+      target: { entity: true },
+    })
+    this.serviceRegistry.register({
+      domain: 'climate', service: 'set_hvac_mode', name: 'Set HVAC mode',
+      description: 'Set heating/cooling mode', fields: { hvac_mode: { required: true, description: 'off|heat|cool|heat_cool' } },
+      handler: async (call: ServiceCall) => {
+        const ids = call.target?.entity_id ? (Array.isArray(call.target.entity_id) ? call.target.entity_id : [call.target.entity_id]) : []
+        for (const eid of ids) {
+          const cur = this.stateMachine.getState(eid)
+          if (!cur) continue
+          const mode = String(call.service_data?.hvac_mode ?? 'off')
+          const curTemp = Number((cur.attributes as any).current_temperature ?? 20)
+          const setpoint = Number((cur.attributes as any).temperature ?? 22)
+          const hvacAction = mode === 'heat' ? (curTemp < setpoint ? 'heating' : 'idle') : mode === 'cool' ? (curTemp > setpoint ? 'cooling' : 'idle') : 'idle'
+          this.stateMachine.setState(eid, mode, { ...cur.attributes as any, hvac_action: hvacAction }, call.context)
+        }
+      },
+      target: { entity: true },
+    })
+
     for (const domain of ['light', 'switch', 'media_player', 'binary_sensor']) {
       this.serviceRegistry.register({
         domain, service: 'turn_on', name: 'Turn on', description: 'Turn on', fields: {}, handler, target: { entity: true },
