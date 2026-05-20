@@ -1,6 +1,6 @@
 import React from 'react'
 import type { HaState } from '../../../context/HaContext'
-import { LightTile } from '../cards/LightCards'
+import { LightTile, LightRingCard } from '../cards/LightCards'
 import { MediaRtiCard } from '../cards/MediaCards'
 import { SensorRtiCard, AlarmCard, LockTile, CurtainTile } from '../cards/SecurityCards'
 import { CameraRtiCard } from '../cards/CameraCard'
@@ -15,6 +15,7 @@ export function renderCard(s: HaState, cardType: string, icon?: string, label?: 
   const entity = label ? { ...s, attributes: { ...s.attributes, friendly_name: label } } : s
   switch (cardType) {
     case 'light':        return <LightTile        key={entity.entity_id} s={entity} />
+    case 'light-ring':   return <LightRingCard    key={entity.entity_id} s={entity} />
     case 'sensor':       return <SensorRtiCard     key={entity.entity_id} s={entity} />
     case 'curtain':      return <CurtainTile       key={entity.entity_id} s={entity} />
     case 'camera':       return <CameraRtiCard     key={entity.entity_id} s={entity} />

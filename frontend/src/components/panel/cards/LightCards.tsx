@@ -259,3 +259,181 @@ export const LightTile = memo(({ s }: { s: HaState }) => {
     </div>
   )
 })
+
+// ─── Light Ring Card (card_type: light-ring) ──────────────────────────────────
+
+const LR_S = 160; const LR_CX = 80; const LR_CY = 80
+const LR_R_OUT = 72; const LR_R_ARC = 64; const LR_R_FACE = 54
+const LR_START = 135; const LR_SPAN = 270
+
+function lrPolar(angle: number, r: number): [number, number] {
+  const a = angle * Math.PI / 180
+  return [LR_CX + r * Math.cos(a), LR_CY + r * Math.sin(a)]
+}
+
+function lrArc(startAngle: number, spanDeg: number, r: number): string {
+  if (spanDeg <= 0) return ''
+  const clipped = Math.min(spanDeg, LR_SPAN - 0.1)
+  const [sx, sy] = lrPolar(startAngle, r)
+  const [ex, ey] = lrPolar(startAngle + clipped, r)
+  return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 ${clipped > 180 ? 1 : 0} 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`
+}
+
+function lrAngleToProgress(raw: number): number {
+  if (raw >= LR_START) return Math.min((raw - LR_START) / LR_SPAN, 1)
+  if (raw <= LR_START - 360 + LR_SPAN) return Math.min((raw + 360 - LR_START) / LR_SPAN, 1)
+  return raw <= 90 ? 1 : 0
+}
+
+export const LightRingCard = memo(({ s }: { s: HaState }) => {
+  const callService = useRestCall()
+  const th = useTh(); const sound = useSound()
+  const svgRef = useRef<SVGSVGElement>(null)
+  const dragging = useRef(false)
+  const didDrag = useRef(false)
+
+  const on = s.state === 'on'
+  const bPct = Math.round(Number(s.attributes.brightness ?? 0) / 255 * 100)
+  const name = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
+  const [localBri, setLocalBri] = useState(bPct)
+  useEffect(() => { if (!dragging.current) setLocalBri(bPct) }, [bPct])
+
+  const displayBri = dragging.current ? localBri : bPct
+  const displayOn  = on || (dragging.current && localBri > 0)
+  const b    = displayBri / 100
+  const warmG = Math.round(160 + b * 75)
+  const arcColor = displayOn ? `rgb(255,${warmG},50)` : (th === 'day' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)')
+  const glowColor = `rgba(255,${warmG},50,${b * 0.5})`
+
+  const getProgress = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!svgRef.current) return displayBri / 100
+    const rect = svgRef.current.getBoundingClientRect()
+    const scale = rect.width / LR_S
+    const raw = ((Math.atan2(
+      e.clientY - rect.top  - LR_CY * scale,
+      e.clientX - rect.left - LR_CX * scale
+    ) * 180 / Math.PI) + 360) % 360
+    return lrAngleToProgress(raw)
+  }
+
+  const isDay = th === 'day'
+  const faceColor = displayOn
+    ? isDay ? `rgba(255,${warmG},50,0.12)` : `rgba(255,${warmG},50,0.18)`
+    : isDay ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)'
+  const trackColor = isDay ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.10)'
+
+  const [thumbX, thumbY] = lrPolar(LR_START + (displayBri / 100) * LR_SPAN, LR_R_ARC)
+
+  const stopTouch = (e: React.TouchEvent) => e.stopPropagation()
+
+  return (
+    <div
+      onTouchStart={stopTouch} onTouchMove={stopTouch} onTouchEnd={stopTouch}
+      style={{
+        border: displayOn ? `1px solid rgba(255,${warmG},50,0.4)` : `1px solid ${isDay ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.10)'}`,
+        borderRadius: 18,
+        background: isDay
+          ? (displayOn ? `rgba(255,${warmG},50,0.06)` : 'rgba(255,255,255,0.85)')
+          : (displayOn ? `rgba(255,${warmG},50,0.10)` : 'rgba(255,255,255,0.06)'),
+        boxShadow: displayOn ? `0 4px 24px ${glowColor}` : (isDay ? '0 2px 10px rgba(0,0,0,0.07)' : 'none'),
+        padding: '10px 6px 10px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+        cursor: 'pointer', userSelect: 'none', touchAction: 'none',
+        transition: 'all 0.3s',
+      }}
+    >
+      <svg ref={svgRef} viewBox={`0 0 ${LR_S} ${LR_S}`}
+        style={{ width: 120, height: 120, touchAction: 'none', userSelect: 'none', overflow: 'visible' }}
+        onPointerDown={e => {
+          e.stopPropagation(); dragging.current = true; didDrag.current = false
+          svgRef.current?.setPointerCapture(e.pointerId)
+        }}
+        onPointerMove={e => {
+          if (!dragging.current) return; e.stopPropagation(); didDrag.current = true
+          const prog = getProgress(e)
+          const newBri = Math.round(prog * 100)
+          setLocalBri(newBri)
+          if (newBri > 0) callService('light', 'turn_on', { brightness: Math.round(newBri * 255 / 100) }, s.entity_id)
+          else callService('light', 'turn_off', {}, s.entity_id)
+        }}
+        onPointerUp={e => {
+          e.stopPropagation()
+          if (!dragging.current) return
+          dragging.current = false
+          if (!didDrag.current) {
+            // tap = toggle
+            if (on) callService('light', 'turn_off', {}, s.entity_id)
+            else callService('light', 'turn_on', { brightness: 255 }, s.entity_id)
+            sound('light', !on, name)
+          }
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <defs>
+          <radialGradient id={`lrFace_${s.entity_id}`} cx="50%" cy="40%" r="60%">
+            <stop offset="0%" stopColor={isDay ? '#fff' : '#333'} />
+            <stop offset="100%" stopColor={isDay ? '#f0f0f0' : '#1a1a1a'} />
+          </radialGradient>
+          <filter id={`lrGlow_${s.entity_id}`} x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="5" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        {/* Outer ring */}
+        <circle cx={LR_CX} cy={LR_CY} r={LR_R_OUT} fill={isDay ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)'} />
+
+        {/* Track arc */}
+        <path d={lrArc(LR_START, LR_SPAN, LR_R_ARC)}
+          fill="none" stroke={trackColor} strokeWidth={6} strokeLinecap="round" />
+
+        {/* Active brightness arc */}
+        {displayBri > 1 && (
+          <path d={lrArc(LR_START, (displayBri / 100) * LR_SPAN, LR_R_ARC)}
+            fill="none" stroke={arcColor} strokeWidth={6} strokeLinecap="round"
+            style={{ transition: dragging.current ? 'none' : 'stroke 0.4s, d 0.15s' }} />
+        )}
+
+        {/* Thumb */}
+        {(displayOn || displayBri > 1) && (
+          <circle cx={thumbX} cy={thumbY} r={7} fill={arcColor}
+            stroke={isDay ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)'} strokeWidth={2}
+            filter={`url(#lrGlow_${s.entity_id})`}
+            style={{ cursor: 'grab', transition: dragging.current ? 'none' : 'cx 0.15s, cy 0.15s' }} />
+        )}
+
+        {/* Face circle */}
+        <circle cx={LR_CX} cy={LR_CY} r={LR_R_FACE}
+          fill={displayOn ? faceColor : `url(#lrFace_${s.entity_id})`}
+          style={{ transition: 'fill 0.4s' }} />
+
+        {/* Warm glow behind face when on */}
+        {displayOn && (
+          <circle cx={LR_CX} cy={LR_CY} r={LR_R_FACE - 4}
+            fill={`rgba(255,${warmG},50,${b * 0.25})`}
+            style={{ transition: 'fill 0.4s' }} />
+        )}
+
+        {/* Center: brightness % */}
+        <text x={LR_CX} y={LR_CY + 6} textAnchor="middle"
+          fill={displayOn ? (isDay ? `rgb(160,80,0)` : `rgb(255,${warmG},50)`) : (isDay ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)')}
+          fontSize={22} fontWeight={300}
+          fontFamily="'Helvetica Neue', -apple-system, sans-serif"
+          style={{ transition: 'fill 0.4s' }}>
+          {displayOn ? `${displayBri}%` : '—'}
+        </text>
+      </svg>
+
+      {/* Name */}
+      <div style={{
+        fontSize: 11, fontWeight: 600, textAlign: 'center',
+        color: displayOn
+          ? (isDay ? `rgb(140,70,0)` : `rgb(255,${warmG},50)`)
+          : (isDay ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.4)'),
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        width: '100%', padding: '0 4px',
+        transition: 'color 0.4s',
+      }}>{name}</div>
+    </div>
+  )
+})
