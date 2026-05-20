@@ -8,6 +8,7 @@ import { renderCard, filterStates } from './renderCard'
 export function ScenesView({ states, cols }: { states: Map<string, HaState>; cols: number }) {
   const mapped = useMapped()
   const dashboard = useDashboard()
+  const effectiveMapped = dashboard ? null : mapped
 
   const dbCards = dashboard?.views?.scenes
   if (dbCards !== undefined) {
@@ -15,8 +16,8 @@ export function ScenesView({ states, cols }: { states: Map<string, HaState>; col
     return rendered.length ? <CardGrid cols={cols}>{rendered}</CardGrid> : <EmptyState icon="🎭" cat="scenes" />
   }
 
-  const scenes     = filterStates(states, s => s.entity_id.startsWith('scene.'), mapped)
-  const automations = filterStates(states, s => s.entity_id.startsWith('automation.'), mapped)
+  const scenes     = filterStates(states, s => s.entity_id.startsWith('scene.'), effectiveMapped)
+  const automations = filterStates(states, s => s.entity_id.startsWith('automation.'), effectiveMapped)
   if (!scenes.length && !automations.length) return <EmptyState icon="🎭" cat="scenes" />
   return (
     <CardGrid cols={cols}>

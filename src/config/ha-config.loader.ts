@@ -89,5 +89,11 @@ export default (): Record<string, unknown> => {
     ],
   };
 
+  // TURN server config (optional)
+  (config as any).turn = {
+    host: process.env.HA_TURN_HOST ?? (fileConfig.turn as Record<string, unknown>)?.host ?? '',
+    secret: process.env.HA_TURN_SECRET ?? (fileConfig.turn as Record<string, unknown>)?.secret ?? '',
+  };
+
   return config;
 };

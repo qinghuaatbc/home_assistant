@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { HaState } from '../../../context/HaContext'
 import { useHa } from '../../../context/HaContext'
-import { useMapped, useDashboard, useTh, useRestCall, tc2 } from '../PanelContext'
+import { useMapped, useDashboard, useTh, useT, useRestCall, tc2 } from '../PanelContext'
 import { CardGrid, EmptyState } from '../ui/CardGrid'
 import { LightTile } from '../cards/LightCards'
 import { FanRtiCard } from '../cards/SwitchCards'
@@ -14,6 +14,7 @@ function AreaHeader({ label, count, allOn, onAllOff, onAllOn }: {
   onAllOff: () => void; onAllOn: () => void
 }) {
   const th = useTh()
+  const t  = useT()
   return (
     <div style={{
       gridColumn: '1 / -1',
@@ -28,11 +29,11 @@ function AreaHeader({ label, count, allOn, onAllOff, onAllOn }: {
       <button onClick={onAllOn} style={{
         fontSize: 10, padding: '3px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600,
         background: 'rgba(255,230,80,0.18)', color: '#d4880a',
-      }}>全开</button>
+      }}>{t.allOn}</button>
       <button onClick={onAllOff} style={{
         fontSize: 10, padding: '3px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600,
         background: th === 'day' ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.08)', color: tc2(th),
-      }}>全关</button>
+      }}>{t.allOff}</button>
     </div>
   )
 }
@@ -45,6 +46,9 @@ export function LightsView({ states, cols }: { states: Map<string, HaState>; col
   const { token } = useHa()
   const callService = useRestCall()
   const th = useTh()
+  const t  = useT()
+  // When dashboard.yaml is loaded, skip 3D-mapping filter — show all entities
+  const effectiveMapped = dashboard ? null : mapped
 
   const [entityArea, setEntityArea] = useState<Map<string, string>>(new Map())
   const [areaNames, setAreaNames]   = useState<Map<string, string>>(new Map())
@@ -83,8 +87,8 @@ export function LightsView({ states, cols }: { states: Map<string, HaState>; col
     entityIds.forEach(id => callService('light', 'turn_on', {}, id))
   }, [callService])
 
-  const lights = filterStates(states, s => s.entity_id.startsWith('light.'), mapped)
-  const fans   = filterStates(states, s => s.entity_id.startsWith('fan.'),   mapped)
+  const lights = filterStates(states, s => s.entity_id.startsWith('light.'), effectiveMapped)
+  const fans   = filterStates(states, s => s.entity_id.startsWith('fan.'),   effectiveMapped)
   const anyOn  = lights.some(s => s.state === 'on')
   const hasAreas = areaNames.size > 0
 
@@ -126,12 +130,12 @@ export function LightsView({ states, cols }: { states: Map<string, HaState>; col
         <button onClick={() => allOn(lights.map(s => s.entity_id))} style={{
           fontSize: 11, padding: '5px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700,
           background: 'rgba(255,200,50,0.20)', color: '#d4880a',
-        }}>全开</button>
+        }}>{t.allOn}</button>
         <button onClick={() => allOff(lights.map(s => s.entity_id))} style={{
           fontSize: 11, padding: '5px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700,
           background: th === 'day' ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.08)', color: tc2(th),
           opacity: anyOn ? 1 : 0.4,
-        }}>全关</button>
+        }}>{t.allOff}</button>
       </div>
 
       {/* Area-grouped or flat grid */}

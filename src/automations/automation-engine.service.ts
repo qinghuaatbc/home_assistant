@@ -144,6 +144,17 @@ export class AutomationEngineService implements OnApplicationShutdown {
     return Array.from(this.automations.values());
   }
 
+  reloadAutomations(configs: AutomationConfig[]): void {
+    // Tear down all existing
+    for (const runtime of this.automations.values()) {
+      runtime.unsubscribers.forEach((u) => u());
+    }
+    this.automations.clear();
+    // Re-register
+    this.loadAutomations(configs);
+    this.logger.log(`Automations reloaded: ${configs.length} loaded`);
+  }
+
   onApplicationShutdown(): void {
     for (const runtime of this.automations.values()) {
       runtime.unsubscribers.forEach((u) => u());

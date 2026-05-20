@@ -12,11 +12,42 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import * as crypto from 'crypto';
+import { ConfigService } from '@nestjs/config';
 import { WebrtcService } from './webrtc.service';
 
 @Controller('webrtc')
 export class WebrtcController {
-  constructor(private readonly webrtcService: WebrtcService) {}
+  constructor(
+    private readonly webrtcService: WebrtcService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  /**
+   * Return ICE servers (STUN + TURN) for WebRTC clients.
+   * TURN credentials use time-limited HMAC so the secret never leaves the server.
+   * TTL: 24 hours.
+   */
+  @Get('ice-servers')
+  getIceServers() {
+    const turnHost = this.configService.get<string>('turn.host');
+    const turnSecret = this.configService.get<string>('turn.secret');
+    const stun: RTCIceServer[] = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ];
+    if (!turnHost || !turnSecret) return { iceServers: stun };
+
+    // Time-limited HMAC credentials (coturn --use-auth-secret)
+    const ttl = 24 * 3600;
+    const username = `${Math.floor(Date.now() / 1000) + ttl}:ha`;
+    const password = crypto.createHmac('sha1', turnSecret).update(username).digest('base64');
+    const turn: RTCIceServer[] = [
+      { urls: `turn:${turnHost}:3478`, username, credential: password },
+      { urls: `turn:${turnHost}:3478?transport=tcp`, username, credential: password },
+    ];
+    return { iceServers: [...stun, ...turn] };
+  }
 
   /** List all streams — HLS served by go2rtc at /go2rtc/api/hls/:name/index.m3u8 */
   @Get('streams')

@@ -8,20 +8,27 @@ import {
   playDing, playSwitchToggle, speakText,
 } from '../PanelContext'
 
+const SECURITY_SENSOR_CLASSES = new Set(['door','window','smoke','gas','moisture','tamper'])
+
 function getActiveCounts(states: Map<string, HaState>): Partial<Record<Cat, number>> {
   const counts: Partial<Record<Cat, number>> = {}
   states.forEach((s, eid) => {
     const domain = eid.split('.')[0]
-    if (domain === 'light' && s.state === 'on')
+    const devClass = String(s.attributes?.device_class ?? '')
+    if (domain === 'light' && s.state === 'on') {
       counts.lights = (counts.lights ?? 0) + 1
-    else if (domain === 'media_player' && s.state === 'playing')
+    } else if (domain === 'media_player' && (s.state === 'playing' || s.state === 'paused')) {
       counts.music = (counts.music ?? 0) + 1
-    else if (domain === 'climate' && s.state !== 'off' && s.state !== 'unavailable')
+    } else if (domain === 'climate' && s.state !== 'off' && s.state !== 'unavailable') {
       counts.climate = (counts.climate ?? 0) + 1
-    else if (domain === 'cover' && (s.state === 'open' || s.state === 'opening'))
+    } else if (domain === 'cover' && (s.state === 'open' || s.state === 'opening') &&
+               (eid.includes('garage') || devClass.includes('garage'))) {
       counts.garage = (counts.garage ?? 0) + 1
-    else if (domain === 'alarm_control_panel' && s.state !== 'disarmed')
+    } else if (domain === 'alarm_control_panel' && s.state !== 'disarmed') {
       counts.security = (counts.security ?? 0) + 1
+    } else if (domain === 'binary_sensor' && s.state === 'on' && SECURITY_SENSOR_CLASSES.has(devClass)) {
+      counts.security = (counts.security ?? 0) + 1
+    }
   })
   return counts
 }

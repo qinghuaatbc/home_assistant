@@ -1,4 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as yaml from 'yaml';
 import { HaIntegration, IntegrationManifest, IntegrationConfig } from '../integrations/interfaces/integration.interface';
 import { ServiceRegistryService } from '../core/service-registry/service-registry.service';
 import { AutomationEngineService } from './automation-engine.service';
@@ -7,6 +10,9 @@ import { AutomationConfig } from './interfaces/automation-config.interface';
 @Injectable()
 export class AutomationIntegration implements HaIntegration {
   private readonly logger = new Logger(AutomationIntegration.name);
+  private automationsFilePath: string | null = null;
+  private fileWatcher: fs.FSWatcher | null = null;
+  private debounceTimer: NodeJS.Timeout | null = null;
 
   readonly manifest: IntegrationManifest = {
     domain: 'automation',
@@ -24,8 +30,38 @@ export class AutomationIntegration implements HaIntegration {
     const automations = (config.automations as AutomationConfig[]) ?? [];
     this.engine.loadAutomations(automations);
     this.registerServices();
+
+    // Watch automations file for hot reload if it's a separate file
+    const configPath = process.env.HA_CONFIG_PATH ?? path.resolve(process.cwd(), 'config', 'configuration.yaml');
+    const configDir = path.dirname(configPath);
+    const autoFile = path.resolve(configDir, 'automations.yaml');
+    if (fs.existsSync(autoFile)) {
+      this.automationsFilePath = autoFile;
+      this.startWatcher(autoFile);
+    }
+
     this.logger.log(`Automation integration ready: ${automations.length} automations`);
     return true;
+  }
+
+  private startWatcher(filePath: string): void {
+    this.fileWatcher = fs.watch(filePath, () => {
+      // Debounce: editors write files multiple times in quick succession
+      if (this.debounceTimer) clearTimeout(this.debounceTimer);
+      this.debounceTimer = setTimeout(() => this.reloadFromFile(filePath), 500);
+    });
+    this.logger.log(`Watching ${filePath} for changes`);
+  }
+
+  private reloadFromFile(filePath: string): void {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const automations: AutomationConfig[] = yaml.parse(content) ?? [];
+      this.engine.reloadAutomations(automations);
+      this.logger.log(`Hot reloaded ${automations.length} automations from ${path.basename(filePath)}`);
+    } catch (err) {
+      this.logger.error(`Hot reload failed: ${(err as Error).message}`);
+    }
   }
 
   private registerServices(): void {
@@ -71,6 +107,8 @@ export class AutomationIntegration implements HaIntegration {
   }
 
   async teardown(): Promise<void> {
-    // Engine handles cleanup via OnApplicationShutdown
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.fileWatcher?.close();
+    this.fileWatcher = null;
   }
 }

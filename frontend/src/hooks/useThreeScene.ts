@@ -15,7 +15,7 @@ export function useThreeScene(
 ) {
   const handleRef = useRef<SceneHandle | null>(null)
   const animRef = useRef(0)
-  const clockRef = useRef(new THREE.Clock())
+  const clockRef = useRef(new THREE.Timer())
 
   useEffect(() => {
     const el = containerRef.current
@@ -25,7 +25,7 @@ export function useThreeScene(
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(Math.max(el.clientWidth, 100), Math.max(el.clientHeight, 100))
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.1
     renderer.localClippingEnabled = true
@@ -102,8 +102,9 @@ export function useThreeScene(
 
     const animate = () => {
       animRef.current = requestAnimationFrame(animate)
+      clockRef.current.update()
       controls.update()
-      onAnimate(clockRef.current.getElapsedTime())
+      onAnimate(clockRef.current.getElapsed())
       renderer.render(scene, camera)
     }
     animate()

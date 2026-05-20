@@ -1,6 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as fs from 'fs';
+import * as path from 'path';
 import { EventBusService } from '../event-bus/event-bus.service';
 import { ContextService } from '../context/context.service';
 import { HaState } from './interfaces/ha-state.interface';
@@ -31,6 +33,14 @@ export class StateMachineService implements OnModuleInit {
   /** In-memory state store: entity_id → current HaState */
   private readonly states = new Map<string, HaState>();
 
+  private readonly snapshotPath = path.resolve(
+    process.env.HA_CONFIG_PATH
+      ? path.dirname(process.env.HA_CONFIG_PATH)
+      : path.resolve(process.cwd(), 'config'),
+    'state-snapshot.json',
+  );
+  private snapshotTimer: NodeJS.Timeout | null = null;
+
   constructor(
     @InjectRepository(StateHistoryEntity)
     private readonly stateRepo: Repository<StateHistoryEntity>,
@@ -41,6 +51,8 @@ export class StateMachineService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     this.eventBus.listen(EVENT_HOMEASSISTANT_START, async () => {
       await this.restoreStates();
+      // Snapshot every 30s so restart loses at most 30s of state
+      this.snapshotTimer = setInterval(() => this.saveSnapshot(), 30_000);
     });
 
     // Prune history older than 30 days, run once at startup then every 24 hours
@@ -232,12 +244,33 @@ export class StateMachineService implements OnModuleInit {
     return result;
   }
 
+  private saveSnapshot(): void {
+    try {
+      const data = Object.fromEntries(this.states);
+      fs.writeFileSync(this.snapshotPath, JSON.stringify(data), 'utf-8');
+    } catch (err) {
+      this.logger.warn(`Snapshot write failed: ${(err as Error).message}`);
+    }
+  }
+
   /**
    * Restore states from DB on startup.
    * Loads the most recent state per entity from history.
    */
   private async restoreStates(): Promise<void> {
     this.logger.log('Restoring states from database...');
+
+    // Load snapshot (more recent than DB for last 30s window)
+    const snapshot: Record<string, HaState> = {};
+    if (fs.existsSync(this.snapshotPath)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(this.snapshotPath, 'utf-8'));
+        Object.assign(snapshot, raw);
+        this.logger.log(`Loaded state snapshot: ${Object.keys(snapshot).length} entities`);
+      } catch {
+        this.logger.warn('Failed to read state snapshot, falling back to DB only');
+      }
+    }
 
     try {
       // Get the most recent state record per entity
@@ -259,7 +292,7 @@ export class StateMachineService implements OnModuleInit {
             ? JSON.parse(record.attributes_json)
             : {};
 
-          const restoredState: HaState = Object.freeze({
+          const dbState: HaState = Object.freeze({
             entity_id: record.entity_id,
             state: record.state || 'unknown',
             attributes: Object.freeze(attributes),
@@ -272,12 +305,23 @@ export class StateMachineService implements OnModuleInit {
             },
           });
 
-          this.states.set(record.entity_id, restoredState);
+          // Use snapshot if it's newer than DB record (covers the last 30s window)
+          const snap = snapshot[record.entity_id];
+          const useSnap = snap && snap.last_updated > dbState.last_updated;
+          this.states.set(record.entity_id, useSnap ? Object.freeze({ ...snap, attributes: Object.freeze(snap.attributes) }) : dbState);
           restoredCount++;
         } catch {
           this.logger.warn(
             `Failed to restore state for ${record.entity_id}`,
           );
+        }
+      }
+
+      // Also apply snapshot entries not in DB (very recent, never persisted)
+      for (const [entityId, snap] of Object.entries(snapshot)) {
+        if (!this.states.has(entityId)) {
+          this.states.set(entityId, Object.freeze({ ...snap, attributes: Object.freeze(snap.attributes) }));
+          restoredCount++;
         }
       }
 

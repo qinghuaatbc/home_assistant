@@ -43,6 +43,13 @@ import { WebrtcModule } from './api/webrtc/webrtc.module';
         migrationsRun: true,
         migrations: [__dirname + '/database/migrations/*.{ts,js}'],
         logging: configService.get<boolean>('database.logging', false),
+        // WAL mode: readers don't block writers, writers don't block readers
+        nativeBinding: undefined,
+        prepareDatabase: (db: any) => {
+          db.pragma('journal_mode = WAL');
+          db.pragma('synchronous = NORMAL');
+          db.pragma('busy_timeout = 5000');
+        },
       }),
       inject: [ConfigService],
     }),

@@ -9,6 +9,7 @@ import { renderCard, filterStates } from './renderCard'
 export function SecurityView({ states, cols }: { states: Map<string, HaState>; cols: number }) {
   const mapped = useMapped()
   const dashboard = useDashboard()
+  const effectiveMapped = dashboard ? null : mapped
 
   const dbCards = dashboard?.views?.security
   if (dbCards !== undefined) {
@@ -16,11 +17,11 @@ export function SecurityView({ states, cols }: { states: Map<string, HaState>; c
     return rendered.length ? <CardGrid cols={cols}>{rendered}</CardGrid> : <EmptyState icon="🔒" cat="security" />
   }
 
-  const alarms = filterStates(states, s => s.entity_id.startsWith('alarm_control_panel.'), mapped)
-  const locks = filterStates(states, s => s.entity_id.startsWith('lock.'), mapped)
-  const curtains = filterStates(states, s => (s.entity_id.startsWith('binary_sensor.') || s.entity_id.startsWith('cover.')) && ['curtain', 'blind'].includes(String(s.attributes.device_class ?? '')), mapped)
-  const sensors = filterStates(states, s => s.entity_id.startsWith('binary_sensor.') && ['door', 'window', 'motion', 'garage_door'].includes(String(s.attributes.device_class ?? '')), mapped)
-  const alarmSwitches = filterStates(states, s => s.entity_id.startsWith('switch.') && (s.entity_id.includes('alarm') || s.entity_id.includes('siren')), mapped)
+  const alarms = filterStates(states, s => s.entity_id.startsWith('alarm_control_panel.'), effectiveMapped)
+  const locks = filterStates(states, s => s.entity_id.startsWith('lock.'), effectiveMapped)
+  const curtains = filterStates(states, s => (s.entity_id.startsWith('binary_sensor.') || s.entity_id.startsWith('cover.')) && ['curtain', 'blind'].includes(String(s.attributes.device_class ?? '')), effectiveMapped)
+  const sensors = filterStates(states, s => s.entity_id.startsWith('binary_sensor.') && ['door', 'window', 'motion', 'garage_door'].includes(String(s.attributes.device_class ?? '')), effectiveMapped)
+  const alarmSwitches = filterStates(states, s => s.entity_id.startsWith('switch.') && (s.entity_id.includes('alarm') || s.entity_id.includes('siren')), effectiveMapped)
   if (!alarms.length && !locks.length && !curtains.length && !sensors.length && !alarmSwitches.length) return <EmptyState icon="🔒" cat="security" />
   return (
     <CardGrid cols={cols}>

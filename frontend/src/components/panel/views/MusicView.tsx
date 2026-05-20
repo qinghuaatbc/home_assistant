@@ -8,6 +8,7 @@ import { renderCard, filterStates } from './renderCard'
 export function MusicView({ states, cols }: { states: Map<string, HaState>; cols: number }) {
   const mapped = useMapped()
   const dashboard = useDashboard()
+  const effectiveMapped = dashboard ? null : mapped
 
   const dbCards = dashboard?.views?.music
   if (dbCards !== undefined) {
@@ -15,7 +16,7 @@ export function MusicView({ states, cols }: { states: Map<string, HaState>; cols
     return rendered.length ? <CardGrid cols={cols}>{rendered}</CardGrid> : <EmptyState icon="🎵" cat="music" />
   }
 
-  const players = filterStates(states, s => s.entity_id.startsWith('media_player.'), mapped)
+  const players = filterStates(states, s => s.entity_id.startsWith('media_player.'), effectiveMapped)
   if (!players.length) return <EmptyState icon="🎵" cat="music" />
   return <CardGrid cols={cols}>{players.map(s => <MediaRtiCard key={s.entity_id} s={s} />)}</CardGrid>
 }
