@@ -27,16 +27,21 @@ export function EqBars({ active }: { active: boolean }) {
 export function SpeakerImg({ powered, playing, volume }: { powered: boolean; playing: boolean; volume: number }) {
   const v = volume / 100
   const glow = Math.round(10 + v * 26)
-  const period = (0.4 + (1 - v) * 1.1).toFixed(2)
+  const period = (0.28 + (1 - v) * 0.92).toFixed(2)   // 0.28s (100%) → 1.2s (0%)
+  const scale  = (1.10 + v * 0.18).toFixed(3)           // 1.10 (0%) → 1.28 (100%)
   const filter = !powered
     ? 'grayscale(1) brightness(0.28) opacity(0.55)'
     : playing
       ? `drop-shadow(0 0 ${glow}px rgba(77,143,255,${0.4 + v * 0.5})) brightness(${1 + v * 0.28})`
       : `drop-shadow(0 0 ${Math.round(4 + v * 10)}px rgba(77,143,255,${0.1 + v * 0.3})) brightness(0.95)`
-  const hasVol = powered && v > 0.02
+  const hasVol = powered && playing && v > 0.02
   return (
-    <div style={{ animation: hasVol ? `speakerPulse ${period}s ease-in-out infinite` : 'none', display: 'inline-flex', width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
-      <img src="/speaker.png" style={{ width: 48, height: 48, objectFit: 'contain', filter, transition: 'filter 0.4s' }} />
+    <div style={{
+      '--sp-scale': scale,
+      animation: hasVol ? `speakerPulse ${period}s ease-in-out infinite` : 'none',
+      display: 'inline-flex', width: 64, height: 64, alignItems: 'center', justifyContent: 'center',
+    } as React.CSSProperties}>
+      <img src="/speaker.png" style={{ width: 64, height: 64, objectFit: 'contain', filter, transition: 'filter 0.4s' }} />
     </div>
   )
 }
@@ -281,6 +286,218 @@ export const MediaRtiCard = memo(({ s }: { s: HaState }) => {
           )}
         </div>
       )}
+    </div>
+  )
+})
+
+// ─── Media Player Ring Card (card_type: media-player-ring) ───────────────────
+
+const SR_S = 160; const SR_CX = 80; const SR_CY = 80
+const SR_R_OUT = 72; const SR_R_ARC = 64; const SR_R_FACE = 54
+const SR_START = 135; const SR_SPAN = 270
+
+function srPolar(angle: number, r: number): [number, number] {
+  const a = angle * Math.PI / 180
+  return [SR_CX + r * Math.cos(a), SR_CY + r * Math.sin(a)]
+}
+function srArc(startAngle: number, spanDeg: number, r: number): string {
+  if (spanDeg <= 0) return ''
+  const clipped = Math.min(spanDeg, SR_SPAN - 0.1)
+  const [sx, sy] = srPolar(startAngle, r)
+  const [ex, ey] = srPolar(startAngle + clipped, r)
+  return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 ${clipped > 180 ? 1 : 0} 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`
+}
+function srAngleToProgress(raw: number): number {
+  if (raw >= SR_START) return Math.min((raw - SR_START) / SR_SPAN, 1)
+  if (raw <= SR_START - 360 + SR_SPAN) return Math.min((raw + 360 - SR_START) / SR_SPAN, 1)
+  return raw <= 90 ? 1 : 0
+}
+function playSpeakerTick(ctx: AudioContext) {
+  const now = ctx.currentTime, sr = ctx.sampleRate
+  const nLen = Math.floor(sr * 0.002)
+  const nBuf = ctx.createBuffer(1, nLen, sr)
+  const nd = nBuf.getChannelData(0)
+  for (let i = 0; i < nLen; i++) nd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.0003))
+  const nSrc = ctx.createBufferSource(); nSrc.buffer = nBuf
+  const nG = ctx.createGain(); nG.gain.value = 0.14
+  nSrc.connect(nG); nG.connect(ctx.destination); nSrc.start(now)
+  const tLen = Math.floor(sr * 0.018)
+  const tBuf = ctx.createBuffer(1, tLen, sr)
+  const td = tBuf.getChannelData(0)
+  for (let i = 0; i < tLen; i++) td[i] = Math.sin(2 * Math.PI * 2200 * i / sr) * Math.exp(-i / (sr * 0.004))
+  const tSrc = ctx.createBufferSource(); tSrc.buffer = tBuf
+  const tG = ctx.createGain(); tG.gain.value = 0.06
+  tSrc.connect(tG); tG.connect(ctx.destination); tSrc.start(now)
+}
+
+export const MediaRingCard = memo(({ s }: { s: HaState }) => {
+  const callService = useRestCall()
+  const th = useTh()
+  const svgRef = useRef<SVGSVGElement>(null)
+  const dragging = useRef(false)
+  const didDrag = useRef(false)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const lastTickVol = useRef<number | null>(null)
+
+  const playing = s.state === 'playing'
+  const active  = s.state !== 'off' && s.state !== 'unavailable'
+  const muted   = Boolean(s.attributes.is_volume_muted)
+  const volPct  = Math.round(Number(s.attributes.volume_level ?? 0) * 100)
+  const name    = String(s.attributes.friendly_name ?? s.entity_id.split('.')[1].replace(/_/g, ' '))
+  const title   = String(s.attributes.media_title ?? '')
+
+  const [localVol, setLocalVol] = useState(volPct)
+  useEffect(() => { if (!dragging.current) setLocalVol(volPct) }, [volPct])
+
+  const displayVol = dragging.current ? localVol : volPct
+  const displayActive = active || (dragging.current && localVol > 0)
+  const v = displayVol / 100
+
+  // Cool blue-cyan palette
+  const arcR = Math.round(40  + v * 80)   // 40→120
+  const arcG = Math.round(120 + v * 80)   // 120→200
+  const arcColor  = displayActive && !muted ? `rgb(${arcR},${arcG},255)` : (th === 'day' ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.28)')
+  const glowColor = `rgba(${arcR},${arcG},255,${0.12 + v * 0.55})`
+
+  const getProgress = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    if (!svgRef.current) return displayVol / 100
+    const rect = svgRef.current.getBoundingClientRect()
+    const scale = rect.width / SR_S
+    const raw = ((Math.atan2(
+      e.clientY - rect.top  - SR_CY * scale,
+      e.clientX - rect.left - SR_CX * scale
+    ) * 180 / Math.PI) + 360) % 360
+    return srAngleToProgress(raw)
+  }, [displayVol])
+
+  const isDay = th === 'day'
+  const faceColor = displayActive
+    ? isDay ? `rgba(${arcR},${arcG},255,0.14)` : `rgba(${arcR},${arcG},255,0.20)`
+    : isDay ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.06)'
+  const trackColor = isDay ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.22)'
+  const [thumbX, thumbY] = srPolar(SR_START + v * SR_SPAN, SR_R_ARC)
+  const stopTouch = (e: React.TouchEvent) => e.stopPropagation()
+
+  return (
+    <div onTouchStart={stopTouch} onTouchMove={stopTouch} onTouchEnd={stopTouch}
+      style={{
+        border: displayActive ? `1px solid rgba(${arcR},${arcG},255,0.35)` : `1px solid ${isDay ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.22)'}`,
+        borderRadius: 18,
+        background: isDay
+          ? (displayActive ? `rgba(${arcR},${arcG},255,0.06)` : 'rgba(255,255,255,0.85)')
+          : (displayActive ? `rgba(${arcR},${arcG},255,0.09)` : 'rgba(255,255,255,0.10)'),
+        boxShadow: displayActive ? `0 4px 24px ${glowColor}` : (isDay ? '0 2px 10px rgba(0,0,0,0.07)' : 'none'),
+        padding: '10px 6px 10px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+        cursor: 'pointer', userSelect: 'none', touchAction: 'none',
+        transition: 'all 0.3s',
+      }}>
+      <svg ref={svgRef} viewBox={`0 0 ${SR_S} ${SR_S}`}
+        style={{ width: '100%', height: 'auto', aspectRatio: '1', touchAction: 'none', userSelect: 'none', overflow: 'visible' }}
+        onPointerDown={e => {
+          e.stopPropagation(); dragging.current = true; didDrag.current = false
+          svgRef.current?.setPointerCapture(e.pointerId)
+          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+          lastTickVol.current = null
+        }}
+        onPointerMove={e => {
+          if (!dragging.current) return; e.stopPropagation(); didDrag.current = true
+          const prog = getProgress(e)
+          const newVol = Math.round(prog * 100)
+          setLocalVol(newVol)
+          if (lastTickVol.current === null || Math.abs(newVol - lastTickVol.current) >= 4) {
+            lastTickVol.current = newVol
+            if (audioCtxRef.current) audioCtxRef.current.resume().then(() => playSpeakerTick(audioCtxRef.current!))
+          }
+          callService('media_player', 'volume_set', { volume_level: prog }, s.entity_id)
+        }}
+        onPointerUp={e => {
+          e.stopPropagation()
+          if (!dragging.current) return
+          dragging.current = false
+          if (!didDrag.current) {
+            // tap = play/pause toggle
+            if (playing) callService('media_player', 'media_pause', {}, s.entity_id)
+            else callService('media_player', active ? 'media_play' : 'turn_on', {}, s.entity_id)
+          }
+        }}
+        onClick={e => e.stopPropagation()}>
+        <defs>
+          <radialGradient id={`srFace_${s.entity_id}`} cx="50%" cy="40%" r="60%">
+            <stop offset="0%" stopColor={isDay ? '#fff' : '#333'} />
+            <stop offset="100%" stopColor={isDay ? '#f0f0f0' : '#1a1a1a'} />
+          </radialGradient>
+          <filter id={`srGlow_${s.entity_id}`} x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="5" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        <circle cx={SR_CX} cy={SR_CY} r={SR_R_OUT} fill={isDay ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)'} />
+        <path d={srArc(SR_START, SR_SPAN, SR_R_ARC)} fill="none" stroke={trackColor} strokeWidth={6} strokeLinecap="round" />
+        {displayVol > 1 && (
+          <path d={srArc(SR_START, v * SR_SPAN, SR_R_ARC)}
+            fill="none" stroke={arcColor} strokeWidth={6} strokeLinecap="round"
+            style={{ transition: dragging.current ? 'none' : 'stroke 0.4s' }} />
+        )}
+
+        {/* Thumb — red blink when playing */}
+        {(displayActive || displayVol > 1) && (
+          <circle cx={thumbX} cy={thumbY} r={11}
+            fill={playing ? '#ff3b30' : (displayActive ? `rgb(${arcR},${arcG},255)` : '#888')}
+            stroke="rgba(255,255,255,0.92)" strokeWidth={2.5}
+            filter={`url(#srGlow_${s.entity_id})`}
+            style={{ cursor: 'grab', transition: dragging.current ? 'none' : 'cx 0.15s, cy 0.15s' }}>
+            {playing && (
+              <animate attributeName="opacity" values="1;0.15;1" dur="1.1s" repeatCount="indefinite" />
+            )}
+          </circle>
+        )}
+
+        <circle cx={SR_CX} cy={SR_CY} r={SR_R_FACE}
+          fill={displayActive ? faceColor : `url(#srFace_${s.entity_id})`}
+          style={{ transition: dragging.current ? 'none' : 'fill 0.4s' }} />
+        {displayActive && !muted && (
+          <circle cx={SR_CX} cy={SR_CY} r={SR_R_FACE - 2}
+            fill={`rgba(${arcR},${arcG},255,${(v * 0.35).toFixed(2)})`}
+            filter={`url(#srGlow_${s.entity_id})`}
+            style={{ transition: dragging.current ? 'none' : 'fill 0.4s' }} />
+        )}
+        {/* Speaker image — opacity + pulse animation follows volume */}
+        <image href="/speaker.png"
+          x={SR_CX - 24} y={SR_CY - 28} width={48} height={56}
+          style={{
+            opacity: displayActive && !muted ? Math.max(0.25, v) : 0.15,
+            transition: dragging.current ? 'none' : 'opacity 0.4s',
+            transformBox: 'fill-box',
+            transformOrigin: 'center',
+            '--sp-scale': (1.10 + v * 0.18).toFixed(3),
+            animation: (displayActive && !muted && playing && !dragging.current)
+              ? `speakerPulse ${(0.28 + (1 - v) * 0.92).toFixed(2)}s ease-in-out infinite`
+              : 'none',
+          } as React.CSSProperties} />
+        {/* Blue glow over speaker when active */}
+        <ellipse cx={SR_CX} cy={SR_CY} rx={16} ry={18}
+          fill={`rgba(${arcR},${arcG},255,${((displayActive && !muted ? v : 0) * 0.70).toFixed(2)})`}
+          filter={`url(#srGlow_${s.entity_id})`}
+          style={{ pointerEvents: 'none', transition: dragging.current ? 'none' : 'fill 0.4s' }} />
+      </svg>
+
+      {/* Volume % */}
+      <div style={{
+        fontSize: 18, fontWeight: 300, textAlign: 'center', lineHeight: 1,
+        color: displayActive ? (isDay ? `rgb(${arcR - 20},${arcG - 20},200)` : `rgb(${arcR},${arcG},255)`) : (isDay ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.25)'),
+        fontFamily: "'Helvetica Neue', -apple-system, sans-serif",
+        transition: 'color 0.4s',
+      }}>{muted ? '🔇' : (displayActive ? `${displayVol}%` : '—')}</div>
+
+      {/* Name / title */}
+      <div style={{
+        fontSize: 11, fontWeight: 600, textAlign: 'center',
+        color: displayActive ? (isDay ? `rgb(${arcR - 20},${arcG - 20},180)` : `rgb(${arcR},${arcG},255)`) : (isDay ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.4)'),
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        width: '100%', padding: '0 4px', transition: 'color 0.4s',
+      }}>{title || name}</div>
     </div>
   )
 })

@@ -545,6 +545,37 @@ export function CommProvider({ children }: { children: ReactNode }) {
 
       // Also register when the user enables push notifications after connecting
       window.addEventListener('push-subscribed', onPushSubscribed)
+
+      // Load persisted chat history
+      const token = localStorage.getItem('ha_token')
+      fetch('/api/comm/history?limit=100', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then(r => r.ok ? r.json() : [])
+        .then((rows: Array<{
+          from: string; fromName: string; to: string | null; text: string;
+          msgId: string | null; mediaUrl: string | null; mediaType: string | null;
+          mediaName: string | null; timestamp: number; isSystem: number;
+        }>) => {
+          if (!rows.length) return
+          const history: ChatMessage[] = rows.map(r => ({
+            from: r.from, fromName: r.fromName, to: r.to, text: r.text,
+            msgId: r.msgId ?? undefined,
+            mediaUrl: r.mediaUrl ?? undefined,
+            mediaType: (r.mediaType as ChatMessage['mediaType']) ?? undefined,
+            mediaName: r.mediaName ?? undefined,
+            timestamp: r.timestamp,
+            system: r.isSystem === 1,
+            readBy: [],
+          }))
+          setMessages(prev => {
+            const existingIds = new Set(prev.map(m => m.msgId).filter(Boolean))
+            const newHistory = history.filter(m => !m.msgId || !existingIds.has(m.msgId))
+            const merged = [...newHistory, ...prev]
+            return merged.length > MAX_MESSAGES ? merged.slice(merged.length - MAX_MESSAGES) : merged
+          })
+        })
+        .catch(() => {})
     })
 
     socket.on('users', (list: CommUser[]) => {

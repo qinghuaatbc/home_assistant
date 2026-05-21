@@ -367,7 +367,7 @@ export const LightRingCard = memo(({ s }: { s: HaState }) => {
       }}
     >
       <svg ref={svgRef} viewBox={`0 0 ${LR_S} ${LR_S}`}
-        style={{ width: 120, height: 120, touchAction: 'none', userSelect: 'none', overflow: 'visible' }}
+        style={{ width: '100%', height: 'auto', aspectRatio: '1', touchAction: 'none', userSelect: 'none', overflow: 'visible' }}
         onPointerDown={e => {
           e.stopPropagation(); dragging.current = true; didDrag.current = false
           svgRef.current?.setPointerCapture(e.pointerId)
@@ -425,36 +425,44 @@ export const LightRingCard = memo(({ s }: { s: HaState }) => {
             style={{ transition: dragging.current ? 'none' : 'stroke 0.4s, d 0.15s' }} />
         )}
 
-        {/* Thumb */}
+        {/* Thumb — bigger red dot, blinks when on */}
         {(displayOn || displayBri > 1) && (
-          <circle cx={thumbX} cy={thumbY} r={7} fill={arcColor}
-            stroke={isDay ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)'} strokeWidth={2}
+          <circle cx={thumbX} cy={thumbY} r={11} fill={displayOn ? '#ff3b30' : '#888'}
+            stroke="rgba(255,255,255,0.92)" strokeWidth={2.5}
             filter={`url(#lrGlow_${s.entity_id})`}
-            style={{ cursor: 'grab', transition: dragging.current ? 'none' : 'cx 0.15s, cy 0.15s' }} />
+            style={{ cursor: 'grab', transition: dragging.current ? 'none' : 'cx 0.15s, cy 0.15s' }}>
+            {displayOn && (
+              <animate attributeName="opacity" values="1;0.15;1" dur="1.1s" repeatCount="indefinite" />
+            )}
+          </circle>
         )}
 
         {/* Face circle */}
         <circle cx={LR_CX} cy={LR_CY} r={LR_R_FACE}
           fill={displayOn ? faceColor : `url(#lrFace_${s.entity_id})`}
-          style={{ transition: 'fill 0.4s' }} />
+          style={{ transition: dragging.current ? 'none' : 'fill 0.4s' }} />
 
         {/* Sunshine glow behind face when on */}
         {displayOn && (
           <circle cx={LR_CX} cy={LR_CY} r={LR_R_FACE - 2}
-            fill={`rgba(255,${warmG},${warmB},${b * 0.45})`}
+            fill={`rgba(255,${warmG},${warmB},${(b * 0.45).toFixed(2)})`}
             filter={`url(#lrGlow_${s.entity_id})`}
-            style={{ transition: 'fill 0.4s' }} />
+            style={{ transition: dragging.current ? 'none' : 'fill 0.4s' }} />
         )}
 
-        {/* Bulb icon inside face */}
+        {/* Bulb icon — opacity-based dimming (works on iOS, unlike CSS filter) */}
         <image href="/bulb.png"
           x={LR_CX - 19} y={LR_CY - 30} width={38} height={48}
           style={{
-            filter: displayOn
-              ? `sepia(${Math.max(0,(0.78-b*0.78)).toFixed(2)}) saturate(${(1+b*2).toFixed(2)}) brightness(${(0.38+b*0.72).toFixed(2)}) drop-shadow(0 0 ${Math.round(6+b*22)}px rgba(255,${warmG},${warmB},${(0.4+b*0.55).toFixed(2)}))`
-              : 'grayscale(1) brightness(0.35) opacity(0.5)',
-            transition: 'filter 0.45s',
+            opacity: displayOn ? Math.max(0.22, b) : 0.15,
+            transition: dragging.current ? 'none' : 'opacity 0.4s',
           }} />
+
+        {/* Filament glow — warm colour floods bulb glass as brightness rises */}
+        <ellipse cx={LR_CX} cy={LR_CY - 10} rx={14} ry={17}
+          fill={`rgba(255,${warmG},${warmB},${((displayOn ? b : 0) * 0.82).toFixed(2)})`}
+          filter={`url(#lrGlow_${s.entity_id})`}
+          style={{ pointerEvents: 'none', transition: dragging.current ? 'none' : 'fill 0.4s' }} />
       </svg>
 
       {/* Brightness percentage */}

@@ -26,20 +26,20 @@ function TheaterSVG({ state }: { state: string }) {
         </linearGradient>
         {/* Room surfaces */}
         <linearGradient id="thCeil" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%"  stopColor="#14142a" />
-          <stop offset="100%" stopColor="#0e0e1e" />
+          <stop offset="0%"  stopColor={on ? '#1a1a30' : '#6868a0'} />
+          <stop offset="100%" stopColor={on ? '#101020' : '#50507e'} />
         </linearGradient>
         <linearGradient id="thFloor" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%"  stopColor="#0a0a16" />
-          <stop offset="100%" stopColor="#060610" />
+          <stop offset="0%"  stopColor={on ? '#0e0e1c' : '#484870'} />
+          <stop offset="100%" stopColor={on ? '#080810' : '#343458'} />
         </linearGradient>
         <linearGradient id="thWL" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%"  stopColor="#090916" />
-          <stop offset="100%" stopColor="#0e0e1e" />
+          <stop offset="0%"  stopColor={on ? '#101018' : '#505088'} />
+          <stop offset="100%" stopColor={on ? '#16162a' : '#606098'} />
         </linearGradient>
         <linearGradient id="thWR" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%"  stopColor="#0e0e1e" />
-          <stop offset="100%" stopColor="#090916" />
+          <stop offset="0%"  stopColor={on ? '#16162a' : '#606098'} />
+          <stop offset="100%" stopColor={on ? '#101018' : '#505088'} />
         </linearGradient>
         {/* Speaker driver */}
         <radialGradient id="thCone" cx="38%" cy="35%" r="65%">
@@ -67,15 +67,15 @@ function TheaterSVG({ state }: { state: string }) {
       <polygon points={`0,${H} ${W},${H} ${BX2},${BY2} ${BX1},${BY2}`}    fill="url(#thFloor)" />
       <polygon points={`0,0 ${BX1},${BY1} ${BX1},${BY2} 0,${H}`}          fill="url(#thWL)" />
       <polygon points={`${W},0 ${BX2},${BY1} ${BX2},${BY2} ${W},${H}`}    fill="url(#thWR)" />
-      <rect x={BX1} y={BY1} width={BX2-BX1} height={BY2-BY1}              fill="#0c0c1c" />
+      <rect x={BX1} y={BY1} width={BX2-BX1} height={BY2-BY1} fill={on ? '#0c0c1c' : '#1e1e3a'} />
 
       {/* Carpet runner */}
-      <polygon points={`75,${H} 225,${H} ${BX2-22},${BY2} ${BX1+22},${BY2}`} fill="rgba(38,18,58,0.45)" />
+      <polygon points={`75,${H} 225,${H} ${BX2-22},${BY2} ${BX1+22},${BY2}`} fill={on ? 'rgba(38,18,58,0.45)' : 'rgba(80,40,120,0.55)'} />
 
       {/* Acoustic panels left */}
-      {[13, 27].map(x => <rect key={x} x={x} y={36} width={9} height={78} rx={2} fill="#111124" stroke="#1c1c30" strokeWidth={0.5} />)}
+      {[13, 27].map(x => <rect key={x} x={x} y={36} width={9} height={78} rx={2} fill={on ? '#111124' : '#303060'} stroke={on ? '#1c1c30' : '#484880'} strokeWidth={0.5} />)}
       {/* Acoustic panels right */}
-      {[264, 278].map(x => <rect key={x} x={x} y={36} width={9} height={78} rx={2} fill="#111124" stroke="#1c1c30" strokeWidth={0.5} />)}
+      {[264, 278].map(x => <rect key={x} x={x} y={36} width={9} height={78} rx={2} fill={on ? '#111124' : '#303060'} stroke={on ? '#1c1c30' : '#484880'} strokeWidth={0.5} />)}
 
       {/* Ceiling recessed lights */}
       {[80, 150, 220].map(cx => (
@@ -84,6 +84,25 @@ function TheaterSVG({ state }: { state: string }) {
           {on && <ellipse cx={cx} cy={3} rx={4} ry={1.5} fill="rgba(255,245,210,0.09)" />}
         </g>
       ))}
+
+      {/* ── Ambient standby lighting (always visible when off) ── */}
+      {!on && (
+        <>
+          {/* Wall sconces left */}
+          <rect x={2} y={70} width={10} height={5} rx={2} fill="#1a1a2e" />
+          <ellipse cx={7} cy={70} rx={8} ry={14} fill="rgba(255,200,100,0.08)" />
+          {/* Wall sconces right */}
+          <rect x={288} y={70} width={10} height={5} rx={2} fill="#1a1a2e" />
+          <ellipse cx={293} cy={70} rx={8} ry={14} fill="rgba(255,200,100,0.08)" />
+          {/* Aisle LED strips along floor */}
+          {[80,100,120,140,160,180,200,220].map(x => (
+            <rect key={x} x={x} y={H-4} width={12} height={2} rx={1} fill="rgba(60,80,255,0.35)" />
+          ))}
+          {/* Exit sign top-right */}
+          <rect x={270} y={18} width={22} height={9} rx={2} fill="rgba(180,0,0,0.7)" />
+          <text x={281} y={25} textAnchor="middle" fontSize={5} fill="rgba(255,255,255,0.9)" fontWeight="bold">EXIT</text>
+        </>
+      )}
 
       {/* ── Screen bloom ── */}
       {playing && (
@@ -128,6 +147,16 @@ function TheaterSVG({ state }: { state: string }) {
             return <rect key={x} x={67+x} y={122+11-h-1} width={4} height={h} rx={0.5}
               fill={`rgba(70,160,255,${0.28 + i * 0.03})`} />
           })}
+        </>
+      )}
+
+      {/* Standby screen — show when on but not yet playing/paused */}
+      {(state === 'off' || state === 'on' || state === 'idle') && (
+        <>
+          <rect x={64} y={26} width={172} height={107} fill="rgba(0,0,0,0.6)" />
+          <text x={150} y={74} textAnchor="middle" fill="rgba(255,255,255,0.12)" fontSize={11} letterSpacing={3} fontFamily="'Helvetica Neue',sans-serif">STANDBY</text>
+          <ellipse cx={150} cy={88} rx={5} ry={5} fill="rgba(255,80,80,0.45)" />
+          <ellipse cx={150} cy={88} rx={8} ry={8} fill="rgba(255,60,60,0.12)" />
         </>
       )}
 
@@ -235,96 +264,118 @@ export const HomeTheaterCard = memo(({ s }: { s: HaState }) => {
 
   const state   = s.state ?? 'off'
   const playing = state === 'playing'
-  const on      = state === 'playing' || state === 'paused'
+  const on      = state !== 'off' && state !== 'unavailable'
   const volume  = Number(s.attributes.volume_level ?? 0.5)
   const muted   = Boolean(s.attributes.is_volume_muted)
   const title   = String(s.attributes.media_title ?? '')
   const artist  = String(s.attributes.media_artist ?? '')
   const name    = String(s.attributes.friendly_name ?? 'Home Theater')
 
+  // Button colours adapt: bright bg when off, dark bg when on
+  const offBg   = 'rgba(255,255,255,0.18)'
+  const offBdr  = 'rgba(255,255,255,0.30)'
+  const offTxt  = 'rgba(255,255,255,0.85)'
+  const onBg    = 'rgba(255,255,255,0.07)'
+  const onBdr   = 'rgba(255,255,255,0.12)'
+  const onTxt   = 'rgba(255,255,255,0.70)'
   const btnBase: React.CSSProperties = {
-    border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8,
+    border: `1px solid ${on ? onBdr : offBdr}`, borderRadius: 8,
     fontSize: 14, padding: '6px 10px', cursor: 'pointer', transition: 'all 0.2s',
+    background: on ? onBg : offBg, color: on ? onTxt : offTxt,
   }
 
   return (
     <div style={{
       gridColumn: 'span 2',
-      background: '#090914',
-      border: `1px solid ${on ? 'rgba(50,100,255,0.28)' : 'rgba(255,255,255,0.05)'}`,
+      background: on ? '#0d0d20' : '#5050a0',
+      border: `1px solid ${on ? 'rgba(50,100,255,0.28)' : 'rgba(255,255,255,0.25)'}`,
       borderRadius: 20, padding: '14px 12px 12px',
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-      boxShadow: on ? '0 4px 32px rgba(25,70,255,0.18)' : '0 4px 20px rgba(0,0,0,0.5)',
+      boxShadow: on ? '0 4px 32px rgba(25,70,255,0.18)' : '0 4px 20px rgba(0,0,0,0.3)',
       transition: 'all 0.5s',
     }}>
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-        <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', fontFamily: "'Helvetica Neue', sans-serif" }}>
+        <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', color: on ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.85)', fontFamily: "'Helvetica Neue', sans-serif" }}>
           {name}
         </span>
         {title ? (
-          <span style={{ fontSize: 10, color: 'rgba(100,170,255,0.7)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 10, color: on ? 'rgba(100,170,255,0.7)' : 'rgba(255,255,255,0.7)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {artist ? `${artist} — ` : ''}{title}
           </span>
         ) : (
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)' }}>
+          <span style={{ fontSize: 10, color: on ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.7)' }}>
             {state === 'off' ? 'Off' : state === 'idle' ? 'Idle' : state}
           </span>
         )}
       </div>
 
       {/* Theater visual */}
-      <TheaterSVG state={state} />
+      <div style={{ width: '100%', position: 'relative' }}>
+        <TheaterSVG state={state} />
+        {/* YouTube video overlaid exactly on the SVG screen area
+            Screen in 300×192 viewBox: x=64 y=26 w=172 h=107
+            As %: left=21.33% top=13.54% w=57.33% h=55.73% */}
+        {playing && (
+          <iframe
+            key="yt"
+            src="https://www.youtube.com/embed/aqz-KE-bpKQ?autoplay=1&mute=1&loop=1&playlist=aqz-KE-bpKQ&controls=0&modestbranding=1&rel=0&iv_load_policy=3"
+            style={{
+              position: 'absolute',
+              left: '21.33%', top: '13.54%',
+              width: '57.33%', height: '55.73%',
+              border: 'none', borderRadius: 2,
+            }}
+            allow="autoplay; encrypted-media"
+          />
+        )}
+        {/* Paused: dim glass overlay so video freezes visually */}
+        {state === 'paused' && (
+          <div style={{
+            position: 'absolute',
+            left: '21.33%', top: '13.54%',
+            width: '57.33%', height: '55.73%',
+            background: 'rgba(0,0,0,0.45)',
+            borderRadius: 2,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 28, color: 'rgba(255,255,255,0.3)',
+          }}>⏸</div>
+        )}
+      </div>
 
       {/* Volume bar */}
-      <div style={{ width: '100%', height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 2 }}>
-        <div style={{ height: '100%', width: `${muted ? 0 : volume * 100}%`, background: on ? 'rgba(80,140,255,0.7)' : 'rgba(255,255,255,0.15)', borderRadius: 2, transition: 'width 0.3s' }} />
+      <div style={{ width: '100%', height: 3, background: on ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.30)', borderRadius: 2 }}>
+        <div style={{ height: '100%', width: `${muted ? 0 : volume * 100}%`, background: on ? 'rgba(80,140,255,0.8)' : 'rgba(255,255,255,0.9)', borderRadius: 2, transition: 'width 0.3s' }} />
       </div>
 
       {/* Controls */}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
-        {/* Power */}
         <button onClick={() => callService('media_player', on ? 'turn_off' : 'turn_on', {}, s.entity_id)}
-          style={{ ...btnBase, background: on ? 'rgba(255,55,55,0.14)' : 'rgba(255,255,255,0.05)', borderColor: on ? 'rgba(255,55,55,0.3)' : 'rgba(255,255,255,0.08)', color: on ? '#ff6060' : 'rgba(255,255,255,0.35)' }}>
+          style={{ ...btnBase, background: on ? 'rgba(255,55,55,0.22)' : offBg, borderColor: on ? 'rgba(255,55,55,0.45)' : offBdr, color: on ? '#ff7070' : offTxt }}>
           ⏻
         </button>
-        {/* Prev */}
         <button onClick={() => callService('media_player', 'media_previous_track', {}, s.entity_id)}
-          disabled={!on}
-          style={{ ...btnBase, background: 'rgba(255,255,255,0.04)', color: on ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.18)' }}>
-          ⏮
-        </button>
-        {/* Play / Pause */}
+          disabled={!on} style={{ ...btnBase, opacity: on ? 1 : 0.45 }}>⏮</button>
         <button onClick={() => callService('media_player', playing ? 'media_pause' : 'media_play', {}, s.entity_id)}
           disabled={!on}
-          style={{ ...btnBase, background: on ? 'rgba(55,110,255,0.2)' : 'rgba(255,255,255,0.04)', borderColor: on ? 'rgba(55,110,255,0.4)' : 'rgba(255,255,255,0.08)', color: on ? '#6090ff' : 'rgba(255,255,255,0.18)', fontSize: 16, padding: '6px 14px' }}>
+          style={{ ...btnBase, fontSize: 16, padding: '6px 14px', opacity: on ? 1 : 0.45,
+            background: on ? 'rgba(55,110,255,0.28)' : offBg,
+            borderColor: on ? 'rgba(55,110,255,0.5)' : offBdr,
+            color: on ? '#80aaff' : offTxt }}>
           {playing ? '⏸' : '▶'}
         </button>
-        {/* Next */}
         <button onClick={() => callService('media_player', 'media_next_track', {}, s.entity_id)}
-          disabled={!on}
-          style={{ ...btnBase, background: 'rgba(255,255,255,0.04)', color: on ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.18)' }}>
-          ⏭
-        </button>
-        {/* Vol down */}
+          disabled={!on} style={{ ...btnBase, opacity: on ? 1 : 0.45 }}>⏭</button>
         <button onClick={() => callService('media_player', 'volume_down', {}, s.entity_id)}
-          disabled={!on}
-          style={{ ...btnBase, background: 'rgba(255,255,255,0.04)', color: on ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.18)', fontSize: 12 }}>
-          🔉
-        </button>
-        {/* Vol up */}
+          disabled={!on} style={{ ...btnBase, fontSize: 12, opacity: on ? 1 : 0.45 }}>🔉</button>
         <button onClick={() => callService('media_player', 'volume_up', {}, s.entity_id)}
-          disabled={!on}
-          style={{ ...btnBase, background: 'rgba(255,255,255,0.04)', color: on ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.18)', fontSize: 12 }}>
-          🔊
-        </button>
-        {/* Mute */}
+          disabled={!on} style={{ ...btnBase, fontSize: 12, opacity: on ? 1 : 0.45 }}>🔊</button>
         <button onClick={() => callService('media_player', 'volume_mute', { is_volume_muted: !muted }, s.entity_id)}
-          disabled={!on}
-          style={{ ...btnBase, background: muted ? 'rgba(255,200,0,0.12)' : 'rgba(255,255,255,0.04)', borderColor: muted ? 'rgba(255,200,0,0.3)' : 'rgba(255,255,255,0.08)', color: muted ? '#ffcc44' : (on ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.18)'), fontSize: 12 }}>
-          🔇
-        </button>
+          disabled={!on} style={{ ...btnBase, fontSize: 12, opacity: on ? 1 : 0.45,
+            background: muted ? 'rgba(255,200,0,0.25)' : (on ? onBg : offBg),
+            borderColor: muted ? 'rgba(255,200,0,0.5)' : (on ? onBdr : offBdr),
+            color: muted ? '#ffcc44' : (on ? onTxt : offTxt) }}>🔇</button>
       </div>
     </div>
   )

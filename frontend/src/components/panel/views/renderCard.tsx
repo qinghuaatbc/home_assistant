@@ -1,7 +1,7 @@
 import React from 'react'
 import type { HaState } from '../../../context/HaContext'
 import { LightTile, LightRingCard } from '../cards/LightCards'
-import { MediaRtiCard } from '../cards/MediaCards'
+import { MediaRtiCard, MediaRingCard } from '../cards/MediaCards'
 import { SensorRtiCard, AlarmCard, LockTile, CurtainTile } from '../cards/SecurityCards'
 import { CameraRtiCard } from '../cards/CameraCard'
 import { ClimateRtiCard, ThermostatCard } from '../cards/ClimateCards'
@@ -24,6 +24,7 @@ export function renderCard(s: HaState, cardType: string, icon?: string, label?: 
     case 'alarm':        return <AlarmCard         key={entity.entity_id} s={entity} />
     case 'switch':       return <SwitchTile        key={entity.entity_id} s={entity} icon={icon} />
     case 'media-player': return <MediaRtiCard      key={entity.entity_id} s={entity} />
+    case 'media-player-ring': return <MediaRingCard key={entity.entity_id} s={entity} />
     case 'climate':      return <ClimateRtiCard    key={entity.entity_id} s={entity} />
     case 'thermostat':   return <ThermostatCard    key={entity.entity_id} s={entity} />
     case 'cover':        return <GarageCoverCard   key={entity.entity_id} s={entity} />

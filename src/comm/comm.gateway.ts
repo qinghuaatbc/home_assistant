@@ -9,6 +9,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { PushService } from '../push/push.service';
 import { VoiceMessageEntity } from './voice-message.entity';
+import { ChatMessageService } from './chat-message.service';
 
 interface CommUser {
   clientId: string;
@@ -55,7 +56,10 @@ export class CommGateway
   /** Group call rooms: roomId → Set<clientId> */
   private readonly rooms = new Map<string, Set<string>>();
 
-  constructor(private readonly pushService: PushService) {}
+  constructor(
+    private readonly pushService: PushService,
+    private readonly chatMessageService: ChatMessageService,
+  ) {}
 
   afterInit(): void {
     this.logger.log('CommGateway initialized at /api/comm');
@@ -132,6 +136,7 @@ export class CommGateway
         mediaName: data.mediaName ?? null,
         timestamp: Date.now(),
       };
+      this.chatMessageService.save({ ...msg, isSystem: 0 }).catch(() => {});
       if (data.to) {
         const targetSocket = this.findSocket(data.to);
         if (targetSocket) targetSocket.emit('chat_message', msg);

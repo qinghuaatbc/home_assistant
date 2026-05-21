@@ -144,7 +144,7 @@ export const NestThermostat = memo(({ s }: { s: HaState }) => {
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}
       onTouchStart={stopTouch} onTouchMove={stopTouch} onTouchEnd={stopTouch}>
       <svg ref={svgRef} viewBox={`0 0 ${SVG_S} ${SVG_S}`}
-        style={{ width: 220, height: 220, cursor: 'grab', touchAction: 'none', userSelect: 'none', overflow: 'visible' }}
+        style={{ width: '100%', height: 'auto', aspectRatio: '1', cursor: 'grab', touchAction: 'none', userSelect: 'none', overflow: 'visible' }}
         onPointerDown={e => {
           e.stopPropagation(); dragging.current = true; svgRef.current?.setPointerCapture(e.pointerId)
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
@@ -275,7 +275,7 @@ export const NestThermostat = memo(({ s }: { s: HaState }) => {
       </svg>
 
       {/* Mode buttons — Nest style */}
-      <div style={{ display: 'flex', gap: 8, width: '100%', maxWidth: 220 }}>
+      <div style={{ display: 'flex', gap: 8, width: '100%' }}>
         {([
           { m: 'off',  icon: '⏸', color: isDay ? '#666' : 'rgba(255,255,255,0.6)' },
           { m: 'heat', icon: '🔥', color: heatColor },

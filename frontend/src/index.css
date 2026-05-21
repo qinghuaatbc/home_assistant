@@ -525,6 +525,10 @@ input[type=range].ios-range::-webkit-slider-thumb {
 }
 
 /* ── Animations ──────────────────────────────────────────────────────────── */
+@keyframes speakerPulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(var(--sp-scale, 1.14)); }
+}
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }

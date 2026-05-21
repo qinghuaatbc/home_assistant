@@ -175,7 +175,40 @@ export class DemoIntegration implements HaIntegration {
       domain: 'media_player', service: 'volume_set', name: 'Set volume', description: 'Set volume level',
       fields: { volume_level: { required: true, description: 'Volume 0.0-1.0' } }, handler, target: { entity: true },
     })
-    this.logger.log('Demo: registered service handlers (light/switch/media_player/binary_sensor/cover + volume_set)')
+    const mediaHandler = async (call: ServiceCall) => {
+      const ids = call.target?.entity_id
+        ? (Array.isArray(call.target.entity_id) ? call.target.entity_id : [call.target.entity_id])
+        : []
+      for (const eid of ids) {
+        const cur = this.stateMachine.getState(eid)
+        if (!cur) continue
+        const attrs: Record<string, unknown> = { ...cur.attributes }
+        if (call.service === 'media_play') {
+          this.stateMachine.setState(eid, 'playing', attrs, call.context)
+        } else if (call.service === 'media_pause') {
+          this.stateMachine.setState(eid, 'paused', attrs, call.context)
+        } else if (call.service === 'media_play_pause') {
+          this.stateMachine.setState(eid, cur.state === 'playing' ? 'paused' : 'playing', attrs, call.context)
+        } else if (call.service === 'media_next_track' || call.service === 'media_previous_track') {
+          this.stateMachine.setState(eid, 'playing', attrs, call.context)
+        } else if (call.service === 'volume_mute') {
+          attrs.is_volume_muted = call.service_data?.is_volume_muted ?? !attrs.is_volume_muted
+          this.stateMachine.setState(eid, cur.state, attrs, call.context)
+        } else if (call.service === 'volume_up') {
+          attrs.volume_level = Math.min(1, Number(attrs.volume_level ?? 0.5) + 0.1)
+          this.stateMachine.setState(eid, cur.state, attrs, call.context)
+        } else if (call.service === 'volume_down') {
+          attrs.volume_level = Math.max(0, Number(attrs.volume_level ?? 0.5) - 0.1)
+          this.stateMachine.setState(eid, cur.state, attrs, call.context)
+        }
+      }
+    }
+    for (const svc of ['media_play', 'media_pause', 'media_play_pause', 'media_next_track', 'media_previous_track', 'volume_mute', 'volume_up', 'volume_down']) {
+      this.serviceRegistry.register({
+        domain: 'media_player', service: svc, name: svc, description: svc, fields: {}, handler: mediaHandler, target: { entity: true },
+      })
+    }
+    this.logger.log('Demo: registered service handlers (light/switch/media_player/binary_sensor/cover + volume_set + media controls)')
   }
 
   async teardown(): Promise<void> {}

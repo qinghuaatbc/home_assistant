@@ -24,7 +24,8 @@
 #   lock         → lock entity
 #   alarm        → alarm control panel
 #   switch       → generic switch (add icon: "🌀" etc. to customize)
-#   media-player → speaker/media player with volume
+#   media-player        → speaker/media player with volume
+#   media-player-ring   → ring dial media player (volume control)
 #   climate      → temperature/humidity sensor
 #   thermostat   → climate thermostat
 #   cover        → garage cover entity
@@ -55,13 +56,13 @@ views:
 
   lights:
     - entity: light.demo_living_room
-      card_type: light
+      card_type: light-ring
     - entity: light.demo_bedroom
       card_type: light
     - entity: light.demo_kitchen
       card_type: light
     - entity: light.demo_kitchen_light
-      card_type: light
+      card_type: light-ring
     - entity: light.demo_dining_light
       card_type: light
     - entity: light.demo_office_light
@@ -72,11 +73,13 @@ views:
 
   music:
     - entity: media_player.demo_living_room_speaker
-      card_type: media-player
+      card_type: media-player-ring
     - entity: media_player.demo_bedroom_speaker
-      card_type: media-player
+      card_type: media-player-ring
 
   theater:
+    - entity: media_player.demo_home_theater
+      card_type: home-theater
     - entity: switch.demo_tv
       card_type: switch
       icon: "📺"
@@ -84,6 +87,8 @@ views:
       card_type: media-player
 
   climate:
+    - entity: climate.demo_thermostat
+      card_type: thermostat
     - entity: sensor.demo_temperature
       card_type: climate
     - entity: sensor.demo_humidity
