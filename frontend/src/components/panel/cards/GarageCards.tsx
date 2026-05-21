@@ -203,7 +203,7 @@ function GarageDoorSVG({ open, moving, isDay }: { open: boolean; moving: boolean
       <g clipPath="url(#gdClip)">
         <g style={{
           transform: `translateY(${open ? '-100%' : '0%'})`,
-          transition: moving ? 'transform 1.8s cubic-bezier(0.42,0,0.18,1)' : 'none',
+          transition: moving ? 'transform 3.5s cubic-bezier(0.42,0,0.18,1)' : 'none',
         }}>
           {Array.from({ length: PANELS }).map((_, pi) => {
             const py = pi * PH
@@ -375,7 +375,7 @@ export const GarageCoverCard = memo(({ s }: { s: HaState }) => {
   useEffect(() => {
     setAnimMoving(true)
     setAnimOpen(isOpen)
-    const id = setTimeout(() => setAnimMoving(false), 2000)
+    const id = setTimeout(() => setAnimMoving(false), 3600)
     return () => clearTimeout(id)
   }, [s.state])
 
@@ -387,7 +387,7 @@ export const GarageCoverCard = memo(({ s }: { s: HaState }) => {
     sound('garage', !isOpen, name)
     setAnimMoving(true)
     setAnimOpen(!isOpen)
-    setTimeout(() => setAnimMoving(false), 2000)
+    setTimeout(() => setAnimMoving(false), 3600)
   }, [isOpen, isMoving, s.entity_id, callService, sound, name])
 
   const stateColor = isMoving ? '#ff9f0a' : isOpen ? '#ff453a' : '#30d158'
